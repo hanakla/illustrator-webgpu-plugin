@@ -1,0 +1,4 @@
+[macos]
+build:
+    cargo clean -p ai-deno
+    cargo build --release

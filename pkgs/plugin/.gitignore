@@ -1,0 +1,4 @@
+build/
+output/
+HelloWorld.xcodeproj/project.xcworkspace/xcuserdata
+HelloWorld.xcodeproj/xcuserdata

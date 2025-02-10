@@ -1,0 +1,14 @@
+[package]
+name = "ai-deno"
+
+[lib]
+name = "ai_deno"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+ffi-support = "0.4.4"
+rustyscript = {git = "https://github.com/rscarson/rustyscript.git", features = ["all_extensions"] }
+data-url = "0.3.0"
+
+[build-dependencies]
+cbindgen = "0.28.0"
