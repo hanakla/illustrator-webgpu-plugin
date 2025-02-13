@@ -1,51 +1,44 @@
 #ifndef __HelloWorldPlugin_h__
 #define __HelloWorldPlugin_h__
 
+#include <AIRasterize.h>
 #include "Plugin.hpp"
 #include "HelloWorldID.h"
 
-/**	Creates a new HelloWorldPlugin.
-	@param pluginRef IN unique reference to this plugin.
-	@return pointer to new HelloWorldPlugin.
-*/
-Plugin* AllocatePlugin(SPPluginRef pluginRef);
+#define kMaxEffects 100
 
-/**	Reloads the HelloWorldPlugin class state when the plugin is 
-	reloaded by the application.
-	@param plugin IN pointer to plugin being reloaded.
-*/
+struct PluginParams {
+    ai::UnicodeString script;
+};
+
+Plugin* AllocatePlugin(SPPluginRef pluginRef);
 void FixupReload(Plugin* plugin);
 
-/**	Hooks HelloWorld up as an Illustrator plug-in.
-	@ingroup HelloWorld
-*/
 class HelloWorldPlugin : public Plugin
 {
 public:
-	/** Constructor.
-		@param pluginRef IN reference to this plugin.
-	*/
 	HelloWorldPlugin(SPPluginRef pluginRef);
-
-	/** Destructor.
-	*/
 	virtual ~HelloWorldPlugin();
   
-  /**	Restores state of HelloWorldPlugin during reload.
-	*/
 	FIXUP_VTABLE_EX(HelloWorldPlugin, Plugin);
   
-  /**	Initializes the plugin.
-		@param message IN message sent by the plugin manager.
-		@return kNoErr on success, other ASErr otherwise.
-	*/
-	ASErr StartupPlugin( SPInterfaceMessage * message );
+	ASErr StartupPlugin(SPInterfaceMessage*);
+//    ASErr PostStartupPlugin();
+	ASErr ShutdownPlugin(SPInterfaceMessage*);
+    
+private:
+    AILiveEffectHandle fLiveEffect;
+    AILiveEffectHandle fEffects[kMaxEffects];
+    ASInt32 fNumEffects;
 
-	/**	Removes the plugin.
-		@param message IN message sent by the plugin manager.
-		@return kNoErr on success, other ASErr otherwise.
-	*/
-	ASErr ShutdownPlugin( SPInterfaceMessage * message );
+    
+    ASErr InitMenus(SPInterfaceMessage*);
+    ASErr InitLiveEffect(SPInterfaceMessage*);
+    ASErr GoLiveEffect(AILiveEffectGoMessage*);
+    ASErr EditLiveEffectParameters(AILiveEffectEditParamMessage*);
+    
+    ASErr getDictionaryValues(const AILiveEffectParameters&, PluginParams&);
+    ASErr putParamsToDictionaly(const AILiveEffectParameters&, PluginParams);
 };
 
 #endif

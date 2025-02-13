@@ -1,3 +1,6 @@
 [macos]
 build:
     # cargo build
+
+watch:
+    sudo deno run -A ./watch-sync.ts
