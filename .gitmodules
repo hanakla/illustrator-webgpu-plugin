@@ -1,0 +1,3 @@
+[submodule "pkgs/rustyscript"]
+	path = pkgs/rustyscript
+	url = git@github.com:rscarson/rustyscript.git

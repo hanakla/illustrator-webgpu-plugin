@@ -1,0 +1,5 @@
+sdk/legalnotices/
+sdk/docs
+pkgs/plugin/{build,output}
+pkgs/ai-deno/target
+Cargo.lock

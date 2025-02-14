@@ -2,6 +2,7 @@ extern crate cbindgen;
 
 use std::env;
 use std::path::PathBuf;
+use cbindgen::{Bindings, Config, Error};
 
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -19,13 +20,25 @@ fn main() {
 
     let profile = env::var("PROFILE").unwrap();
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let config = cbindgen::Config::from_root_or_default(&crate_dir);
+    let config = cbindgen::Config::from(Config {
+      namespace: Some("ai_deno".to_string()),
+      ..Default::default()
+    });
 
-    cbindgen::Builder::new()
+    let result = cbindgen::Builder::new()
         .with_config(config)
         .with_crate(crate_dir.to_string())
         .with_language(cbindgen::Language::Cxx)
-        .generate()
-        .expect("Unable to generate bindings")
-        .write_to_file(PathBuf::from(crate_dir.to_string()).join(format!("target/{}/includes/libai_deno.h", profile)));
+        .generate();
+
+    match result {
+      Ok(_) => {
+        result.unwrap().write_to_file(PathBuf::from(crate_dir.to_string()).join(format!("target/{}/includes/libai_deno.h", profile)));
+      }
+      Err(e) => {
+        println!("{:?}", e);
+      }
+    }
+
+        // .expect("Unable to generate bindings")
 }

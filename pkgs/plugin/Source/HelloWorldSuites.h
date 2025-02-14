@@ -1,6 +1,7 @@
 #ifndef __HelloWorldSuites_H__
 #define __HelloWorldSuites_H__
 
+#include <AIBlock.h>
 #include "IllustratorSDK.h"
 #include "Suites.hpp"
 
@@ -8,6 +9,7 @@
 
 // Suite externs
 extern "C" SPBlocksSuite*          sSPBlocks;
+extern "C" AIBlockSuite*           sAIBlock;
 extern "C" AIUnicodeStringSuite*   sAIUnicodeString;
 extern "C" AILiveEffectSuite*	   sAILiveEffect;
 extern "C" AIDictionarySuite*      sAIDictionary;

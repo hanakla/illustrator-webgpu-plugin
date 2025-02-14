@@ -4,54 +4,75 @@
 #include <IllustratorSDK.h>
 #include "SDKErrors.h"
 
-
 #include "HelloWorldPlugin.h"
 #include "HelloWorldSuites.h"
-#include "libai_deno.h"
 
 #ifndef CHKERR
 #define CHKERR aisdk::check_ai_error(error)
 #endif
 
-
-
-Plugin* AllocatePlugin(SPPluginRef pluginRef)
+Plugin *AllocatePlugin(SPPluginRef pluginRef)
 {
-	return new HelloWorldPlugin(pluginRef);
+    return new HelloWorldPlugin(pluginRef);
 }
 
-void FixupReload(Plugin* plugin)
+void FixupReload(Plugin *plugin)
 {
-	HelloWorldPlugin::FixupVTable((HelloWorldPlugin*) plugin);
+    HelloWorldPlugin::FixupVTable((HelloWorldPlugin *)plugin);
 }
 
-HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef) :
-	Plugin(pluginRef),
-    fLiveEffect(NULL)
+HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef)
+    : Plugin(pluginRef),
+      fLiveEffect(NULL),
+      denoModuleRef(nullptr),
+      denoRuntimeRef(nullptr)
 {
-	strncpy(fPluginName, kHelloWorldPluginName, kMaxStringLength);
+    strncpy(fPluginName, kHelloWorldPluginName, kMaxStringLength);
 }
 
 HelloWorldPlugin::~HelloWorldPlugin()
 {
 }
 
-ASErr HelloWorldPlugin::StartupPlugin( SPInterfaceMessage *message )
+ASErr HelloWorldPlugin::StartupPlugin(SPInterfaceMessage *message)
 {
-	ASErr error = kNoErr;
-    
-    try {
-        error = Plugin::StartupPlugin(message); CHKERR;
-        error = this->InitLiveEffect(message); CHKERR;
-    } catch (ai::Error &ex) {
+    ASErr error = kNoErr;
+
+    std::cout << "Start up" << std::endl;
+
+    try
+    {
+        error = Plugin::StartupPlugin(message);
+        CHKERR;
+        error = this->InitLiveEffect(message);
+        CHKERR;
+    }
+    catch (ai::Error &ex)
+    {
         error = ex;
-    } catch (...) {
+    }
+    catch (...)
+    {
         error = kCantHappenErr;
     }
 
-    try {
-        uint32_t handle = ai_deno::create_runtime();
-        ai_deno::execute_deno(handle, R"END(
+    try
+    {
+        denoRuntimeRef = ai_deno::create_runtime();
+        denoModuleRef = ai_deno::create_module(R"END(
+            export default (input: Uint8ClampedArray) => {
+                console.log("Deno code running", input.byteLength / 4, input);
+
+                // Random color
+                for (let i = 0; i < input.length; i += 4) {
+                    input[i] = Math.random() * 255;
+                    input[i + 1] = Math.random() * 255;
+                    input[i + 2] = Math.random() * 255;
+                    input[i + 3] = 255;
+                }
+
+                // return new Uint8Array(input.length);
+            }
               console.log("Deno code running", new Uint8Array(10000));
         //        console.log(navigator.gpu);
         //
@@ -105,7 +126,7 @@ ASErr HelloWorldPlugin::StartupPlugin( SPInterfaceMessage *message )
         //                },
         //                primitive: { topology: "triangle-list" }
         //            });
-        //    
+        //
         //            console.log('ok');
         //
         //            function frame() {
@@ -126,29 +147,32 @@ ASErr HelloWorldPlugin::StartupPlugin( SPInterfaceMessage *message )
         //
         //        initWebGPU();
         )END");
-    } catch (...) {
+
+        // ai_deno::execute_deno(handle, moduleHandle, "", nullptr);
+    }
+    catch (...)
+    {
         std::cout << "ヷ！死んじゃった……" << std::endl;
     }
 
-
-//	sAIUser->MessageAlert(ai::UnicodeString(returns));
-//    free(returns);
-	return error;
+    //	sAIUser->MessageAlert(ai::UnicodeString(returns));
+    //    free(returns);
+    return error;
 }
 
-ASErr HelloWorldPlugin::ShutdownPlugin( SPInterfaceMessage *message )
+ASErr HelloWorldPlugin::ShutdownPlugin(SPInterfaceMessage *message)
 {
-	ASErr error = kNoErr;
-//	sAIUser->MessageAlert(ai::UnicodeString("Goodbye from HelloWorld!"));
-	error = Plugin::ShutdownPlugin(message);
-	return error;
+    ASErr error = kNoErr;
+    //	sAIUser->MessageAlert(ai::UnicodeString("Goodbye from HelloWorld!"));
+    error = Plugin::ShutdownPlugin(message);
+    return error;
 }
 
 ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage *message)
 {
     ASErr error = kNoErr;
     short filterIndex = 0;
-    
+
     AILiveEffectData effect;
     effect.self = message->d.self;
     effect.name = "la.hanak.illustrator-deno";
@@ -157,123 +181,140 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage *message)
     effect.minorVersion = 0;
     effect.prefersAsInput = AIStyleFilterPreferredInputArtType::kInputArtDynamic;
     effect.styleFilterFlags = AIStyleFilterFlags::kPostEffectFilter;
-    
+
     AddLiveEffectMenuData menu;
     menu.category = ai::UnicodeString("Deno Effectors", kAIUTF8CharacterEncoding).as_UTF8().data();
     menu.title = ai::UnicodeString("Effect", kAIUTF8CharacterEncoding).as_UTF8().data();
-    
-    error = sAILiveEffect->AddLiveEffect(&effect, &this->fEffects[filterIndex]); CHKERR;
+
+    error = sAILiveEffect->AddLiveEffect(&effect, &this->fEffects[filterIndex]);
+    CHKERR;
     error = sAILiveEffect->AddLiveEffectMenuItem(this->fEffects[filterIndex], effect.name, &menu, NULL, NULL);
-    
+
     this->fNumEffects = filterIndex;
-    
+
     return error;
 }
 
 ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
 {
     std::cout << "GO LIVE!! EFFECT!!!" << std::endl;
-    
+
     ASErr error = kNoErr;
     PluginParams params;
     this->getDictionaryValues(message->parameters, params);
 
     std::cout << "GET DICK!" << std::endl;
-    
-    AIRasterizeSettings settings;
-    settings.type = AIRasterizeType::kRasterizeARGB;
-//    settings.resolution = 300.0;
-    settings.antialiasing = 2;
-    settings.options = (AIRasterizeOptions)(
-        AIRasterizeOptions::kRasterizeOptionsUseMinTiles
-        | AIRasterizeOptions::kRasterizeOptionsUseEffectsRes
-    );
-    settings.preserveSpotColors = true;
 
-    
-    try {
+    // clang-format off
+    AIRasterizeSettings settings = suai::createAIRasterSetting({
+        .type = suai::RasterType::ARGB,
+        .antiAlias = 2,
+        .colorConvert = suai::RasterSettingColorConvert::Standard,
+        .preserveSpotColors = true,
+        .options = suai::RasterSettingOption {
+            .useMinTiles = true,
+            .useEffectsRes= true,
+        }
+    });
+    // clang-format on
+
+    try
+    {
         AIArtHandle art = message->art;
 
-        AIArtSet artSet;
-        error = sAIArtSet->NewArtSet(&artSet); CHKERR;
-        error = sAIArtSet->AddArtToArtSet(artSet, art); CHKERR;
-       
+        suai::ArtSet *artSet = new suai::ArtSet();
+        artSet->AddArt(art);
+
         AIRealRect bounds;
-        error = sAIRasterize->ComputeArtBounds(artSet, &bounds, false); CHKERR;
+        error = sAIRasterize->ComputeArtBounds(artSet->ToAIArtSet(), &bounds, false);
 
         AIArtHandle rasterArt;
-        error = sAIArt->NewArt(AIArtType::kRasterArt, AIPaintOrder::kPlaceDefault, art, &rasterArt); //CHKERR;
-        
+        error = sAIArt->NewArt(AIArtType::kRasterArt, AIPaintOrder::kPlaceDefault, art, &rasterArt); // CHKERR;
+
         error = sAIRasterize->Rasterize(
-            artSet,
+            artSet->ToAIArtSet(),
             &settings,
             &bounds,
             AIPaintOrder::kPlaceAbove,
             art,
             &rasterArt,
-            NULL
-        ); CHKERR;
-        
-        AIRasterRecord rasterRecord;
-        error = sAIRaster->GetRasterInfo(rasterArt, &rasterRecord); CHKERR;
-        
-        std::cout << rasterRecord.bounds.top << " "
-                      << rasterRecord.bounds.right << " "
-                      << rasterRecord.bounds.bottom << " "
-                      << rasterRecord.bounds.left << std::endl;
-        std::cout << "Color space: " << rasterRecord.colorSpace << std::endl;
+            NULL);
+        CHKERR;
 
-        ai::uint32 width = rasterRecord.bounds.right - rasterRecord.bounds.left;
-        ai::uint32 height = rasterRecord.bounds.bottom - rasterRecord.bounds.top;
-        
-        AISlice artSlice = {
-            0, 0,
-            static_cast<ai::int32>(width),
-            static_cast<ai::int32>(height),
-            0,
-            4
-        };
-        
-        AISlice workSlice;
-        AITile workTile;
-//        workTile.Init();
-//        workTile.channelInterleave[0] = 0;
-//        workTile.channelInterleave[1] = 1;
-//        workTile.channelInterleave[2] = 2;
-//        workTile.channelInterleave[3] = 3;
+        AIRasterRecord info;
+        sAIRaster->GetRasterInfo(rasterArt, &info);
+        unsigned char bytes = info.bitsPerPixel / 8;
 
-        std::cout << "GetRasterTile" << std::endl;
-        error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile, &workSlice); CHKERR;
+        AIRealRect bbox;
+        sAIRaster->GetRasterBoundingBox(rasterArt, &bbox);
+
+        AISlice artSlice = {0}, workSlice = {0};
+        workSlice.top = artSlice.top = info.bounds.top;
+        workSlice.bottom = artSlice.bottom = info.bounds.bottom;
+        workSlice.left = artSlice.left = info.bounds.left;
+        workSlice.right = artSlice.right = info.bounds.right;
+        workSlice.back = artSlice.back = bytes;
+
+        AITile workTile = {0};
+        workTile.colBytes = bytes;
+
+        size_t width = artSlice.right - artSlice.left;
+        size_t height = artSlice.bottom - artSlice.top;
+
+        size_t dataSize = width * height * bytes;
+        workTile.data = new unsigned char[dataSize];
+        workTile.rowBytes = width * bytes;
+
+        workTile.channelInterleave[0] = 1;
+        workTile.channelInterleave[1] = 2;
+        workTile.channelInterleave[2] = 3;
+        workTile.channelInterleave[3] = 0;
+
+        workTile.bounds = artSlice;
+
+        error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
+        CHKERR;
 
         const ai::uint32 totalPixels = width * height;
         const ai::uint32 pixelStride = workTile.colBytes;
-        ai::uint8* pixelData = static_cast<ai::uint8*>(workTile.data);
-        
-        
-        std::cout << "Set PIXELS" << std::endl;
+        ai::uint8 *pixelData = static_cast<ai::uint8 *>(workTile.data);
+        uintptr_t byteLingth = totalPixels * pixelStride;
 
-        // ピクセルデータの設定
-        for(ai::uint32 i = 0; i < totalPixels * pixelStride; i += pixelStride) {
-            if (i + 3 >= totalPixels * pixelStride) break;
-            
-            ai::uint8* pixel = pixelData + i;
-            pixel[0] = 255;  // Red
-            pixel[1] = 0;    // Green
-            pixel[2] = 0;    // Blue
-            pixel[3] = 255;  // Alpha
-        }
-        
+        ai_deno::ArrayBufferRef input = ai_deno::ArrayBufferRef{
+            .ptr = (void *)pixelData,
+            .len = byteLingth,
+        };
 
-        error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice); CHKERR;
+        ai_deno::ArrayBufferRef *result = ai_deno::execute_deno(
+            denoRuntimeRef,
+            denoModuleRef,
+            &input);
+
+        // for (ai::uint32 i = 0; i < totalPixels * pixelStride; i += pixelStride)
+        // {
+        //     if (i + 3 >= totalPixels * pixelStride)
+        //         break;
+
+        //     ai::uint8 *pixel = pixelData + i;
+        //     pixel[0] = 255; // Red
+        //     pixel[1] = 0;   // Green
+        //     pixel[2] = 0;   // Blue
+        //     pixel[3] = 255; // Alpha
+        // }
+
+        error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
 
         message->art = rasterArt;
-        sAIArtSet->DisposeArtSet(&artSet);
-        
-        std::cout << "Art Type:" << error << std::endl;
-    } catch (const ai::Error& ex) {
+    }
+    catch (const ai::Error &ex)
+    {
         std::cout << (AIErr)ex << ":" << ex.what() << std::endl;
     }
-    
+    catch (exception &ex)
+    {
+        std::cout << "exception: " << ex.what() << std::endl;
+    }
+
     return error;
 }
 
@@ -281,12 +322,12 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage *m
 {
     std::cout << "EDIT LIVE!! EFFECT!!!" << std::endl;
     ASErr error = kNoErr;
-    
+
     AIDictKey key;
     PluginParams params;
-    
+
     error = this->getDictionaryValues(message->parameters, params);
-    
+
     ai::UnicodeString out;
     error = sAIUser->GetInputFromUser(
         ai::UnicodeString("DENODE-NO De-no de-No"),
@@ -295,15 +336,15 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage *m
         params.script,
         NULL,
         &out,
-        200
-    );
-    
-    if (!error) {
+        200);
+
+    if (!error)
+    {
         params.script = out;
         this->putParamsToDictionaly(message->parameters, params);
         sAILiveEffect->UpdateParameters(message->context);
     }
-    
+
     return error;
 }
 
@@ -311,14 +352,17 @@ ASErr HelloWorldPlugin::getDictionaryValues(const AILiveEffectParameters &dict, 
 {
     ASErr error = kNoErr;
     AIReal tempval;
-    
+
     AIDictKey key = sAIDictionary->Key("AiDeno.main-script");
-    if (sAIDictionary->IsKnown(dict, key)) {
+    if (sAIDictionary->IsKnown(dict, key))
+    {
         error = sAIDictionary->GetUnicodeStringEntry(dict, key, params.script);
-    } else {
+    }
+    else
+    {
         params.script = ai::UnicodeString("", kAIUTF8CharacterEncoding);
     }
-    
+
     return error;
 }
 
@@ -326,75 +370,74 @@ ASErr HelloWorldPlugin::putParamsToDictionaly(const AILiveEffectParameters &dict
 {
     ASErr error = kNoErr;
     AIDictKey key;
-    
+
     key = sAIDictionary->Key("AiDeno.main-script");
     sAIDictionary->SetUnicodeStringEntry(dict, key, params.script);
-    
+
     return error;
 }
 
-
-//ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
+// ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
 //{
-//    ASErr error = kNoErr;
-//    PluginParams params;
-//    this->getDictionaryValues(message->parameters, params);
-//    
-//    try {
-//        AIArtHandle art = message->art;
-//   
-//        AIArtSet artSet;
-//        error = sAIArtSet->NewArtSet(&artSet); CHKERR;
-//        error = sAIArtSet->AddArtToArtSet(artSet, art); CHKERR;
+//     ASErr error = kNoErr;
+//     PluginParams params;
+//     this->getDictionaryValues(message->parameters, params);
 //
-//        AIRasterizeSettings settings;
-//        settings.type = kRasterizeARGB;
-//        settings.resolution = 300.0;
-//        settings.antialiasing = 4;
-//        settings.options = kRasterizeOptionsNone;
-//        settings.preserveSpotColors = false;
-//       
-//        AIRealRect bounds;
-//        error = sAIRasterize->ComputeArtBounds(artSet, &bounds, false); CHKERR;
+//     try {
+//         AIArtHandle art = message->art;
 //
-//        AIArtHandle rasterArt;
-//        AIRasterRecord rasterRecord;
-//       
-//        error = sAIRasterize->Rasterize(artSet, &settings, &bounds,
-//                                      kPlaceAbove, art, &rasterArt, NULL); CHKERR;
-//        error = sAIRaster->GetRasterInfo(rasterArt, &rasterRecord); CHKERR;
-//        
-//        std::cout << rasterRecord.bounds.top << " "
-//            << rasterRecord.bounds.right << " "
-//            << rasterRecord.bounds.bottom << " "
-//            << rasterRecord.bounds.left << std::endl;
+//         AIArtSet artSet;
+//         error = sAIArtSet->NewArtSet(&artSet); CHKERR;
+//         error = sAIArtSet->AddArtToArtSet(artSet, art); CHKERR;
 //
-//        ai::uint32 width = rasterRecord.bounds.right - rasterRecord.bounds.left;
-//        ai::uint32 height = rasterRecord.bounds.bottom - rasterRecord.bounds.top;
-//        
-//        AISlice artSlice = {0, 0, static_cast<ai::int32>(width), static_cast<ai::int32>(height), 0, 4};
-//        AISlice workSlice = artSlice;
-//        
-//        // !! THIS IS NOT WORKING (No any appearance changed) !! //
-//        AITile workTile;
-//        error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile, &workSlice); CHKERR;
-//        
-//        for(ai::uint32 i = 0; i < width * height * 4; i += 4) {
-//           static_cast<ai::uint8*>(workTile.data)[i] = 255;     // Red
-//           static_cast<ai::uint8*>(workTile.data)[i+1] = 0;     // Green
-//           static_cast<ai::uint8*>(workTile.data)[i+2] = 0;     // Blue
-//           static_cast<ai::uint8*>(workTile.data)[i+3] = 255;   // Alpha
-//        }
+//         AIRasterizeSettings settings;
+//         settings.type = kRasterizeARGB;
+//         settings.resolution = 300.0;
+//         settings.antialiasing = 4;
+//         settings.options = kRasterizeOptionsNone;
+//         settings.preserveSpotColors = false;
 //
-//        error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
-//        delete[] static_cast<ai::uint8*>(workTile.data);
-//        message->art = rasterArt;
-//        // !! THIS IS NOT WORKING (No any appearance changed) !! //
-//        
-//        sAIArtSet->DisposeArtSet(&artSet);
-//    } catch (...) {
-//        
-//    }
-//    
-//    return error;
-//}
+//         AIRealRect bounds;
+//         error = sAIRasterize->ComputeArtBounds(artSet, &bounds, false); CHKERR;
+//
+//         AIArtHandle rasterArt;
+//         AIRasterRecord rasterRecord;
+//
+//         error = sAIRasterize->Rasterize(artSet, &settings, &bounds,
+//                                       kPlaceAbove, art, &rasterArt, NULL); CHKERR;
+//         error = sAIRaster->GetRasterInfo(rasterArt, &rasterRecord); CHKERR;
+//
+//         std::cout << rasterRecord.bounds.top << " "
+//             << rasterRecord.bounds.right << " "
+//             << rasterRecord.bounds.bottom << " "
+//             << rasterRecord.bounds.left << std::endl;
+//
+//         ai::uint32 width = rasterRecord.bounds.right - rasterRecord.bounds.left;
+//         ai::uint32 height = rasterRecord.bounds.bottom - rasterRecord.bounds.top;
+//
+//         AISlice artSlice = {0, 0, static_cast<ai::int32>(width), static_cast<ai::int32>(height), 0, 4};
+//         AISlice workSlice = artSlice;
+//
+//         // !! THIS IS NOT WORKING (No any appearance changed) !! //
+//         AITile workTile;
+//         error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile, &workSlice); CHKERR;
+//
+//         for(ai::uint32 i = 0; i < width * height * 4; i += 4) {
+//            static_cast<ai::uint8*>(workTile.data)[i] = 255;     // Red
+//            static_cast<ai::uint8*>(workTile.data)[i+1] = 0;     // Green
+//            static_cast<ai::uint8*>(workTile.data)[i+2] = 0;     // Blue
+//            static_cast<ai::uint8*>(workTile.data)[i+3] = 255;   // Alpha
+//         }
+//
+//         error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
+//         delete[] static_cast<ai::uint8*>(workTile.data);
+//         message->art = rasterArt;
+//         // !! THIS IS NOT WORKING (No any appearance changed) !! //
+//
+//         sAIArtSet->DisposeArtSet(&artSet);
+//     } catch (...) {
+//
+//     }
+//
+//     return error;
+// }

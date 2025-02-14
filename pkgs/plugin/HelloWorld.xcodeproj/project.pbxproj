@@ -25,6 +25,8 @@
 		9E9C475A1423AD0C004EA572 /* IAIFilePath.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47591423AD0C004EA572 /* IAIFilePath.cpp */; };
 		A51B63312D5A9A2B00BC41CA /* libai_deno.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B63302D5A9A2B00BC41CA /* libai_deno.dylib */; };
 		A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */ = {isa = PBXBuildFile; fileRef = A51B63322D5AA19E00BC41CA /* libai_dino.h */; };
+		A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E02D5F5A7D00BC41CA /* Metal.framework */; };
+		A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */; };
 		C4A3F955134C5AA500128D2D /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4A3F954134C5AA500128D2D /* Cocoa.framework */; };
 /* End PBXBuildFile section */
 
@@ -51,6 +53,8 @@
 		A190BBD425E3F5FB0001DF18 /* AIPluginRelease.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = AIPluginRelease.xcconfig; path = xcconfig/AIPluginRelease.xcconfig; sourceTree = "<group>"; };
 		A51B63302D5A9A2B00BC41CA /* libai_deno.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libai_deno.dylib; path = "../ai-deno/target/release/libai_deno.dylib"; sourceTree = "<group>"; };
 		A51B63322D5AA19E00BC41CA /* libai_dino.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = libai_dino.h; path = "../ai-deno/target/release/includes/libai_dino.h"; sourceTree = SOURCE_ROOT; };
+		A51B65E02D5F5A7D00BC41CA /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		C4A3F954134C5AA500128D2D /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
@@ -59,7 +63,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */,
 				A51B63312D5A9A2B00BC41CA /* libai_deno.dylib in Frameworks */,
+				A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */,
 				C4A3F955134C5AA500128D2D /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -138,6 +144,8 @@
 		C4A3F94D134C5A7F00128D2D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */,
+				A51B65E02D5F5A7D00BC41CA /* Metal.framework */,
 				A51B63302D5A9A2B00BC41CA /* libai_deno.dylib */,
 				C4A3F954134C5AA500128D2D /* Cocoa.framework */,
 			);

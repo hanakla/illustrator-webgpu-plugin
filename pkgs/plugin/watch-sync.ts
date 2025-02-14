@@ -16,7 +16,7 @@ const AIP_DIST = new URL(
 let currentProcess: Deno.ChildProcess | null = null;
 
 async function main() {
-  const watcher = Deno.watchFs(fromFileUrl(BUILT_AIP));
+  const watcher = Deno.watchFs(fromFileUrl(BUILT_AIP), { recursive: true });
 
   console.log(">>> Watching for changes");
 
@@ -24,14 +24,13 @@ async function main() {
 
   onUpdate({ kind: "any", paths: [] });
   for await (const event of watcher) {
-    console.log("event");
     onUpdate(event);
   }
 }
 
 const onUpdate = debounce(async (e: Deno.FsEvent) => {
   console.log(`>>> Plugin updated: ${e.kind}`, e.paths);
-
+  return;
   try {
     await Deno.remove(AIP_DIST, { recursive: true });
   } catch {}

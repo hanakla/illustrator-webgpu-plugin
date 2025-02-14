@@ -1,5 +1,6 @@
 [package]
 name = "ai-deno"
+edition = "2021"
 
 [lib]
 name = "ai_deno"
@@ -7,8 +8,10 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 ffi-support = "0.4.4"
-rustyscript = {git = "https://github.com/rscarson/rustyscript.git", features = ["all_extensions"] }
-data-url = "0.3.0"
+rustyscript = {git = "https://github.com/rscarson/rustyscript.git", features = ["all_extensions", "node_experimental"] }
+hyper-util = "=0.1.7"
+# rustyscript = { path = "../rustyscript", default-features = false, features = ["all_extensions", "node_experimental"] }
+once_cell = "1.20.3"
 
 [build-dependencies]
 cbindgen = "0.28.0"

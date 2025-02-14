@@ -6,6 +6,7 @@
 extern "C"
 {
     SPBlocksSuite*          sSPBlocks = NULL;
+    AIBlockSuite*           sAIBlock = NULL;
     AIUnicodeStringSuite*   sAIUnicodeString = NULL;
     AILiveEffectSuite*      sAILiveEffect = NULL;
     AIDictionarySuite*      sAIDictionary = NULL;
@@ -20,6 +21,7 @@ extern "C"
 ImportSuite gImportSuites[] =
 {
     { kSPBlocksSuite, kSPBlocksSuiteVersion, &sSPBlocks },
+    { kAIBlockSuite, kAIBlockSuiteVersion, &sAIBlock },
     { kAIUnicodeStringSuite, kAIUnicodeStringVersion, &sAIUnicodeString },
     { kAILiveEffectSuite, kAILiveEffectVersion, &sAILiveEffect },
     { kAIDictionarySuite, kAIDictionarySuiteVersion, &sAIDictionary },
