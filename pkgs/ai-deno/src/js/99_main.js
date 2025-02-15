@@ -1,6 +1,6 @@
-// import * as webgpuSurface from 'ext:deno_runtime/99_main.js';
+// from  deno_runtime==0.191.0
 
-// Copyright 2018-2025 the Deno authors. MIT license.
+// Copyright 2018-2024 the Deno authors. All rights reserved. MIT license.
 
 // Remove Intl.v8BreakIterator because it is a non-standard API.
 delete Intl.v8BreakIterator;
@@ -8,22 +8,22 @@ delete Intl.v8BreakIterator;
 import * as internalConsole from "ext:deno_console/01_console.js";
 import { core, internals, primordials } from "ext:core/mod.js";
 const ops = core.ops;
-// import {
-//     op_bootstrap_args,
-//     op_bootstrap_is_stderr_tty,
-//     op_bootstrap_is_stdout_tty,
-//     op_bootstrap_no_color,
-//     op_bootstrap_pid,
-//     op_main_module,
-//     op_ppid,
-//     op_set_format_exception_callback,
-//     op_snapshot_options,
-//     op_worker_close,
-//     op_worker_get_type,
-//     op_worker_post_message,
-//     op_worker_recv_message,
-//     op_worker_sync_fetch,
-// } from "ext:core/ops";
+import {
+    op_bootstrap_args,
+    op_bootstrap_is_stderr_tty,
+    op_bootstrap_is_stdout_tty,
+    op_bootstrap_no_color,
+    op_bootstrap_pid,
+    op_main_module,
+    op_ppid,
+    op_set_format_exception_callback,
+    op_snapshot_options,
+    op_worker_close,
+    op_worker_get_type,
+    op_worker_post_message,
+    op_worker_recv_message,
+    op_worker_sync_fetch,
+} from "ext:core/ops";
 const {
     ArrayPrototypeFilter,
     ArrayPrototypeForEach,
@@ -38,6 +38,7 @@ const {
     ObjectDefineProperty,
     ObjectHasOwn,
     ObjectKeys,
+    ObjectEntries,
     ObjectGetOwnPropertyDescriptor,
     ObjectGetOwnPropertyDescriptors,
     ObjectPrototypeIsPrototypeOf,
@@ -57,7 +58,7 @@ import { registerDeclarativeServer } from "ext:deno_http/00_serve.ts";
 import * as event from "ext:deno_web/02_event.js";
 import * as location from "ext:deno_web/12_location.js";
 import * as version from "ext:runtime/01_version.ts";
-// import * as os from "ext:deno_os/30_os.js";
+import * as os from "ext:runtime/30_os.js";
 import * as timers from "ext:deno_web/02_timers.js";
 import {
     getDefaultInspectOptions,
@@ -92,27 +93,26 @@ import {
 import { SymbolDispose, SymbolMetadata } from "ext:deno_web/00_infra.js";
 import { bootstrap as bootstrapOtel } from "ext:deno_telemetry/telemetry.ts";
 
-// deno-lint-ignore prefer-primordials
-if (Symbol.metadata) {
-    throw "V8 supports Symbol.metadata now, no need to shim it";
-}
-
-ObjectDefineProperties(Symbol, {
-    dispose: {
-        __proto__: null,
-        value: SymbolDispose,
-        enumerable: false,
-        writable: false,
-        configurable: false,
-    },
-    metadata: {
-        __proto__: null,
-        value: SymbolMetadata,
-        enumerable: false,
-        writable: false,
-        configurable: false,
-    },
-});
+// // deno-lint-ignore prefer-primordials
+// if (Symbol.metadata) {
+//     throw "V8 supports Symbol.metadata now, no need to shim it";
+// }
+// ObjectDefineProperties(Symbol, {
+//     dispose: {
+//         __proto__: null,
+//         value: SymbolDispose,
+//         enumerable: false,
+//         writable: false,
+//         configurable: false,
+//     },
+//     metadata: {
+//         __proto__: null,
+//         value: SymbolMetadata,
+//         enumerable: false,
+//         writable: false,
+//         configurable: false,
+//     },
+// });
 
 let windowIsClosing = false;
 let globalThis_;
@@ -173,14 +173,12 @@ function postMessage(message, transferOrOptions = { __proto__: null }) {
 
 let isClosing = false;
 let globalDispatchEvent;
-let closeOnIdle;
 
 function hasMessageEventListener() {
     // the function name is kind of a misnomer, but we want to behave
     // as if we have message event listeners if a node message port is explicitly
     // refed (and the inverse as well)
-    return (event.listenerCount(globalThis, "message") > 0 &&
-            !globalThis[messagePort.unrefParentPort]) ||
+    return event.listenerCount(globalThis, "message") > 0 ||
         messagePort.refedMessagePortsCount > 0;
 }
 
@@ -193,10 +191,7 @@ async function pollForMessages() {
     }
     while (!isClosing) {
         const recvMessage = op_worker_recv_message();
-        // In a Node.js worker, unref() the op promise to prevent it from
-        // keeping the event loop alive. This avoids the need to explicitly
-        // call self.close() or worker.terminate().
-        if (closeOnIdle) {
+        if (globalThis[messagePort.unrefPollForMessages] === true) {
             core.unrefOpPromise(recvMessage);
         }
         const data = await recvMessage;
@@ -276,100 +271,95 @@ function importScripts(...urls) {
     }
 }
 
-const opArgs = memoizeLazy(() => op_bootstrap_args());
-const opPid = memoizeLazy(() => op_bootstrap_pid());
+// const opArgs = memoizeLazy(() => []);
+// const opPid = memoizeLazy(() => op_bootstrap_pid());
+
 setNoColorFns(
     () => op_bootstrap_no_color() || !op_bootstrap_is_stdout_tty(),
     () => op_bootstrap_no_color() || !op_bootstrap_is_stderr_tty(),
 );
-
-function formatException(error) {
-    if (
-        isNativeError(error) ||
-        ObjectPrototypeIsPrototypeOf(ErrorPrototype, error)
-    ) {
-        return null;
-    } else if (typeof error == "string") {
-        return `Uncaught ${
-            inspectArgs([quoteString(error, getDefaultInspectOptions())], {
-                colors: !getStderrNoColor(),
-            })
-        }`;
-    } else {
-        return `Uncaught ${inspectArgs([error], { colors: !getStderrNoColor() })}`;
-    }
-}
-
-core.registerErrorClass("NotFound", errors.NotFound);
-core.registerErrorClass("ConnectionRefused", errors.ConnectionRefused);
-core.registerErrorClass("ConnectionReset", errors.ConnectionReset);
-core.registerErrorClass("ConnectionAborted", errors.ConnectionAborted);
-core.registerErrorClass("NotConnected", errors.NotConnected);
-core.registerErrorClass("AddrInUse", errors.AddrInUse);
-core.registerErrorClass("AddrNotAvailable", errors.AddrNotAvailable);
-core.registerErrorClass("BrokenPipe", errors.BrokenPipe);
-core.registerErrorClass("PermissionDenied", errors.PermissionDenied);
-core.registerErrorClass("AlreadyExists", errors.AlreadyExists);
-core.registerErrorClass("InvalidData", errors.InvalidData);
-core.registerErrorClass("TimedOut", errors.TimedOut);
-core.registerErrorClass("WouldBlock", errors.WouldBlock);
-core.registerErrorClass("WriteZero", errors.WriteZero);
-core.registerErrorClass("UnexpectedEof", errors.UnexpectedEof);
-core.registerErrorClass("Http", errors.Http);
-core.registerErrorClass("Busy", errors.Busy);
-core.registerErrorClass("NotSupported", errors.NotSupported);
-core.registerErrorClass("FilesystemLoop", errors.FilesystemLoop);
-core.registerErrorClass("IsADirectory", errors.IsADirectory);
-core.registerErrorClass("NetworkUnreachable", errors.NetworkUnreachable);
-core.registerErrorClass("NotADirectory", errors.NotADirectory);
-core.registerErrorBuilder(
-    "DOMExceptionOperationError",
-    function DOMExceptionOperationError(msg) {
-        return new DOMException(msg, "OperationError");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionQuotaExceededError",
-    function DOMExceptionQuotaExceededError(msg) {
-        return new DOMException(msg, "QuotaExceededError");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionNotSupportedError",
-    function DOMExceptionNotSupportedError(msg) {
-        return new DOMException(msg, "NotSupported");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionNetworkError",
-    function DOMExceptionNetworkError(msg) {
-        return new DOMException(msg, "NetworkError");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionAbortError",
-    function DOMExceptionAbortError(msg) {
-        return new DOMException(msg, "AbortError");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionInvalidCharacterError",
-    function DOMExceptionInvalidCharacterError(msg) {
-        return new DOMException(msg, "InvalidCharacterError");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionDataError",
-    function DOMExceptionDataError(msg) {
-        return new DOMException(msg, "DataError");
-    },
-);
-core.registerErrorBuilder(
-    "DOMExceptionInvalidStateError",
-    function DOMExceptionInvalidStateError(msg) {
-        return new DOMException(msg, "InvalidStateError");
-    },
-);
+//
+// function formatException(error) {
+//     if (
+//         isNativeError(error) ||
+//         ObjectPrototypeIsPrototypeOf(ErrorPrototype, error)
+//     ) {
+//         return null;
+//     } else if (typeof error == "string") {
+//         return `Uncaught ${
+//             inspectArgs([quoteString(error, getDefaultInspectOptions())], {
+//                 colors: !getStderrNoColor(),
+//             })
+//         }`;
+//     } else {
+//         return `Uncaught ${inspectArgs([error], { colors: !getStderrNoColor() })}`;
+//     }
+// }
+//
+// // core.registerErrorClass("NotFound", errors.NotFound);
+// // core.registerErrorClass("ConnectionRefused", errors.ConnectionRefused);
+// // core.registerErrorClass("ConnectionReset", errors.ConnectionReset);
+// // core.registerErrorClass("ConnectionAborted", errors.ConnectionAborted);
+// // core.registerErrorClass("NotConnected", errors.NotConnected);
+// // core.registerErrorClass("AddrInUse", errors.AddrInUse);
+// // core.registerErrorClass("AddrNotAvailable", errors.AddrNotAvailable);
+// // core.registerErrorClass("BrokenPipe", errors.BrokenPipe);
+// // core.registerErrorClass("PermissionDenied", errors.PermissionDenied);
+// // core.registerErrorClass("AlreadyExists", errors.AlreadyExists);
+// // core.registerErrorClass("InvalidData", errors.InvalidData);
+// // core.registerErrorClass("TimedOut", errors.TimedOut);
+// // core.registerErrorClass("WouldBlock", errors.WouldBlock);
+// // core.registerErrorClass("WriteZero", errors.WriteZero);
+// // core.registerErrorClass("UnexpectedEof", errors.UnexpectedEof);
+// // core.registerErrorClass("Http", errors.Http);
+// // core.registerErrorClass("Busy", errors.Busy);
+// // core.registerErrorClass("NotSupported", errors.NotSupported);
+// // core.registerErrorClass("FilesystemLoop", errors.FilesystemLoop);
+// // core.registerErrorClass("IsADirectory", errors.IsADirectory);
+// // core.registerErrorClass("NetworkUnreachable", errors.NetworkUnreachable);
+// // core.registerErrorClass("NotADirectory", errors.NotADirectory);
+// // core.registerErrorBuilder(
+// //     "DOMExceptionOperationError",
+// //     function DOMExceptionOperationError(msg) {
+// //         return new DOMException(msg, "OperationError");
+// //     },
+// // );
+// // core.registerErrorBuilder(
+// //     "DOMExceptionQuotaExceededError",
+// //     function DOMExceptionQuotaExceededError(msg) {
+// //         return new DOMException(msg, "QuotaExceededError");
+// //     },
+// // );
+// // core.registerErrorBuilder(
+// //     "DOMExceptionNotSupportedError",
+// //     function DOMExceptionNotSupportedError(msg) {
+// //         return new DOMException(msg, "NotSupported");
+// //     },
+// // );
+// // core.registerErrorBuilder(
+// //     "DOMExceptionNetworkError",
+// //     function DOMExceptionNetworkError(msg) {
+// //         return new DOMException(msg, "NetworkError");
+// //     },
+// // );
+// // core.registerErrorBuilder(
+// //     "DOMExceptionAbortError",
+// //     function DOMExceptionAbortError(msg) {
+// //         return new DOMException(msg, "AbortError");
+// //     },
+// // );
+// // core.registerErrorBuilder(
+// //     "DOMExceptionInvalidCharacterError",
+// //     function DOMExceptionInvalidCharacterError(msg) {
+// //         return new DOMException(msg, "InvalidCharacterError");
+// //     },
+// // );
+// // core.registerErrorBuilder(
+// //     "DOMExceptionDataError",
+// //     function DOMExceptionDataError(msg) {
+// //         return new DOMException(msg, "DataError");
+// //     },
+// // );
 
 function runtimeStart(
     denoVersion,
@@ -377,9 +367,9 @@ function runtimeStart(
     tsVersion,
     target,
 ) {
-    core.setWasmStreamingCallback(fetch.handleWasmStreaming);
-    core.setReportExceptionCallback(event.reportException);
-    op_set_format_exception_callback(formatException);
+    // core.setWasmStreamingCallback(fetch.handleWasmStreaming);
+    // core.setReportExceptionCallback(event.reportException);
+    // op_set_format_exception_callback(formatException);
     version.setVersions(
         denoVersion,
         v8Version,
@@ -454,10 +444,19 @@ function dispatchUnloadEvent() {
 
 let hasBootstrapped = false;
 // Set up global properties shared by main and worker runtime.
-ObjectDefineProperties(globalThis, windowOrWorkerGlobalScope);
+// ObjectDefineProperties(globalThis, windowOrWorkerGlobalScope);
 
-// Set up global properties shared by main and worker runtime that are exposed
-// by unstable features if those are enabled.
+defineNotDefinedProperties(windowOrWorkerGlobalScope, globalThis);
+
+function defineNotDefinedProperties(source, target) {
+    for (const [k,def] of ObjectEntries(ObjectGetOwnPropertyDescriptors(source))) {
+        if (target[k] != null) continue;
+        ObjectDefineProperty(target, k, def);
+    }
+}
+
+// // Set up global properties shared by main and worker runtime that are exposed
+// // by unstable features if those are enabled.
 function exposeUnstableFeaturesForWindowOrWorkerGlobalScope(unstableFeatures) {
     const featureIds = ArrayPrototypeMap(
         ObjectKeys(
@@ -535,12 +534,6 @@ const NOT_IMPORTED_OPS = [
     // Used in jupyter API
     "op_base64_encode",
 
-    // Used in the lint API
-    "op_lint_report",
-    "op_lint_get_source",
-    "op_lint_create_serialized_ast",
-    "op_is_cancelled",
-
     // Related to `Deno.test()` API
     "op_test_event_step_result_failed",
     "op_test_event_step_result_ignored",
@@ -581,40 +574,41 @@ const finalDenoNs = {
     internal: internalSymbol,
     [internalSymbol]: internals,
     ...denoNs,
-    // Deno.test, Deno.bench, Deno.lint are noops here, but kept for compatibility; so
-    // that they don't cause errors when used outside of `deno test`/`deno bench`/`deno lint`
+    // Deno.test and Deno.bench are noops here, but kept for compatibility; so
+    // that they don't cause errors when used outside of `deno test`/`deno bench`
     // contexts.
     test: () => {},
     bench: () => {},
-    lint: {
-        runPlugin: () => {},
-    },
 };
 
-ObjectDefineProperties(finalDenoNs, {
-    pid: core.propGetterOnly(opPid),
-    // `ppid` should not be memoized.
-    // https://github.com/denoland/deno/issues/23004
-    ppid: core.propGetterOnly(() => op_ppid()),
-    noColor: core.propGetterOnly(() => op_bootstrap_no_color()),
-    args: core.propGetterOnly(opArgs),
-    mainModule: core.propGetterOnly(() => op_main_module()),
-    exitCode: {
-        __proto__: null,
-        get() {
-            return os.getExitCode();
-        },
-        set(value) {
-            os.setExitCode(value);
-        },
-    },
-});
+// ObjectDefineProperties(finalDenoNs, {
+//     pid: core.propGetterOnly(opPid),
+//     // `ppid` should not be memoized.
+//     // https://github.com/denoland/deno/issues/23004
+//     ppid: core.propGetterOnly(() => op_ppid()),
+//     noColor: core.propGetterOnly(() => op_bootstrap_no_color()),
+//     args: core.propGetterOnly(opArgs),
+//     mainModule: core.propGetterOnly(() => op_main_module()),
+//     exitCode: {
+//         __proto__: null,
+//         get() {
+//             return os.getExitCode();
+//         },
+//         set(value) {
+//             os.setExitCode(value);
+//         },
+//     },
+// });
 
 const {
     tsVersion,
     v8Version,
     target,
-} = op_snapshot_options();
+} = {
+    tsVersion: "0.0.0",
+    v8Version: "0.0.0",
+    target: "unknown-unknown",
+}; // FIXME: this is makes trap: 6; op_snapshot_options();
 
 const executionModes = {
     none: 0,
@@ -634,84 +628,91 @@ function bootstrapMainRuntime(runtimeOptions, warmup = false) {
             throw new Error("Worker runtime already bootstrapped");
         }
 
-        const {
-            0: denoVersion,
-            1: location_,
-            2: unstableFeatures,
-            3: inspectFlag,
-            5: hasNodeModulesDir,
-            6: argv0,
-            7: nodeDebug,
-            8: mode,
-            9: servePort,
-            10: serveHost,
-            11: serveIsMain,
-            12: serveWorkerCount,
-            13: otelConfig,
-        } = runtimeOptions;
+        const mode = executionModes.run,
+              unstableFeatures = [],
+              hasNodeModulesDir = false,
+              argv0 = "node",
+              nodeDebug = false,
+              inspectFlag = false;
+
+        // const {
+        //     0: denoVersion,
+        //     1: location_,
+        //     2: unstableFeatures,
+        //     3: inspectFlag,
+        //     5: hasNodeModulesDir,
+        //     6: argv0,
+        //     7: nodeDebug,
+        //     8: mode,
+        //     9: servePort,
+        //     10: serveHost,
+        //     11: serveIsMain,
+        //     12: serveWorkerCount,
+        //     13: otelConfig,
+        // } = runtimeOptions;
 
         if (mode === executionModes.serve) {
-            if (serveIsMain && serveWorkerCount) {
-                // deno-lint-ignore no-global-assign
-                console = new internalConsole.Console((msg, level) =>
-                    core.print("[serve-worker-0 ] " + msg, level > 1)
-                );
-            } else if (serveWorkerCount !== null) {
-                const base = `serve-worker-${serveWorkerCount + 1}`;
-                // 15 = "serve-worker-nn".length, assuming
-                // serveWorkerCount < 100
-                const prefix = `[${StringPrototypePadEnd(base, 15, " ")}]`;
-                // deno-lint-ignore no-global-assign
-                console = new internalConsole.Console((msg, level) =>
-                    core.print(`${prefix} ` + msg, level > 1)
-                );
-            }
+            // if (serveIsMain && serveWorkerCount) {
+            //     // deno-lint-ignore no-global-assign
+            //     console = new internalConsole.Console((msg, level) =>
+            //         core.print("[serve-worker-0 ] " + msg, level > 1)
+            //     );
+            // } else if (serveWorkerCount !== null) {
+            //     const base = `serve-worker-${serveWorkerCount + 1}`;
+            //     // 15 = "serve-worker-nn".length, assuming
+            //     // serveWorkerCount < 100
+            //     const prefix = `[${StringPrototypePadEnd(base, 15, " ")}]`;
+            //     // deno-lint-ignore no-global-assign
+            //     console = new internalConsole.Console((msg, level) =>
+            //         core.print(`${prefix} ` + msg, level > 1)
+            //     );
+            // }
         }
 
         if (mode === executionModes.run || mode === executionModes.serve) {
-            let serve = undefined;
-            core.addMainModuleHandler((main) => {
-                if (ObjectHasOwn(main, "default")) {
-                    try {
-                        serve = registerDeclarativeServer(main.default);
-                    } catch (e) {
-                        if (mode === executionModes.serve) {
-                            throw e;
-                        }
-                    }
-                }
-
-                if (mode === executionModes.serve && !serve) {
-                    if (serveIsMain) {
-                        // Only error if main worker
-                        // deno-lint-ignore no-console
-                        console.error(
-                            `%cerror: %cdeno serve requires %cexport default { fetch }%c in the main module, did you mean to run \"deno run\"?`,
-                            "color: yellow;",
-                            "color: inherit;",
-                            "font-weight: bold;",
-                            "font-weight: normal;",
-                        );
-                    }
-                    return;
-                }
-
-                if (serve) {
-                    if (mode === executionModes.run) {
-                        // deno-lint-ignore no-console
-                        console.error(
-                            `%cwarning: %cDetected %cexport default { fetch }%c, did you mean to run \"deno serve\"?`,
-                            "color: yellow;",
-                            "color: inherit;",
-                            "font-weight: bold;",
-                            "font-weight: normal;",
-                        );
-                    }
-                    if (mode === executionModes.serve) {
-                        serve({ servePort, serveHost, serveIsMain, serveWorkerCount });
-                    }
-                }
-            });
+            // let serve = undefined;
+            // core.addMainModuleHandler((main) => {
+            //     if (ObjectHasOwn(main, "default")) {
+            //         try {
+            //             serve = registerDeclarativeServer(main.default);
+            //         } catch (e) {
+            //             if (mode === executionModes.serve) {
+            //                 throw e;
+            //             }
+            //         }
+            //     }
+            //
+            //     if (mode === executionModes.serve && !serve) {
+            //         if (serveIsMain) {
+            //             // Only error if main worker
+            //             // deno-lint-ignore no-console
+            //             console.error(
+            //                 `%cerror: %cdeno serve requires %cexport default { fetch }%c in the main module, did you mean to run \"deno run\"?`,
+            //                 "color: yellow;",
+            //                 "color: inherit;",
+            //                 "font-weight: bold;",
+            //                 "font-weight: normal;",
+            //             );
+            //         }
+            //         return;
+            //     }
+            //
+            //     if (serve) {
+            //         if (mode === executionModes.run) {
+            //             // deno-lint-ignore no-console
+            //             console.error(
+            //                 `%cwarning: %cDetected %cexport default { fetch }%c, did you mean to run \"deno serve\"?`,
+            //                 "color: yellow;",
+            //                 "color: inherit;",
+            //                 "font-weight: bold;",
+            //                 "font-weight: normal;",
+            //             );
+            //         }
+            //         if (mode === executionModes.serve) {
+            //             serve({ servePort, serveHost, serveIsMain, serveWorkerCount });
+            //         }
+            //     }
+            // });
         }
 
         removeImportedOps();
@@ -727,17 +728,19 @@ function bootstrapMainRuntime(runtimeOptions, warmup = false) {
         // If the `--location` flag isn't set, make `globalThis.location` `undefined` and
         // writable, so that they can mock it themselves if they like. If the flag was
         // set, define `globalThis.location`, using the provided value.
-        if (location_ == null) {
+        // if (location_ == null) {
             mainRuntimeGlobalProperties.location = {
                 writable: true,
                 configurable: true,
             };
-        } else {
-            location.setLocationHref(location_);
-        }
+        // } else {
+        //     location.setLocationHref(location_);
+        // }
 
-        exposeUnstableFeaturesForWindowOrWorkerGlobalScope(unstableFeatures);
-        ObjectDefineProperties(globalThis, mainRuntimeGlobalProperties);
+        exposeUnstableFeaturesForWindowOrWorkerGlobalScope(/* unstableFeatures */ false);
+        defineNotDefinedProperties(mainRuntimeGlobalProperties, globalThis);
+        console.log(mainRuntimeGlobalProperties.navigator)
+
         ObjectDefineProperties(globalThis, {
             // TODO(bartlomieju): in the future we might want to change the
             // behavior of setting `name` to actually update the process name.
@@ -746,9 +749,9 @@ function bootstrapMainRuntime(runtimeOptions, warmup = false) {
             close: core.propWritable(windowClose),
             closed: core.propGetterOnly(() => windowIsClosing),
         });
-        ObjectSetPrototypeOf(globalThis, Window.prototype);
+        // ObjectSetPrototypeOf(globalThis, Window.prototype);
 
-        bootstrapOtel(otelConfig);
+        // bootstrapOtel(otelConfig);
 
         if (inspectFlag) {
             core.wrapConsole(globalThis.console, core.v8Console);
@@ -760,10 +763,10 @@ function bootstrapMainRuntime(runtimeOptions, warmup = false) {
         event.defineEventHandler(globalThis, "unload");
 
         runtimeStart(
-            denoVersion,
-            v8Version,
-            tsVersion,
-            target,
+            /* denoVersion */ "0.0.0",
+            /* v8Version */ "0.0.0",
+            /* tsVersion */ "0.0.0",
+            /* target */ "unknown-unknown",
         );
 
         // TODO(bartlomieju): this is not ideal, but because we use `ObjectAssign`
@@ -901,16 +904,16 @@ function bootstrapMainRuntime(runtimeOptions, warmup = false) {
 
         // Setup `Deno` global - we're actually overriding already existing global
         // `Deno` with `Deno` namespace from "./deno.ts".
-        ObjectDefineProperty(globalThis, "Deno", core.propReadOnly(finalDenoNs));
+        // ObjectDefineProperty(globalThis, "Deno", core.propReadOnly(finalDenoNs));
 
-        if (nodeBootstrap) {
-            nodeBootstrap({
-                usesLocalNodeModulesDir: hasNodeModulesDir,
-                runningOnMainThread: true,
-                argv0,
-                nodeDebug,
-            });
-        }
+        // if (nodeBootstrap) {
+        //     nodeBootstrap({
+        //         usesLocalNodeModulesDir: hasNodeModulesDir,
+        //         runningOnMainThread: true,
+        //         argv0,
+        //         nodeDebug,
+        //     });
+        // }
     } else {
         // Warmup
     }
@@ -929,17 +932,16 @@ function bootstrapWorkerRuntime(
             throw new Error("Worker runtime already bootstrapped");
         }
 
-        const {
-            0: denoVersion,
-            1: location_,
-            2: unstableFeatures,
-            4: enableTestingFeaturesFlag,
-            5: hasNodeModulesDir,
-            6: argv0,
-            7: nodeDebug,
-            13: otelConfig,
-            14: closeOnIdle_,
-        } = runtimeOptions;
+        // const {
+        //     0: denoVersion,
+        //     1: location_,
+        //     2: unstableFeatures,
+        //     4: enableTestingFeaturesFlag,
+        //     5: hasNodeModulesDir,
+        //     6: argv0,
+        //     7: nodeDebug,
+        //     13: otelConfig,
+        // } = runtimeOptions;
 
         performance.setTimeOrigin();
         globalThis_ = globalThis;
@@ -980,10 +982,10 @@ function bootstrapWorkerRuntime(
         });
 
         runtimeStart(
-            denoVersion,
-            v8Version,
-            tsVersion,
-            target,
+            /* denoVersion: */  "0.0.0",
+            /* v8Version: */  "0.0.0",
+            /* tsVersion: */  "0.0.0",
+            /* target: */ "unknown-unknown",
             internalName ?? name,
         );
 
@@ -991,7 +993,6 @@ function bootstrapWorkerRuntime(
 
         globalThis.pollForMessages = pollForMessages;
         globalThis.hasMessageEventListener = hasMessageEventListener;
-        closeOnIdle = closeOnIdle_;
 
         for (let i = 0; i <= unstableFeatures.length; i++) {
             const id = unstableFeatures[i];
@@ -1157,7 +1158,7 @@ event.defineEventHandler(globalThis, "unhandledrejection");
 removeImportedOps();
 
 // Run the warmup path through node and runtime/worker bootstrap functions
-bootstrapMainRuntime(undefined, true);
+bootstrapMainRuntime(undefined, false);
 bootstrapWorkerRuntime(
     undefined,
     undefined,
@@ -1167,5 +1168,3 @@ bootstrapWorkerRuntime(
     true,
 );
 nodeBootstrap({ warmup: true });
-
-console.log("Deno is ready");

@@ -6,6 +6,7 @@
       <sourceFolder url="file://$MODULE_DIR$/pkgs/rustyscript/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/pkgs/rustyscript/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/pkgs/rustyscript/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pkgs/ai-deno/examples" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/pkgs/ai-deno/target" />
       <excludeFolder url="file://$MODULE_DIR$/pkgs/rustyscript/target" />
     </content>

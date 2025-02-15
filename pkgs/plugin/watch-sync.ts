@@ -30,7 +30,7 @@ async function main() {
 
 const onUpdate = debounce(async (e: Deno.FsEvent) => {
   console.log(`>>> Plugin updated: ${e.kind}`, e.paths);
-  return;
+
   try {
     await Deno.remove(AIP_DIST, { recursive: true });
   } catch {}

@@ -68,84 +68,11 @@ ASErr HelloWorldPlugin::StartupPlugin(SPInterfaceMessage *message)
                     input[i] = Math.random() * 255;
                     input[i + 1] = Math.random() * 255;
                     input[i + 2] = Math.random() * 255;
-                    input[i + 3] = 255;
+                    input[i + 3] = i > 2000 ? 0 : 255; 
                 }
 
                 // return new Uint8Array(input.length);
             }
-              console.log("Deno code running", new Uint8Array(10000));
-        //        console.log(navigator.gpu);
-        //
-        //        async function initWebGPU() {
-        //            if (!navigator.gpu) {
-        //                console.error("WebGPU is not supported on this browser.");
-        //                return;
-        //            }
-        //
-        //            const adapter = await navigator.gpu.requestAdapter();
-        //            if (!adapter) {
-        //                console.error("Failed to get GPU adapter.");
-        //                return;
-        //            }
-        //
-        //            const device = await adapter.requestDevice();
-        //            const canvas = document.createElement("canvas");
-        //            document.body.appendChild(canvas);
-        //            const context = canvas.getContext("webgpu")!;
-        //
-        //            canvas.width = window.innerWidth;
-        //            canvas.height = window.innerHeight;
-        //
-        //            const format = navigator.gpu.getPreferredCanvasFormat();
-        //            context.configure({ device, format });
-        //
-        //            const shaderCode = `
-        //                @vertex
-        //                fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-        //                    var positions = array<vec2<f32>, 6>(
-        //                        vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0),
-        //                        vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0)
-        //                    );
-        //                    return vec4<f32>(positions[index], 0.0, 1.0);
-        //                }
-        //
-        //                @fragment
-        //                fn fs(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
-        //                    let uv = fragCoord.xy / vec2<f32>(${canvas.width}.0, ${canvas.height}.0);
-        //                    return vec4<f32>(uv, 0.5, 1.0);
-        //                }
-        //            `;
-        //
-        //            const shaderModule = device.createShaderModule({ code: shaderCode });
-        //            const pipeline = device.createRenderPipeline({
-        //                layout: "auto",
-        //                vertex: { module: shaderModule, entryPoint: "vs" },
-        //                fragment: {
-        //                    module: shaderModule, entryPoint: "fs",
-        //                    targets: [{ format }]
-        //                },
-        //                primitive: { topology: "triangle-list" }
-        //            });
-        //
-        //            console.log('ok');
-        //
-        //            function frame() {
-        //                const commandEncoder = device.createCommandEncoder();
-        //                const textureView = context.getCurrentTexture().createView();
-        //                const renderPass = commandEncoder.beginRenderPass({
-        //                    colorAttachments: [{ view: textureView, loadOp: "clear", storeOp: "store" }]
-        //                });
-        //                renderPass.setPipeline(pipeline);
-        //                renderPass.draw(6);
-        //                renderPass.end();
-        //                device.queue.submit([commandEncoder.finish()]);
-        ////                requestAnimationFrame(frame);
-        //            }
-        //
-        //            frame();
-        //        }
-        //
-        //        initWebGPU();
         )END");
 
         // ai_deno::execute_deno(handle, moduleHandle, "", nullptr);
