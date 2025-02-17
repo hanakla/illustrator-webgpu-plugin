@@ -1,6 +1,6 @@
 ALWAYS_SEARCH_USER_PATHS = NO
 ARCHS = $(ARCHS_STANDARD)
-CLANG_CXX_LANGUAGE_STANDARD = c++20
+CLANG_CXX_LANGUAGE_STANDARD = c++23
 CLANG_CXX_LIBRARY = libc++
 CONFIGURATION_BUILD_DIR = ./output/mac/$(AI_CONFIGURATION)
 CONFIGURATION_TEMP_DIR = $(PROJECT_TEMP_DIR)/Default
@@ -18,7 +18,7 @@ GCC_WARN_ABOUT_MISSING_PROTOTYPES = NO
 GCC_WARN_UNKNOWN_PRAGMAS = YES
 GCC_WARN_UNUSED_VARIABLE = YES
 GENERATE_PKGINFO_FILE = YES
-HEADER_SEARCH_PATHS = ../../sdk/illustratorapi/ate ../../sdk/illustratorapi/illustrator ../../sdk/illustratorapi/illustrator/actions ../../sdk/illustratorapi/pica_sp /Developer/Headers/FlatCarbon ../../sdk/samplecode/common/includes ../ai-deno/target/release/includes Source
+HEADER_SEARCH_PATHS = ../../sdk/illustratorapi/ate ../../sdk/illustratorapi/illustrator ../../sdk/illustratorapi/illustrator/actions ../../sdk/illustratorapi/pica_sp /Developer/Headers/FlatCarbon ../../sdk/samplecode/common/includes ../ai-deno/target/release/includes ./deps/metal-cpp ./deps/json ./deps/format ./deps/imgui Source
 INFOPLIST_FILE = ../../sdk/samplecode/common/mac/Info.plist
 INFOPLIST_PREFIX_HEADER = ../../sdk/samplecode/common/includes/SDKDef.h
 INFOPLIST_PREPROCESS = YES
@@ -36,4 +36,4 @@ SDKROOT = macosx
 SHARED_PRECOMPS_DIR = ./output/mac/sharedprecompiledheaders/$(AI_CONFIGURATION)
 SYMROOT = ./output/mac/$(AI_CONFIGURATION)
 WRAPPER_EXTENSION = aip
-OTHER_LDFLAGS = ${OTHER_LDFLAGS} -lz -lc++ -Wl,-force_load,../ai-deno/target/release/libai_deno.a
+OTHER_LDFLAGS = ${OTHER_LDFLAGS} -lz -lc++ -std=c++23 -Wl,-force_load,../ai-deno/target/release/libai_deno.a

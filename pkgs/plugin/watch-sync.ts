@@ -29,7 +29,8 @@ async function main() {
 }
 
 const onUpdate = debounce(async (e: Deno.FsEvent) => {
-  console.log(`>>> Plugin updated: ${e.kind}`, e.paths);
+  const time = new Date().toLocaleString();
+  console.log(`>>> Plugin updated (${time}): ${e.kind}`, e.paths);
 
   try {
     await Deno.remove(AIP_DIST, { recursive: true });

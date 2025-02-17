@@ -1,6 +1,8 @@
 {
   "deno.enable": true,
+  "rust-analyzer.linkedProjects": ["pkgs/ai-deno/Cargo.toml"],
   "files.associations": {
+    "*.mm": "objective-cpp",
     "__bit_reference": "cpp",
     "__hash_table": "cpp",
     "__locale": "cpp",
@@ -85,6 +87,12 @@
     "numeric": "cpp",
     "system_error": "cpp",
     "version": "cpp",
-    "*.inc": "cpp"
+    "*.inc": "cpp",
+    "any": "cpp",
+    "charconv": "cpp",
+    "forward_list": "cpp",
+    "span": "cpp",
+    "valarray": "cpp",
+    "regex": "cpp"
   }
 }

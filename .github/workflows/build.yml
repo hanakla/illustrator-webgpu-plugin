@@ -1,0 +1,35 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: cd pkgs/plugin
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s '/Applications/Xcode_16.0.app/Contents/Developer'
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build
+        run: xcodebuild -configuration Release build
+
+  build_vcxproj:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: cd pkgs/plugin
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Build
+        run: msbuild /p:Configuration=Release /p:Platform=x64 ./pkgs/plugin/project.vcxproj

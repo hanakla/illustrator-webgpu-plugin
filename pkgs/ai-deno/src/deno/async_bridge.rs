@@ -17,7 +17,7 @@ impl AsyncBridge {
       tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .thread_keep_alive(timeout)
-        .build().into(),
+        .build()?,
     );
 
     Ok(Self::with_tokio_runtime(timeout, tokio))
@@ -49,7 +49,7 @@ impl AsyncBridge {
     self.tokio
   }
 
-  /// Returns the timeout for the runtime
+  /// Returns the timeout for the runtime1
   #[must_use]
   pub fn timeout(&self) -> std::time::Duration {
     self.timeout

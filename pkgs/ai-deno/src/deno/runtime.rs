@@ -1,352 +1,687 @@
+use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
+use crate::deno::error::Error;
+use crate::deno::ext::worker::deno_worker_host;
+use crate::deno::module::{Module, ModuleHandle};
+use crate::deno::my_node_resolver;
+use crate::deno::transpiler::transpile;
+use deno_core::error::JsError;
+use deno_error::JsErrorBox;
+use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
+use deno_runtime::deno_cache::{CreateCache, SqliteBackedCache};
+use deno_runtime::deno_core::futures::FutureExt;
+use deno_runtime::deno_core::{
+    error::AnyError, url::Url, v8, FastString, JsRuntime, ModuleSpecifier, PollEventLoopOptions,
+    RuntimeOptions,
+};
+use deno_runtime::deno_cron::local::LocalCronHandler;
+use deno_runtime::deno_fs::sync::MaybeArc;
+use deno_runtime::deno_http::DefaultHttpPropertyExtractor;
+use deno_runtime::deno_io::{Stdio, StdioPipe};
+use deno_runtime::deno_kv::dynamic::MultiBackendDbHandler;
+use deno_runtime::deno_node::{self, ExtNodeSys, NodeExtInitServices, NodeResolverRc};
+use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
+use deno_runtime::deno_tls::rustls::RootCertStore;
+use deno_runtime::deno_tls::{RootCertStoreProvider, TlsKeys};
+use deno_runtime::deno_web::BlobStore;
+use deno_runtime::permissions::RuntimePermissionDescriptorParser;
+use deno_runtime::web_worker::WebWorkerOptions;
+use deno_runtime::worker::{WorkerOptions, WorkerServiceOptions};
+use deno_runtime::{
+    deno_broadcast_channel, deno_cache, deno_canvas, deno_console, deno_core, deno_cron,
+    deno_crypto, deno_fetch, deno_ffi, deno_fs, deno_http, deno_io, deno_kv, deno_napi, deno_net,
+    deno_os, deno_permissions, deno_process, deno_telemetry, deno_tls, deno_url, deno_web,
+    deno_webgpu, deno_webidl, deno_websocket, deno_webstorage, runtime, BootstrapOptions,
+};
+use homedir::my_home;
+use node_resolver::errors::{PackageFolderResolveErrorKind, PackageNotFoundError};
+use node_resolver::{InNpmPackageChecker, NodeResolver, NpmPackageFolderResolver, UrlOrPath};
+use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
-use deno_core::futures::FutureExt;
-
-use deno_runtime::deno_core::{FastString, JsRuntime, ModuleSpecifier, PollEventLoopOptions, RuntimeOptions, url::{Url}, v8};
-use deno_runtime::deno_node::ExtNodeSys;
-use deno_runtime::{deno_canvas, deno_console, deno_fetch, deno_ffi, deno_fs, deno_http, deno_io, deno_os, deno_telemetry, deno_tls, deno_url, deno_web, deno_webgpu, deno_webidl, deno_webstorage, runtime};
-use deno_runtime::deno_fs::sync::MaybeArc;
-use deno_runtime::deno_http::DefaultHttpPropertyExtractor;
-use deno_runtime::deno_permissions::PermissionsContainer;
-use deno_runtime::deno_web::BlobStore;
-use node_resolver::{InNpmPackageChecker, NpmPackageFolderResolver};
-use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
-use crate::deno::error::Error;
-use crate::deno::module::{Module, ModuleHandle};
+use sys_traits::impls::RealSys;
 
 pub struct RuntimeInitOptions {
-  timeout: Duration
+    pub timeout: Duration,
 }
 
 impl Default for RuntimeInitOptions {
-  fn default() -> Self {
-    Self {timeout: Duration::MAX}
-  }
+    fn default() -> Self {
+        Self {
+            timeout: Duration::MAX,
+        }
+    }
 }
 
-
 pub struct Runtime {
-  pub tokio: AsyncBridge,
-  pub deno_runtime: JsRuntime
+    tokio: AsyncBridge,
+    deno_runtime: JsRuntime,
+    // container: RuntimeContainer,
+    cwd: PathBuf,
 }
 
 impl Runtime {
-  pub fn new(option: RuntimeInitOptions) -> Result<Self, Error>{
-
-    let tokio = AsyncBridge::new(Default::default())?;
-    let runtime = JsRuntime::new(RuntimeOptions {
-      extensions: get_all_extensions(),
-      ..Default::default()
-    });
-
-    Ok(Self { tokio, deno_runtime: runtime })
-  }
-
-  pub fn call_module_function(
-    &mut self, handle: &ModuleHandle, name: &str, args: &[v8::Local<v8::Value>]
-  ) -> Result<v8::Global<v8::Value>, Error> {
-    self.block_on(|runtime| async move {
-      runtime.call_module_function_async(handle, name, args).await
-    })
-  }
-
-  pub async fn call_module_function_async(
-    &mut self, handle: &ModuleHandle, name: &str, args: &[v8::Local<'static, v8::Value>]
-  ) -> Result<v8::Global<v8::Value>, Error> {
-    let mut scope = self.deno_runtime.handle_scope();
-    let function = handle.get_export_function_by_name(self, name)?;
-    let result = self.call_function_by_ref(handle, &function, args)?;
-    let result = self.resolve_with_event_loop(result).await?;
-    Ok(result)
-  }
-
-  fn call_function_by_ref(
-    &mut self,
-    handle: &ModuleHandle,
-    function: &v8::Global<v8::Function>,
-    args: &[v8::Local<v8::Value>]
-  ) -> Result<v8::Global<v8::Value>, Error> {
-    let module_namespace = self.deno_runtime.get_module_namespace(handle.module_id());
-
-    let mut scope = self.deno_runtime.handle_scope();
-    let mut scope = v8::TryCatch::new(&mut scope);
-
-    let namespace: v8::Local<v8::Value> = if let Ok(module_namespace) = module_namespace {
-        v8::Local::<v8::Object>::new(&mut scope, module_namespace).into()
-    } else {
-      // Create a new object to use as the namespace if none is provided
-      //let obj: v8::Local<v8::Value> = v8::Object::new(&mut scope).into();
-      let obj: v8::Local<v8::Value> = v8::undefined(&mut scope).into();
-      obj
-    };
-
-    let function_instance = function.open(&mut scope);
-    let result = function_instance.call(&mut scope, namespace, &args);
-
-    match result {
-      Some(value) => {
-        let value = v8::Global::new(&mut scope, value);
-        Ok(value)
-      }
-      None if scope.has_caught() =>{
-        let e = scope.message().ok_or_else(|| Error::Runtime("Unknown error".to_string()))?;
-
-        let filename = e.get_script_resource_name(&mut scope);
-        let linenumber = e.get_line_number(&mut scope).unwrap_or_default();
-        let filename = if let Some(v) = filename {
-          let filename = v.to_rust_string_lossy(&mut scope);
-          format!("{filename}:{linenumber}: ")
-        } else  {
-          let filename = handle.module().filename().to_string_lossy();
-          format!("{filename}:{linenumber}: ")
+    pub fn new(option: RuntimeInitOptions) -> Result<Self, Error> {
+        let runtime_options = runtime_options_factory();
+        let bootstrap_options = BootstrapOptions {
+            ..Default::default()
         };
 
-        let msg = e.get(&mut scope).to_rust_string_lossy(&mut scope);
-        let s = format!("{filename}{msg}");
-        Err(Error::Runtime(s))
-      }
-      None => Err(Error::Runtime(
-        "Unknown error during function execution".to_string()
-      ))
+        let tokio = AsyncBridge::new(option.timeout)?;
+        let mut runtime = JsRuntime::new(runtime_options);
+        // deno_runtime::worker::MainWorker::bootstrap_from_options(runtime_options,
+        //
+        // );
+
+        if !bootstrap_runtime(&mut runtime, &bootstrap_options).is_ok() {
+            return Err(Error::CoreError("Failed to bootstrap runtime".into()));
+        }
+
+        let cwd = std::env::current_dir().or_else(|e| {
+            Err(Error::Runtime(format!(
+                "Failed to get current directory: {}",
+                e.to_string()
+            )))
+        })?;
+
+        Ok(Self {
+            tokio,
+            deno_runtime: runtime,
+            // container:runtime,
+            cwd,
+        })
     }
-  }
 
-  pub fn attach_module(&mut self, module: &mut Module) -> Result<ModuleHandle, Error> {
-    self.block_on(|runtime| async move {
-      let handle = runtime.attach_module_async(module).await?;
-      runtime.await_event_loop(PollEventLoopOptions::default(), None).await?;
+    // pub fn tokio_rutime(&mut self) -> Rc<tokio::runtime::Runtime> {
+    //     self.tokio.tokio_runtime()
+    // }
 
-      Ok(handle)
-    })
-  }
-
-  pub async fn attach_module_async(&mut self, module: &mut Module) -> Result<ModuleHandle, Error> {
-    let module_specifier = module.specifier();
-
-    let module_id = self.deno_runtime.load_main_es_module_from_code(
-      &module_specifier,
-      FastString::from(module.contents().to_string()),
-    ).await?;
-
-    let mod_load = self.deno_runtime.mod_evaluate(module_id);
-
-    self.with_event_loop_future(mod_load, PollEventLoopOptions::default())
-      .await?;
-
-    Ok(ModuleHandle::new(module.clone(), module_id))
-  }
-
-  async fn await_event_loop(
-    &mut self,
-    options: PollEventLoopOptions,
-    timeout: Option<Duration>,
-  ) -> Result<(), Error> {
-    if let Some(timeout) = timeout {
-      Ok(tokio::select! {
-          r = self.deno_runtime.run_event_loop(options) => r,
-          () = tokio::time::sleep(timeout) => Ok(()),
-      }?)
-    } else {
-      Ok(self.deno_runtime.run_event_loop(options).await?)
+    pub fn deno_runtime(&mut self) -> &mut JsRuntime {
+        self.deno_runtime.rt_mut()
     }
-  }
 
-  async fn with_event_loop_future<'fut, T, E>(
-    &mut self,
-    mut fut: impl std::future::Future<Output = Result<T, E>> + Unpin + 'fut,
-    poll_options: PollEventLoopOptions,
-  ) -> Result<T, Error>
-  where
-    deno_core::error::AnyError: From<E>,
-    Error: std::convert::From<E>,
-  {
-    // Manually implement tokio::select
-    std::future::poll_fn(|cx| {
-      if let Poll::Ready(t) = fut.poll_unpin(cx) {
-        return if let Poll::Ready(Err(e)) =
-          self.deno_runtime.poll_event_loop(cx, poll_options)
-        {
-          // Run one more tick to check for errors
-          Poll::Ready(Err(e.into()))
+    pub fn call_module_function(
+        &mut self,
+        handle: &mut ModuleHandle,
+        name: &str,
+        args: &Vec<v8::Local<v8::Value>>,
+    ) -> Result<v8::Global<v8::Value>, Error> {
+        self.block_on(|runtime| async move {
+            let result = runtime
+                .call_module_function_async(handle, name, args)
+                .await
+                .or::<Error>(Err(Error::Runtime("abc".to_string())));
+            result
+        })
+    }
+
+    pub async fn call_module_function_async<'a>(
+        &mut self,
+        handle: &mut ModuleHandle,
+        name: &str,
+        args: &Vec<v8::Local<'a, v8::Value>>,
+    ) -> Result<v8::Global<v8::Value>, Error> {
+        let function = handle.get_export_function_by_name(self, name)?;
+        let result = self.call_function_by_ref(handle, &function, args)?;
+        let result = self.resolve_with_event_loop(result).await?;
+        Ok(result)
+    }
+
+    fn call_function_by_ref(
+        &mut self,
+        handle: &ModuleHandle,
+        function: &v8::Global<v8::Function>,
+        args: &Vec<v8::Local<v8::Value>>,
+    ) -> Result<v8::Global<v8::Value>, Error> {
+        let module_namespace = self.deno_runtime.get_module_namespace(handle.module_id());
+
+        let mut scope = self.deno_runtime.handle_scope();
+        let mut scope = v8::TryCatch::new(&mut scope);
+
+        let namespace: v8::Local<v8::Value> = if let Ok(module_namespace) = module_namespace {
+            v8::Local::<v8::Object>::new(&mut scope, module_namespace).into()
         } else {
-          // No errors - continue
-          Poll::Ready(t.map_err(Into::into))
+            // Create a new object to use as the namespace if none is provided
+            //let obj: v8::Local<v8::Value> = v8::Object::new(&mut scope).into();
+            let obj: v8::Local<v8::Value> = v8::undefined(&mut scope).into();
+            obj
         };
-      }
 
-      if let Poll::Ready(Err(e)) = self.deno_runtime.poll_event_loop(cx, poll_options) {
-        // Event loop failed
-        return Poll::Ready(Err(e.into()));
-      }
+        let function_instance = function.open(&mut scope);
+        let result = function_instance.call(&mut scope, namespace, &args);
 
-      if self
-        .deno_runtime
-        .poll_event_loop(cx, poll_options)
-        .is_ready()
-      {
-        // Event loop resolved - continue
-        println!("Event loop resolved");
-      }
+        match result {
+            Some(value) => {
+                let value = v8::Global::new(&mut scope, value);
+                Ok(value)
+            }
+            None if scope.has_caught() => {
+                let e = scope
+                    .message()
+                    .ok_or_else(|| Error::Runtime("Unknown error".to_string()))?;
 
-      Poll::Pending
-    })
-      .await
-  }
+                let filename = e.get_script_resource_name(&mut scope);
+                let linenumber = e.get_line_number(&mut scope).unwrap_or_default();
+                let filename = if let Some(v) = filename {
+                    let filename = v.to_rust_string_lossy(&mut scope);
+                    format!("{filename}:{linenumber}: ")
+                } else {
+                    let filename = handle.module().filename().to_string_lossy();
+                    format!("{filename}:{linenumber}: ")
+                };
 
-  async fn resolve_with_event_loop(
-    &mut self,
-    value: v8::Global<v8::Value>,
-  ) -> Result<v8::Global<v8::Value>, Error> {
-    let future = self.deno_runtime.resolve(value);
-    let result = self.deno_runtime
-      .with_event_loop_future(future, PollEventLoopOptions::default())
-      .await?;
+                let msg = e.get(&mut scope).to_rust_string_lossy(&mut scope);
+                let s = format!("{filename}{msg}");
+                Err(Error::Runtime(s))
+            }
+            None => Err(Error::Runtime(
+                "Unknown error during function execution".to_string(),
+            )),
+        }
+    }
 
-    Ok(result)
-  }
+    pub fn load_main_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
+        self.block_on(move |runtime| async move {
+            let handle = runtime.attach_module_async(module, true).await;
+            runtime
+                .await_event_loop(PollEventLoopOptions::default(), None)
+                .await?;
+            handle
+        })
+    }
 
-  // fn cast_value<T, T2>(&mut, self, value: v8::Local<T>) -> Result<T, Error> {
-  //   // v8::Local::cast::<value>
-  //
-  // }
+    pub fn attach_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
+        self.block_on(move |runtime| async move {
+            let handle = runtime.attach_module_async(module, false).await;
+            runtime
+                .await_event_loop(PollEventLoopOptions::default(), None)
+                .await?;
+            handle
+        })
+    }
 
-  // fn to_local_value<T>(&mut self, object: &mut v8::Global<T>) -> v8::Local<T> {
-  //   let mut scope = self.deno_runtime.handle_scope();
-  //   v8::Local::<T>::new(&mut scope, object)
-  // }
+    pub async fn attach_module_async(
+        &mut self,
+        module: &Module,
+        main: bool,
+    ) -> Result<ModuleHandle, Error> {
+        self.attach_module_internal(module, false).await
+    }
+
+    async fn attach_module_internal(
+        &mut self,
+        module: &Module,
+        main: bool,
+    ) -> Result<ModuleHandle, Error> {
+        let module_specifier = module.specifier(&self.cwd)?;
+        let (code, sourcemap) = transpile(
+            FastString::from(module_specifier.clone()),
+            FastString::from(module.contents().to_string()),
+        )?;
+
+        let js_runtime = self.deno_runtime();
+
+        let module_id: deno_runtime::deno_core::ModuleId = if main {
+            js_runtime
+                .load_main_es_module_from_code(&module_specifier, code)
+                .await
+        } else {
+            js_runtime
+                .load_side_es_module_from_code(&module_specifier, code)
+                .await
+        }
+        .or_else(|e| {
+            return Err(Error::ModuleNotFound(format!(
+                "Failed to load module: {} \n For loading: {}",
+                e.to_string(),
+                module_specifier.to_string(),
+            )));
+        })?;
+
+        let mod_load = self.deno_runtime().mod_evaluate(module_id);
+
+        match self
+            .with_event_loop_future(mod_load, PollEventLoopOptions::default())
+            .await
+        {
+            Ok(_) => Ok(ModuleHandle::new(module.clone(), module_id)),
+            Err(e) => {
+                return Err(Error::ModuleNotFound(format!(
+                    "Failed to evaluate module: {}. reason: {}",
+                    module_specifier.to_string(),
+                    e.to_string()
+                )))
+            }
+        }
+    }
+
+    async fn await_event_loop(
+        &mut self,
+        options: PollEventLoopOptions,
+        timeout: Option<Duration>,
+    ) -> Result<(), Error> {
+        if let Some(timeout) = timeout {
+            Ok(tokio::select! {
+                r = self.deno_runtime().run_event_loop(options) => r,
+                () = tokio::time::sleep(timeout) => Ok(()),
+            }?)
+        } else {
+            Ok(self.deno_runtime.run_event_loop(options).await?)
+        }
+    }
+
+    async fn with_event_loop_future<'fut, T, E>(
+        &mut self,
+        mut fut: impl std::future::Future<Output = Result<T, E>> + Unpin + 'fut,
+        poll_options: PollEventLoopOptions,
+    ) -> Result<T, Error>
+    where
+        AnyError: From<E>,
+        Error: std::convert::From<E>,
+    {
+        // Manually implement tokio::select
+        std::future::poll_fn(|cx| {
+            if let Poll::Ready(t) = fut.poll_unpin(cx) {
+                return if let Poll::Ready(Err(e)) =
+                    self.deno_runtime.poll_event_loop(cx, poll_options)
+                {
+                    // Run one more tick to check for errors
+                    Poll::Ready(Err(e.into()))
+                } else {
+                    // No errors - continue
+                    Poll::Ready(t.map_err(Into::into))
+                };
+            }
+
+            if let Poll::Ready(Err(e)) = self.deno_runtime.poll_event_loop(cx, poll_options) {
+                // Event loop failed
+                return Poll::Ready(Err(e.into()));
+            }
+
+            if self
+                .deno_runtime
+                .poll_event_loop(cx, poll_options)
+                .is_ready()
+            {
+                // Event loop resolved - continue
+                println!("Event loop resolved");
+            }
+
+            Poll::Pending
+        })
+        .await
+    }
+
+    async fn resolve_with_event_loop(
+        &mut self,
+        value: v8::Global<v8::Value>,
+    ) -> Result<v8::Global<v8::Value>, Error> {
+        let future = self.deno_runtime.resolve(value);
+        let result = self
+            .deno_runtime
+            .with_event_loop_future(future, PollEventLoopOptions::default())
+            .await?;
+
+        Ok(result)
+    }
+
+    // fn cast_value<T, T2>(&mut, self, value: v8::Local<T>) -> Result<T, Error> {
+    //   // v8::Local::cast::<value>
+    //
+    // }
+
+    // pub fn to_local_value<T>(&mut self, scope: &mut v8::HandleScope, object: v8::Global<T>) -> Result<&'static v8::Local<T>, ()> {
+    //   Ok(&v8::Local::<T>::new(scope, object))
+    // }
 }
 
 impl AsyncBridgeExt for Runtime {
-  fn bridge(&self) -> &AsyncBridge {
-    &self.tokio
-  }
+    fn bridge(&self) -> &AsyncBridge {
+        &self.tokio
+    }
 }
 
+fn runtime_options_factory() -> RuntimeOptions {
+    // let fs = RealSys::default();
+    // let arcFs = Arc::new(fs.clone());
+    //
+    // let node_require_loader = Rc::new(RustyRequireLoader(arcFs.clone()));
+    // let node_require_loader = Rc::new(RequireLoader));
+    //
+    //
+    // let node_ext_init = NodeExtInitServices {
+    //   node_require_loader: node_require_loader.clone(),
+    //   node_resolver: node_resolver.clone(),
+    //   pkg_json_resolver: pjson_resolver.clone(),
+    //   sys: fs.clone(),
+    // };
 
-fn get_all_extensions
-// <
-//   TInNpmPackageChecker: InNpmPackageChecker + 'static,
-//   TNpmPackageFolderResolver: NpmPackageFolderResolver + 'static,
-//   TExtNodeSys: ExtNodeSys + 'static,
-// >
-() -> Vec<deno_runtime::deno_core::Extension> {
-  let blob_store: Arc<BlobStore> = Arc::new(BlobStore::default());
-  let maybe_location: Option<Url> = None;
-
-  // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L391
-  vec![
-    deno_telemetry::deno_telemetry::init_ops_and_esm(),
-    // Web APIs
-    deno_webidl::deno_webidl::init_ops_and_esm(),
-    deno_console::deno_console::init_ops_and_esm(),
-    deno_url::deno_url::init_ops_and_esm(),
-    deno_web::deno_web::init_ops_and_esm::<PermissionsContainer>(
-      blob_store,
-      maybe_location,
-    ),
-    deno_webgpu::deno_webgpu::init_ops_and_esm(),
-    deno_canvas::deno_canvas::init_ops_and_esm(),
-    deno_fetch::deno_fetch::init_ops_and_esm::<PermissionsContainer>(
-      deno_fetch::Options {
-        // user_agent: "UA".to_string(),
-        // root_cert_store_provider: services.root_cert_store_provider.clone(),
-        // unsafely_ignore_certificate_errors: options
-        //   .unsafely_ignore_certificate_errors
-        //   .clone(),
-        // file_fetch_handler: Rc::new(deno_fetch::FsFetchHandler),
-        // resolver: services.fetch_dns_resolver,
+    let runtime_options = RuntimeOptions {
+        extensions: get_all_extensions(),
+        extension_transpiler: Some(Rc::new(|specifier, source| {
+            deno_runtime::transpile::maybe_transpile_source(specifier, source)
+        })),
+        is_main: true,
         ..Default::default()
+    };
+
+    // let services = deno_runtime::worker::WorkerServiceOptions {
+    //   node_services: node_ext_init,
+    //   fs:Arc<deno_fs::RealFs::default()>,
+    // };
+
+    runtime_options
+}
+
+fn get_all_extensions() -> Vec<deno_runtime::deno_core::Extension> {
+    let cachedir = match my_home() {
+        Ok(homedir) => homedir.unwrap().join(".ai-deno"),
+        Err(e) => {
+            panic!("ai-deno: Failed to get home directory: {}", e.to_string());
+        }
+    };
+
+    let blob_store: Arc<BlobStore> = Arc::new(BlobStore::default());
+    let maybe_location: Option<Url> = None;
+    let kv_storedir = cachedir.join("deno_kv");
+    let cache_storage_dir = cachedir.join("deno_cache");
+    let user_agent = "Deno-AdobeIllustraor".to_string();
+
+    let permission_desc_parser = Arc::new(RuntimePermissionDescriptorParser::new(RealSys));
+    let permissions = PermissionsContainer::new(permission_desc_parser, Permissions::allow_all());
+
+    deno_core::extension!(deno_permissions_worker,
+      options = {
+        permissions: PermissionsContainer,
+        enable_testing_features: bool,
       },
-    ),
-    // deno_cache::deno_cache::init_ops_and_esm(create_cache),
-    // deno_websocket::deno_websocket::init_ops_and_esm::<PermissionsContainer>(
-    //   options.bootstrap.user_agent.clone(),
-    //   services.root_cert_store_provider.clone(),
-    //   options.unsafely_ignore_certificate_errors.clone(),
-    // ),
-    deno_webstorage::deno_webstorage::init_ops_and_esm(
-      // options.origin_storage_dir.clone(),
-      None,
-    ),
-    // deno_crypto::deno_crypto::init_ops_and_esm(options.seed),
-    // deno_broadcast_channel::deno_broadcast_channel::init_ops_and_esm(
-    //   services.broadcast_channel.clone(),
-    // ),
-    deno_ffi::deno_ffi::init_ops_and_esm::<PermissionsContainer>(),
-    // deno_net::deno_net::init_ops_and_esm::<PermissionsContainer>(
-    //   services.root_cert_store_provider.clone(),
-    //   options.unsafely_ignore_certificate_errors.clone(),
-    // ),
-    deno_tls::deno_tls::init_ops_and_esm(),
-    // deno_kv::deno_kv::init_ops_and_esm(
-    //   MultiBackendDbHandler::remote_or_sqlite::<PermissionsContainer>(
-    //     options.origin_storage_dir.clone(),
-    //     options.seed,
-    //     deno_kv::remote::HttpOptions {
-    //       user_agent: options.bootstrap.user_agent.clone(),
-    //       root_cert_store_provider: services.root_cert_store_provider.clone(),
-    //       unsafely_ignore_certificate_errors: options
-    //         .unsafely_ignore_certificate_errors
-    //         .clone(),
-    //       client_cert_chain_and_key: TlsKeys::Null,
-    //       proxy: None,
-    //     },
-    //   ),
-    //   deno_kv::KvConfig::builder().build(),
-    // ),
-    // deno_cron::deno_cron::init_ops_and_esm(LocalCronHandler::new()),
-    // deno_napi::deno_napi::init_ops_and_esm::<PermissionsContainer>(),
-    deno_http::deno_http::init_ops_and_esm::<DefaultHttpPropertyExtractor>(
-      deno_http::Options::default(),
-    ),
-    // deno_io::deno_io::init_ops_and_esm(Some(options.stdio)),
-    deno_fs::deno_fs::init_ops_and_esm::<PermissionsContainer>(
-      MaybeArc::new(deno_fs::RealFs::default()),
-    ),
-    deno_os::deno_os::init_ops_and_esm(
-      deno_os::ExitCode::default()
-    ),
-    // deno_process::deno_process::init_ops_and_esm(
-    //   deno_lib::npm::create_npm_process_state_provider(
-    //     deno_resolver::npm::NpmResolver::Managed(
-    //       ManagedNpmResolver::new({})
-    //     )
-    //   ),
-    // ),
-    // deno_node::deno_node::init_ops_and_esm::<
-    //   PermissionsContainer,
-    //   TInNpmPackageChecker,
-    //   TNpmPackageFolderResolver,
-    //   TExtNodeSys,
-    // >(services.node_services, services.fs),
-    // Ops from this crate
-    deno_runtime::ops::runtime::deno_runtime::init_ops_and_esm(ModuleSpecifier::parse("ai-deno://main_module.ts").unwrap().clone()),
-    // deno_runtime::ops::worker_host::deno_worker_host::init_ops_and_esm(
-    //   options.create_web_worker_cb.clone(),
-    //   options.format_js_error_fn.clone(),
-    // ),
-    deno_runtime::ops::fs_events::deno_fs_events::init_ops_and_esm(),
-    deno_runtime::ops::permissions::deno_permissions::init_ops_and_esm(),
-    deno_runtime::ops::tty::deno_tty::init_ops_and_esm(),
-    deno_runtime::ops::http::deno_http_runtime::init_ops_and_esm(),
-    deno_runtime::ops::bootstrap::deno_bootstrap::init_ops_and_esm(
-      None
-      // if options.startup_snapshot.is_some() {
-      //   None
-      // } else {
-      //   Some(Default::default())
-      // },
-    ),
-    // deno_permissions_worker::init_ops_and_esm(
-    //   services.permissions,
-    //   enable_testing_features,
-    // ),
-    runtime::init_ops_and_esm(),
-    // NOTE(bartlomieju): this is done, just so that ops from this extension
-    // are available and importing them in `99_main.js` doesn't cause an
-    // error because they're not defined. Trying to use these ops in non-worker
-    // context will cause a panic.
-    deno_runtime::ops::web_worker::deno_web_worker::init_ops_and_esm().disable(),
-  ]
+      state = |state, options| {
+        state.put::<PermissionsContainer>(options.permissions);
+        state.put(deno_runtime::ops::TestingFeaturesEnabled(options.enable_testing_features));
+      },
+    );
+
+    // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L391
+    vec![
+        deno_telemetry::deno_telemetry::init_ops_and_esm(),
+        // Web APIs
+        deno_webidl::deno_webidl::init_ops_and_esm(),
+        deno_console::deno_console::init_ops_and_esm(),
+        deno_url::deno_url::init_ops_and_esm(),
+        deno_web::deno_web::init_ops_and_esm::<PermissionsContainer>(blob_store, maybe_location),
+        deno_webgpu::deno_webgpu::init_ops_and_esm(),
+        deno_canvas::deno_canvas::init_ops_and_esm(),
+        deno_fetch::deno_fetch::init_ops_and_esm::<PermissionsContainer>(deno_fetch::Options {
+            user_agent: user_agent.clone(),
+            root_cert_store_provider: None, // services.root_cert_store_provider.clone(),
+            unsafely_ignore_certificate_errors: None, // options.unsafely_ignore_certificate_errors.clone(),
+            file_fetch_handler: Rc::new(deno_fetch::FsFetchHandler),
+            resolver: deno_fetch::dns::Resolver::gai(), //services.fetch_dns_resolver,
+            proxy: None,
+            client_builder_hook: None,
+            request_builder_hook: None,
+            client_cert_chain_and_key: deno_tls::TlsKeys::Null,
+            // ..Default::default()
+        }),
+        deno_cache::deno_cache::init_ops_and_esm::<deno_cache::SqliteBackedCache>(None),
+        deno_websocket::deno_websocket::init_ops_and_esm::<PermissionsContainer>(
+            user_agent.clone(),
+            Some(Arc::new(EmptyCertStoreProvider::new())),
+            None,
+        ),
+        deno_webstorage::deno_webstorage::init_ops_and_esm(
+            // options.origin_storage_dir.clone(),
+            None,
+        ),
+        deno_crypto::deno_crypto::init_ops_and_esm(Some(1)),
+        deno_broadcast_channel::deno_broadcast_channel::init_ops_and_esm(
+            // services.broadcast_channel.clone(),
+            InMemoryBroadcastChannel::default(),
+        ),
+        deno_ffi::deno_ffi::init_ops_and_esm::<PermissionsContainer>(),
+        deno_net::deno_net::init_ops_and_esm::<PermissionsContainer>(
+            Some(Arc::new(EmptyCertStoreProvider::new())),
+            None,
+        ),
+        deno_tls::deno_tls::init_ops_and_esm(),
+        deno_kv::deno_kv::init_ops_and_esm(
+            MultiBackendDbHandler::remote_or_sqlite::<PermissionsContainer>(
+                Some(kv_storedir.clone()),
+                None,
+                deno_kv::remote::HttpOptions {
+                    user_agent: user_agent.clone(),
+                    root_cert_store_provider: None,
+                    unsafely_ignore_certificate_errors: None,
+                    client_cert_chain_and_key: TlsKeys::Null,
+                    proxy: None,
+                },
+            ),
+            deno_kv::KvConfig::builder().build(),
+        ),
+        deno_cron::deno_cron::init_ops_and_esm(LocalCronHandler::new()),
+        deno_napi::deno_napi::init_ops_and_esm::<PermissionsContainer>(),
+        deno_http::deno_http::init_ops_and_esm::<DefaultHttpPropertyExtractor>(
+            deno_http::Options::default(),
+        ),
+        deno_io::deno_io::init_ops_and_esm(Some(Stdio {
+            stdin: StdioPipe::inherit(),
+            stdout: StdioPipe::inherit(),
+            stderr: StdioPipe::inherit(),
+        })),
+        deno_fs::deno_fs::init_ops_and_esm::<PermissionsContainer>(MaybeArc::new(
+            deno_fs::RealFs::default(),
+        )),
+        deno_os::deno_os::init_ops_and_esm(deno_os::ExitCode::default()),
+        deno_process::deno_process::init_ops_and_esm(
+            None, // services.npm_process_state_provider,
+        ),
+        deno_node::deno_node::init_ops_and_esm::<
+            PermissionsContainer,
+            InNpmPackageCheckerStub,
+            NpmPackageFolderResolverStub,
+            RealSys,
+        >(None, MaybeArc::new(deno_fs::RealFs::default())),
+        // deno_node::deno_node::init_ops_and_esm::<
+        //     PermissionsContainer,
+        //     TInNpmPackageChecker,
+        //     TNpmPackageFolderResolver,
+        //     TExtNodeSys,
+        // >(Some(
+        //   NodeExtInitServices {
+        //     node_resolver: my_node_resolver::MyNodeResolver::create()
+        //   }
+        // ), services.fs),
+        // Ops from this crate
+        deno_runtime::ops::runtime::deno_runtime::init_ops_and_esm(
+            ModuleSpecifier::parse("ai-deno://main_module.ts")
+                .unwrap()
+                .clone(),
+        ),
+        deno_worker_host::init_ops_and_esm(),
+        // deno_runtime::ops::worker_host::deno_worker_host::init_ops_and_esm(
+        //     Arc::new(|_| unimplemented!("web workers are not supported")),
+        //     Some(Arc::new(deno_runtime::fmt_errors::format_js_error.clone())),
+        // ),
+        deno_runtime::ops::fs_events::deno_fs_events::init_ops_and_esm(),
+        deno_runtime::ops::permissions::deno_permissions::init_ops_and_esm(),
+        deno_runtime::ops::tty::deno_tty::init_ops_and_esm(),
+        deno_runtime::ops::http::deno_http_runtime::init_ops_and_esm(),
+        deno_runtime::ops::bootstrap::deno_bootstrap::init_ops_and_esm(
+            // if options.startup_snapshot.is_some() {
+            //     None
+            // } else {
+            Some(Default::default()), // },
+        ),
+        deno_permissions_worker::init_ops_and_esm(permissions, false),
+        runtime::init_ops_and_esm(),
+        // NOTE(bartlomieju): this is done, just so that ops from this extension
+        // are available and importing them in `99_main.js` doesn't cause an
+        // error because they're not defined. Trying to use these ops in non-worker
+        // context will cause a panic.
+        deno_runtime::ops::web_worker::deno_web_worker::init_ops_and_esm().disable(),
+    ]
+}
+
+fn bootstrap_runtime(js_runtime: &mut JsRuntime, options: &BootstrapOptions) -> Result<(), Error> {
+    {
+        let op_state = js_runtime.op_state();
+        let mut state = op_state.borrow_mut();
+        state.put(options.clone());
+    }
+
+    // SEE: https://github.com/denoland/deno/blob/795ecfdca60d22183babdf887f7f66500c3983b3/runtime/worker.rs#L618
+    let (
+        bootstrap_fn_global,
+        dispatch_load_event_fn_global,
+        dispatch_beforeunload_event_fn_global,
+        dispatch_unload_event_fn_global,
+        dispatch_process_beforeexit_event_fn_global,
+        dispatch_process_exit_event_fn_global,
+    ) = {
+        let context = js_runtime.main_context();
+        let scope = &mut js_runtime.handle_scope();
+        let context_local = v8::Local::new(scope, context);
+        let global_obj = context_local.global(scope);
+        let bootstrap_str = v8::String::new_external_onebyte_static(scope, b"bootstrap").unwrap();
+        let bootstrap_ns: v8::Local<v8::Object> = global_obj
+            .get(scope, bootstrap_str.into())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let main_runtime_str =
+            v8::String::new_external_onebyte_static(scope, b"mainRuntime").unwrap();
+        let bootstrap_fn = bootstrap_ns.get(scope, main_runtime_str.into()).unwrap();
+        let bootstrap_fn = v8::Local::<v8::Function>::try_from(bootstrap_fn).unwrap();
+        let dispatch_load_event_fn_str =
+            v8::String::new_external_onebyte_static(scope, b"dispatchLoadEvent").unwrap();
+        let dispatch_load_event_fn = bootstrap_ns
+            .get(scope, dispatch_load_event_fn_str.into())
+            .unwrap();
+        let dispatch_load_event_fn =
+            v8::Local::<v8::Function>::try_from(dispatch_load_event_fn).unwrap();
+        let dispatch_beforeunload_event_fn_str =
+            v8::String::new_external_onebyte_static(scope, b"dispatchBeforeUnloadEvent").unwrap();
+        let dispatch_beforeunload_event_fn = bootstrap_ns
+            .get(scope, dispatch_beforeunload_event_fn_str.into())
+            .unwrap();
+        let dispatch_beforeunload_event_fn =
+            v8::Local::<v8::Function>::try_from(dispatch_beforeunload_event_fn).unwrap();
+        let dispatch_unload_event_fn_str =
+            v8::String::new_external_onebyte_static(scope, b"dispatchUnloadEvent").unwrap();
+        let dispatch_unload_event_fn = bootstrap_ns
+            .get(scope, dispatch_unload_event_fn_str.into())
+            .unwrap();
+        let dispatch_unload_event_fn =
+            v8::Local::<v8::Function>::try_from(dispatch_unload_event_fn).unwrap();
+        let dispatch_process_beforeexit_event =
+            v8::String::new_external_onebyte_static(scope, b"dispatchProcessBeforeExitEvent")
+                .unwrap();
+        let dispatch_process_beforeexit_event_fn = bootstrap_ns
+            .get(scope, dispatch_process_beforeexit_event.into())
+            .unwrap();
+        let dispatch_process_beforeexit_event_fn =
+            v8::Local::<v8::Function>::try_from(dispatch_process_beforeexit_event_fn).unwrap();
+        let dispatch_process_exit_event =
+            v8::String::new_external_onebyte_static(scope, b"dispatchProcessExitEvent").unwrap();
+        let dispatch_process_exit_event_fn = bootstrap_ns
+            .get(scope, dispatch_process_exit_event.into())
+            .unwrap();
+        let dispatch_process_exit_event_fn =
+            v8::Local::<v8::Function>::try_from(dispatch_process_exit_event_fn).unwrap();
+        (
+            v8::Global::new(scope, bootstrap_fn),
+            v8::Global::new(scope, dispatch_load_event_fn),
+            v8::Global::new(scope, dispatch_beforeunload_event_fn),
+            v8::Global::new(scope, dispatch_unload_event_fn),
+            v8::Global::new(scope, dispatch_process_beforeexit_event_fn),
+            v8::Global::new(scope, dispatch_process_exit_event_fn),
+        )
+    };
+
+    let scope = &mut js_runtime.handle_scope();
+    let scope = &mut v8::TryCatch::new(scope);
+
+    let bootstrap_fn = v8::Local::new(scope, bootstrap_fn_global);
+    let undefined = v8::undefined(scope);
+    let args = options.as_v8(scope);
+    bootstrap_fn.call(scope, undefined.into(), &[args]);
+
+    if let Some(exception) = scope.exception() {
+        return Err(Error::from(JsError::from_v8_exception(scope, exception)));
+    }
+
+    Ok(())
+}
+
+struct InNpmPackageCheckerStub {}
+
+impl InNpmPackageChecker for InNpmPackageCheckerStub {
+    fn in_npm_package(&self, specifier: &Url) -> bool {
+        false
+    }
+
+    fn in_npm_package_at_dir_path(&self, path: &std::path::Path) -> bool {
+        false
+    }
+
+    fn in_npm_package_at_file_path(&self, path: &std::path::Path) -> bool {
+        false
+    }
+}
+
+struct NpmPackageFolderResolverStub {}
+impl NpmPackageFolderResolver for NpmPackageFolderResolverStub {
+    fn resolve_package_folder_from_package(
+        &self,
+        specifier: &str,
+        referrer: &node_resolver::UrlOrPathRef,
+    ) -> Result<PathBuf, node_resolver::errors::PackageFolderResolveError> {
+        Err(node_resolver::errors::PackageFolderResolveError {
+            0: Box::new(
+                node_resolver::errors::PackageFolderResolveErrorKind::PackageNotFound(
+                    PackageNotFoundError {
+                        package_name: specifier.to_string(),
+                        referrer: UrlOrPath::from(referrer.display()),
+                        referrer_extra: None,
+                    },
+                ),
+            ),
+        })
+    }
+}
+
+pub trait RuntimeTrait {
+    fn try_new(options: RuntimeOptions) -> Result<Self, Error>
+    where
+        Self: Sized;
+    fn rt_mut(&mut self) -> &mut JsRuntime;
+}
+impl RuntimeTrait for JsRuntime {
+    fn try_new(options: RuntimeOptions) -> Result<Self, Error>
+    where
+        Self: Sized,
+    {
+        match Self::try_new(options) {
+            Ok(rt) => Ok(rt),
+            Err(e) => Err(Error::Runtime(e.to_string())),
+        }
+    }
+    fn rt_mut(&mut self) -> &mut JsRuntime {
+        self
+    }
+}
+
+struct EmptyCertStoreProvider(RootCertStore);
+
+impl EmptyCertStoreProvider {
+    fn new() -> Self {
+        Self(RootCertStore::empty())
+    }
+}
+
+impl RootCertStoreProvider for EmptyCertStoreProvider {
+    fn get_or_try_init(&self) -> Result<&RootCertStore, JsErrorBox> {
+        Ok(&self.0)
+    }
 }

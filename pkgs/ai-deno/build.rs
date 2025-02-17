@@ -2,7 +2,7 @@ extern crate cbindgen;
 
 use std::env;
 use std::path::PathBuf;
-use cbindgen::{Bindings, Config, Error};
+use cbindgen::{Config};
 
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());

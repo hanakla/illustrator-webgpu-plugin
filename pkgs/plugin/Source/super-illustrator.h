@@ -4,11 +4,14 @@
 #include "AIRasterize.h"
 
 extern "C" AIArtSetSuite *sAIArtSet;
+extern "C" AIDictionarySuite *sAIDictionary;
 
 namespace suai
 {
     template <typename KeyType, typename ValueType>
     static ValueType mapValue(const KeyType &key, const ValueType &defaultValue, const std::unordered_map<KeyType, ValueType> &valueMap);
+
+    std::string unicodeStringToStdString(const ai::UnicodeString &str);
 
     enum RasterType
     {
@@ -158,6 +161,85 @@ namespace suai
             sAIArtSet->AddArtToArtSet(artSet, art);
         }
     };
+
+    namespace dict {
+        AIBoolean getBoolean(const AIDictionaryRef &dict, std::string key, AIBoolean defaultValue) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+
+            if (sAIDictionary->IsKnown(dict, dictKey)) {
+                AIBoolean value;
+                sAIDictionary->GetBooleanEntry(dict, dictKey, &value);
+                return value;
+            } else {
+                return defaultValue;
+            }
+        }
+
+        ai::int32 getInt(const AIDictionaryRef &dict, std::string key, ai::int32 defaultValue) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+
+            if (sAIDictionary->IsKnown(dict, dictKey)) {
+                ai::int32 value;
+                sAIDictionary->GetIntegerEntry(dict, dictKey, &value);
+                return value;
+            } else {
+                return defaultValue;
+            }
+        }
+
+        std::string getString(const AIDictionaryRef &dict, std::string key, std::string defaultValue) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+
+            if (sAIDictionary->IsKnown(dict, dictKey)) {
+                const char* string;
+                sAIDictionary->GetStringEntry(dict, dictKey, &string);
+                
+                ai::UnicodeString str(string);
+                return unicodeStringToStdString(str);
+            } else {
+                return defaultValue;
+            }
+        }
+
+        AIReal getReal(const AIDictionaryRef &dict, std::string key, AIReal defaultValue) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+
+            if (sAIDictionary->IsKnown(dict, dictKey)) {
+                AIReal value;
+                sAIDictionary->GetRealEntry(dict, dictKey, &value);
+                return value;
+            } else {
+                return defaultValue;
+            }
+        }
+
+        ASErr setBoolean(const AIDictionaryRef &dict, std::string key, AIBoolean value) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+            return sAIDictionary->SetBooleanEntry(dict, dictKey, value);
+        }
+
+        ASErr setInt(const AIDictionaryRef &dict, std::string key, ai::int32 value) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+            return sAIDictionary->SetIntegerEntry(dict, dictKey, value);
+        }
+
+        ASErr setString(const AIDictionaryRef &dict, std::string key, std::string value) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+            ai::UnicodeString unicodeStr(value.c_str(), kAIUTF8CharacterEncoding);
+            return sAIDictionary->SetUnicodeStringEntry(dict, dictKey, unicodeStr);
+        }
+
+        ASErr setReal(const AIDictionaryRef &dict, std::string key, AIReal value) {
+            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+            return sAIDictionary->SetRealEntry(dict, dictKey, value);
+        }
+    }
+
+
+    std::string unicodeStringToStdString(const ai::UnicodeString &str)
+    {
+        return str.as_UTF8().data();
+    }
 
     template <typename KeyType, typename ValueType>
     static ValueType mapValue(const KeyType &key, const ValueType &defaultValue, const std::unordered_map<KeyType, ValueType> &valueMap)
