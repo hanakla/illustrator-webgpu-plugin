@@ -1,0 +1,32 @@
+BasedOnStyle: Chromium
+AlignAfterOpenBracket: BlockIndent
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveAssignments: true
+AllowShortBlocksOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: Always
+AllowShortLambdasOnASingleLine: All
+AlwaysBreakAfterReturnType: None
+BinPackArguments: true
+BraceWrapping:
+  AfterFunction: false
+  AfterControlStatement: false
+  AfterNamespace: false
+  AfterStruct: false
+  AfterClass: false
+  AfterEnum: false
+  BeforeFunction: false
+  BeforeElse: false
+  BeforeCatch: false
+  AfterWhile: false
+ColumnLimit: '90'
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+NamespaceIndentation: All
+ObjCSpaceBeforeProtocolList: true
+PenaltyBreakBeforeFirstCallParameter: '1'
+PenaltyReturnTypeOnItsOwnLine: '0'
+Standard: Cpp11
+IndentWidth: '2'
+IndentExternBlock: true

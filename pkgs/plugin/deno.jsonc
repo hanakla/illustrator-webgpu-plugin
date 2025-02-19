@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@adobe/spectrum-tokens": "npm:@adobe/spectrum-tokens@^12.28.0"
+  }
+}

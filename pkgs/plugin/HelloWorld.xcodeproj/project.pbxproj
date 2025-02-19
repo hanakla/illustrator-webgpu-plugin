@@ -27,6 +27,7 @@
 		A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */ = {isa = PBXBuildFile; fileRef = A51B63322D5AA19E00BC41CA /* libai_dino.h */; };
 		A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E02D5F5A7D00BC41CA /* Metal.framework */; };
 		A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */; };
+		A591675F2D660DEE00B4709A /* spectrum-tokens.hpp in Headers */ = {isa = PBXBuildFile; fileRef = A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */; };
 		A5A0661E2D633B13006BE835 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5A0661D2D633B13006BE835 /* MetalKit.framework */; };
 		A5A068A92D637068006BE835 /* imgui_impl_metal.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5A0678C2D63700D006BE835 /* imgui_impl_metal.mm */; };
 		A5A068AA2D637068006BE835 /* imgui_impl_osx.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5A067932D63700D006BE835 /* imgui_impl_osx.mm */; };
@@ -91,6 +92,7 @@
 		A51B63322D5AA19E00BC41CA /* libai_dino.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = libai_dino.h; path = "../ai-deno/target/release/includes/libai_dino.h"; sourceTree = SOURCE_ROOT; };
 		A51B65E02D5F5A7D00BC41CA /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = "spectrum-tokens.hpp"; path = "Source/spectrum-tokens.hpp"; sourceTree = "<group>"; };
 		A5A0661D2D633B13006BE835 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		A5A067652D63700D006BE835 /* Format.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Format.h; sourceTree = "<group>"; };
 		A5A067672D63700D006BE835 /* config.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = config.yml; sourceTree = "<group>"; };
@@ -401,6 +403,7 @@
 				A5F9AB3D2D63E44A007EE38C /* libs */,
 				A5F9AB392D63AC6A007EE38C /* consts.h */,
 				A5F9AB372D63A3DE007EE38C /* super-illustrator.h */,
+				A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */,
 				A5F9AB442D645B6C007EE38C /* debugHelper.h */,
 				6868C920150BA192003DAAF2 /* HelloWorldID.h */,
 				6868C921150BA192003DAAF2 /* HelloWorldPlugin.cpp */,
@@ -1240,6 +1243,7 @@
 				A5F9AB3A2D63AC6A007EE38C /* consts.h in Headers */,
 				A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */,
 				6868C925150BA192003DAAF2 /* HelloWorldID.h in Headers */,
+				A591675F2D660DEE00B4709A /* spectrum-tokens.hpp in Headers */,
 				6868C927150BA192003DAAF2 /* HelloWorldPlugin.h in Headers */,
 				6868C929150BA192003DAAF2 /* HelloWorldSuites.h in Headers */,
 				A5F9AB452D645B6C007EE38C /* debugHelper.h in Headers */,

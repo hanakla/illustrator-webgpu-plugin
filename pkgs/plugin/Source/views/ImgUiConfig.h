@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../deps/imgui/imgui.h"
+
 static const float kMyDialogWidth = 300.0f;
 
 #ifdef __APPLE__

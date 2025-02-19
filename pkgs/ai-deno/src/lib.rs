@@ -152,9 +152,13 @@ pub extern "C" fn get_live_effects(ai_main_ref: OpaqueAiMain) -> *mut FunctionRe
 
     let result = execute_exported_function(ai_main, "getLiveEffects", |scope| Ok(vec![]));
 
-    // println!("🦕rust: get_live_effects result: {}", result);
+    println!("🦕rust: get_live_effects result: {}", result);
 
-    Box::into_raw(Box::new(result))
+    // Boxで確保して、所有権を維持する
+    let boxed_result = Box::new(result);
+
+    // ヒープに確保した結果をポインタとして返す
+    Box::into_raw(boxed_result)
 }
 
 #[no_mangle]
@@ -178,7 +182,11 @@ pub extern "C" fn get_live_effect_view_tree(
         Ok(args)
     });
 
-    Box::into_raw(Box::new(result))
+    print!("get_live_effect_view_tree result: {}", result);
+
+    let boxed = Box::new(result);
+
+    Box::into_raw(boxed)
 }
 
 #[no_mangle]
@@ -191,10 +199,12 @@ extern "C" fn do_live_effect(
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy() };
     let params = unsafe { CStr::from_ptr(params).to_string_lossy() }.clone();
+    let image_data = unsafe { &mut *image_data };
 
     let is_new_buffer = false;
     let source_buffer_ptr = unsafe { (*image_data).data_ptr };
 
+    println!("do_live_effect: effect_id = {}", effect_id);
     let result = execute_export_function_and_raw_return(ai_main, "doLiveEffect", |scope| {
         let effect_id = v8::String::new(scope, effect_id.to_string().as_str()).unwrap();
         let effect_id = v8::Local::new(scope, effect_id);
@@ -203,15 +213,18 @@ extern "C" fn do_live_effect(
         let params = v8::json::parse(scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
+        let width = v8::Number::new(scope, image_data.width as f64);
+        let height = v8::Number::new(scope, image_data.height as f64);
+
         let buffer = {
             let bufferdata = unsafe {
                 Vec::from_raw_parts(
-                    (*image_data).data_ptr as *mut u8,
-                    (*image_data).byte_length,
-                    (*image_data).byte_length,
+                    image_data.data_ptr as *mut u8,
+                    image_data.byte_length,
+                    image_data.byte_length,
                 )
             };
-            let len = unsafe { (*image_data).byte_length };
+            let len = image_data.byte_length;
 
             let store = v8::ArrayBuffer::new_backing_store_from_bytes(bufferdata).make_shared();
             let array_buffer = v8::ArrayBuffer::with_backing_store(scope, &store);
@@ -220,7 +233,13 @@ extern "C" fn do_live_effect(
         }
         .unwrap();
 
-        let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into(), buffer.into()];
+        let args: Vec<v8::Local<v8::Value>> = vec![
+            effect_id.into(),
+            params.into(),
+            width.into(),
+            height.into(),
+            buffer.into(),
+        ];
         Ok(args)
     })
     .unwrap();
@@ -253,7 +272,7 @@ extern "C" fn do_live_effect(
     let is_new_buffer = buffer.data().unwrap().as_ptr() == source_buffer_ptr;
     println!("is_new_buffer: {}", is_new_buffer);
 
-    Box::into_raw(Box::new(DoLiveEffectResult {
+    let boxed = Box::new(DoLiveEffectResult {
         success: true,
         data: &mut ImageDataPayload {
             width: width as u32,
@@ -261,7 +280,9 @@ extern "C" fn do_live_effect(
             data_ptr: Box::into_raw(Box::new(buffer.data())) as *mut c_void,
             byte_length: len,
         },
-    }))
+    });
+
+    Box::into_raw(boxed)
 }
 
 // #[no_mangle]
@@ -388,6 +409,7 @@ fn execute_export_function_and_raw_return<'a>(
     let scope = &mut v8::TryCatch::new(handle_scope);
     let undefined = v8::undefined(scope);
     let args = args_factory(scope).unwrap();
+
     let result = fn_ref.call(scope, undefined.into(), &args);
 
     if let Some(err) = scope.exception() {

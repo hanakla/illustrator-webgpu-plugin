@@ -1,0 +1,37 @@
+{
+  "version": "4",
+  "specifiers": {
+    "jsr:@qnighy/dedent@*": "0.1.2",
+    "npm:@adobe/spectrum-tokens@*": "12.28.0",
+    "npm:@adobe/spectrum-tokens@^12.28.0": "12.28.0",
+    "npm:parse-css-color@*": "0.2.1"
+  },
+  "jsr": {
+    "@qnighy/dedent@0.1.2": {
+      "integrity": "9e420cff5b0082dba168385c9dfc56f25ef9a07999605e5fc9bc2058529998ee"
+    }
+  },
+  "npm": {
+    "@adobe/spectrum-tokens@12.28.0": {
+      "integrity": "sha512-kf8DCVDRE91Q+eaJRgcdGs6Fq/GlItq+OwsY0rygoD4lJlSGOsNbly7BgioTQlBO9gV8bNNwhqnWiipLbNxnkw=="
+    },
+    "color-name@1.1.4": {
+      "integrity": "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA=="
+    },
+    "hex-rgb@4.3.0": {
+      "integrity": "sha512-Ox1pJVrDCyGHMG9CFg1tmrRUMRPRsAWYc/PinY0XzJU4K7y7vjNoLKIQ7BR5UJMCxNN8EM1MNDmHWA/B3aZUuw=="
+    },
+    "parse-css-color@0.2.1": {
+      "integrity": "sha512-bwS/GGIFV3b6KS4uwpzCFj4w297Yl3uqnSgIPsoQkx7GMLROXfMnWvxfNkL0oh8HVhZA4hvJoEoEIqonfJ3BWg==",
+      "dependencies": [
+        "color-name",
+        "hex-rgb"
+      ]
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:@adobe/spectrum-tokens@^12.28.0"
+    ]
+  }
+}

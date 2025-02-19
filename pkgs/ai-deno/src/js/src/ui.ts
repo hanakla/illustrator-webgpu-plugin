@@ -6,7 +6,7 @@ import { UINode, UINodeSlider } from "./types.ts";
 
 export const ui = {
   group: (
-    { direction = "horizontal" }: { direction?: "horizontal" | "vertical" },
+    { direction = "horizontal" }: { direction?: "row" | "col" },
     children: UINode[]
   ): UINode => ({
     type: "group",

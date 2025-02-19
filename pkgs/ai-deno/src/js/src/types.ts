@@ -7,7 +7,7 @@ export type ParameterSchema = {
 
 export type UINodeGroup = {
   type: "group";
-  direction: "horizontal" | "vertical";
+  direction: "col" | "row";
   children: UINode[];
 };
 

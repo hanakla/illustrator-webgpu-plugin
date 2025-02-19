@@ -1,3 +1,27 @@
+// The MIT License (MIT)
+//
+// Copyright (c) 2022 Richard Carson
+//
+// Modified by Hanakla
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the Software), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, andor sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
 use crate::deno::error::Error;
 use crate::deno::ext::worker::deno_worker_host;
@@ -7,7 +31,6 @@ use crate::deno::transpiler::transpile;
 use deno_core::error::JsError;
 use deno_error::JsErrorBox;
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
-use deno_runtime::deno_cache::{CreateCache, SqliteBackedCache};
 use deno_runtime::deno_core::futures::FutureExt;
 use deno_runtime::deno_core::{
     error::AnyError, url::Url, v8, FastString, JsRuntime, ModuleSpecifier, PollEventLoopOptions,
@@ -18,7 +41,6 @@ use deno_runtime::deno_fs::sync::MaybeArc;
 use deno_runtime::deno_http::DefaultHttpPropertyExtractor;
 use deno_runtime::deno_io::{Stdio, StdioPipe};
 use deno_runtime::deno_kv::dynamic::MultiBackendDbHandler;
-use deno_runtime::deno_node::{self, ExtNodeSys, NodeExtInitServices, NodeResolverRc};
 use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
 use deno_runtime::deno_tls::rustls::RootCertStore;
 use deno_runtime::deno_tls::{RootCertStoreProvider, TlsKeys};

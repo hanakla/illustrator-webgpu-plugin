@@ -1,3 +1,5 @@
+.yarn/
 output/
 build/
 xcuserdata/
+node_modules/

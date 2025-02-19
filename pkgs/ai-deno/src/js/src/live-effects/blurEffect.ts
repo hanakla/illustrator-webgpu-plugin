@@ -1,94 +1,87 @@
-// src/js/src/ui.ts
-var ui = {
-  group: ({ direction = "horizontal" }, children) => ({
-    type: "group",
-    direction,
-    children
-  }),
-  slider: (props) => ({
-    ...props,
-    type: "slider"
-  }),
-  checkbox: (props) => ({
-    ...props,
-    type: "checkbox"
-  }),
-  textInput: (props) => ({
-    ...props,
-    type: "textInput"
-  }),
-  text: (props) => ({
-    ...props,
-    type: "text"
-  }),
-  button: (props) => ({
-    ...props,
-    type: "button"
-  })
-};
+import { Effect, StyleFilterFlag } from "../types.ts";
+import { ui } from "../ui.ts";
 
-// src/js/src/live-effects/blurEffect.ts
-var blurEffect = {
+export const blurEffect: Effect<{ radius: number }> = {
   id: "blur-v1",
   title: "Gausian Blur V1",
   version: { major: 1, minor: 0 },
   styleFilterFlags: {
-    main: 2 /* kPostEffectFilter */,
-    features: []
+    main: StyleFilterFlag.kPostEffectFilter,
+    features: [],
   },
   paramSchema: {
     radius: {
       type: "real",
-      default: 1
-    }
+      default: 1.0,
+    },
   },
   doLiveEffect: async (params, input) => {
     console.log("Deno code running", input.buffer.byteLength / 4, input);
+
     function generateGaussianKernel(radius) {
       const size = radius * 2 + 1;
       const kernel = new Array(size * size);
+
       const sigma = radius / 2;
       const twoSigmaSquare = 2 * sigma * sigma;
       const piTwoSigmaSquare = Math.PI * twoSigmaSquare;
+
       let sum = 0;
+
       for (let y = -radius; y <= radius; y++) {
         for (let x = -radius; x <= radius; x++) {
           const exp = Math.exp(-(x * x + y * y) / twoSigmaSquare);
           const value = exp / piTwoSigmaSquare;
+
           const index = (y + radius) * size + (x + radius);
           kernel[index] = value;
           sum += value;
         }
       }
+
       for (let i = 0; i < kernel.length; i++) {
         kernel[i] /= sum;
       }
+
       return { kernel, size };
     }
+
     async function gaussianBlurWebGPU(imageData, radius) {
-      console.log(`\u307C\u304B\u3057\u306E\u5F37\u3055: ${radius}\u30D4\u30AF\u30BB\u30EB`);
+      console.log(`ぼかしの強さ: ${radius}ピクセル`);
+
       const device = await initWebGPU();
       const { width, height, data } = imageData;
+
       const { kernel, size } = generateGaussianKernel(radius);
       const kernelBuffer = device.createBuffer({
         size: kernel.length * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       });
       device.queue.writeBuffer(kernelBuffer, 0, new Float32Array(kernel));
+
       const bufferSize = width * height * 4;
       const inputBuffer = device.createBuffer({
         size: bufferSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       });
+
+      // 出力バッファ作成 - COPY_DST フラグを追加して対応
       const outputBuffer = device.createBuffer({
         size: bufferSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+        usage:
+          GPUBufferUsage.STORAGE |
+          GPUBufferUsage.COPY_DST |
+          GPUBufferUsage.COPY_SRC,
       });
+
+      // 結果読み取り用のバッファを別途作成
       const resultBuffer = device.createBuffer({
         size: bufferSize,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
       });
+
       device.queue.writeBuffer(inputBuffer, 0, data);
+
       const shaderModule = device.createShaderModule({
         code: `
         struct ImageData {
@@ -141,27 +134,30 @@ var blurEffect = {
                 }
             }
 
-            // \u91CD\u307F\u306E\u5408\u8A08\u304C0\u3088\u308A\u5927\u304D\u3044\u5834\u5408\u306E\u307F\u6B63\u898F\u5316
+            // 重みの合計が0より大きい場合のみ正規化
             if (weightSum > 0.0) {
                 color = color / weightSum;
             }
 
             let finalPixel: u32 = (u32(color.r) << 24) | (u32(color.g) << 16) | (u32(color.b) << 8) | u32(color.a);
             outputImage.data[index] = finalPixel;
-        }`
+        }`,
       });
+
       const pipeline = device.createComputePipeline({
         layout: "auto",
-        compute: { module: shaderModule, entryPoint: "main" }
+        compute: { module: shaderModule, entryPoint: "main" },
       });
+
       const bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: inputBuffer } },
           { binding: 1, resource: { buffer: outputBuffer } },
-          { binding: 2, resource: { buffer: kernelBuffer } }
-        ]
+          { binding: 2, resource: { buffer: kernelBuffer } },
+        ],
       });
+
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginComputePass();
       passEncoder.setPipeline(pipeline);
@@ -172,6 +168,8 @@ var blurEffect = {
       );
       passEncoder.end();
       device.queue.submit([commandEncoder.finish()]);
+
+      // コマンドエンコーダを作成して出力バッファから結果バッファへコピー
       const copyEncoder = device.createCommandEncoder();
       copyEncoder.copyBufferToBuffer(
         outputBuffer,
@@ -181,6 +179,8 @@ var blurEffect = {
         bufferSize
       );
       device.queue.submit([copyEncoder.finish()]);
+
+      // 結果バッファからデータを読み取り
       await resultBuffer.mapAsync(GPUMapMode.READ);
       const resultArray = new Uint8Array(resultBuffer.getMappedRange());
       const outputImageData = new ImageData(
@@ -189,6 +189,7 @@ var blurEffect = {
         height
       );
       resultBuffer.unmap();
+
       return outputImageData;
     }
     return input;
@@ -196,6 +197,7 @@ var blurEffect = {
   editLiveEffectParameters: (params) => JSON.stringify(params),
   renderUI: (params) => {
     console.log("renderUI");
+
     return ui.group({ direction: "col" }, [
       ui.text({ text: "Radius" }),
       ui.slider({
@@ -204,91 +206,8 @@ var blurEffect = {
         dataType: "float",
         min: 0,
         max: 400,
-        value: params.radius ?? 1
-      })
+        value: params.radius ?? 1,
+      }),
     ]);
-  }
-};
-
-// src/js/src/live-effects/effects.ts
-var randomNoiseEffect = {
-  id: "randomNoise-v1",
-  title: "Random Noise V1",
-  version: { major: 1, minor: 0 },
-  styleFilterFlags: {
-    main: 2 /* kPostEffectFilter */,
-    features: []
   },
-  paramSchema: {},
-  doLiveEffect: async (params, input) => {
-    const buffer = input.buffer;
-    console.log("Deno code running", buffer.byteLength / 4, buffer);
-    for (let i = 0; i < buffer.length; i += 4) {
-      buffer[i] = Math.random() * 255;
-      buffer[i + 1] = Math.random() * 255;
-      buffer[i + 2] = Math.random() * 255;
-      buffer[i + 3] = i > 2e3 ? 0 : 255;
-    }
-    return input;
-  },
-  editLiveEffectParameters: () => "{}",
-  renderUI: (params) => ui.group({}, [])
-};
-
-// src/js/src/main.ts
-var allEffects = [randomNoiseEffect, blurEffect];
-var getLiveEffects = () => {
-  return allEffects.map((effect) => ({
-    id: effect.id,
-    title: effect.title,
-    version: effect.version
-  }));
-};
-var getEffectViewNode = (id, state) => {
-  const effect = findEffect(id);
-  if (!effect) return null;
-  const defaultValues = getDefaultValus(id);
-  return effect.renderUI({
-    ...defaultValues,
-    ...state
-  });
-};
-var doLiveEffect = async (id, state, width, height, data) => {
-  const effect = findEffect(id);
-  if (!effect) return null;
-  const defaultValues = getDefaultValus(id);
-  const result = await effect.doLiveEffect(
-    {
-      ...defaultValues,
-      ...state
-    },
-    {
-      width,
-      height,
-      buffer: data
-    }
-  );
-  if (typeof result.width !== "number" || typeof result.height !== "number" || !(result.buffer instanceof Uint8ClampedArray)) {
-    throw new Error("Invalid result from doLiveEffect");
-  }
-};
-var getDefaultValus = (effectId) => {
-  const effect = findEffect(effectId);
-  if (!effect) return null;
-  return Object.fromEntries(
-    Object.entries(effect.paramSchema).map(([key, value]) => [
-      key,
-      structuredClone(value.default)
-    ])
-  );
-};
-var findEffect = (id) => {
-  const effect = allEffects.find((e) => e.id === id);
-  if (!effect) console.error(`Effect not found: ${id}`);
-  return effect;
-};
-export {
-  doLiveEffect,
-  getEffectViewNode,
-  getLiveEffects
 };

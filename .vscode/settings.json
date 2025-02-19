@@ -101,5 +101,9 @@
     "span": "cpp",
     "valarray": "cpp",
     "regex": "cpp"
-  }
+  },
+  "clang-format.language.objective-c.style": "",
+  "clang-format.language.objective-cpp.fallbackStyle": "",
+  "clang-format.fallbackStyle": "",
+  "C_Cpp.clang_format_fallbackStyle": "Chromium"
 }
