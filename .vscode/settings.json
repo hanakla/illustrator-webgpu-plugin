@@ -1,6 +1,13 @@
 {
   "deno.enable": true,
   "rust-analyzer.linkedProjects": ["pkgs/ai-deno/Cargo.toml"],
+  "editor.formatOnSave": true,
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+  "[objective-cpp]": {
+    "editor.defaultFormatter": "xaver.clang-format"
+  },
   "files.associations": {
     "*.mm": "objective-cpp",
     "__bit_reference": "cpp",

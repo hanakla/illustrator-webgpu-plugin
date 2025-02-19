@@ -10,7 +10,7 @@
 #include "./libs/format.h"
 
 #include "HelloWorldID.h"
-#include "./views/ImgUiEditModal.h"
+#include "./views/ImgUIEditModal.h"
 #include "debugHelper.h"
 #include "super-illustrator.h"
 
@@ -45,18 +45,18 @@ private:
     ASInt32 fNumEffects;
 
     ai_deno::OpaqueAiMain aiDenoMain;
-    ai_deno::OpaqueDenoRuntime denoRuntimeRef;
-    ai_deno::OpaqueDenoModule denoModuleRef;
-
-    void onChangeCallback();
 
     ASErr InitMenus(SPInterfaceMessage *);
     ASErr InitLiveEffect(SPInterfaceMessage *);
     ASErr GoLiveEffect(AILiveEffectGoMessage *);
     ASErr EditLiveEffectParameters(AILiveEffectEditParamMessage *);
 
-    ASErr getDictionaryValues(const AILiveEffectParameters &, PluginParams &);
-    ASErr putParamsToDictionaly(const AILiveEffectParameters &, PluginParams);
+    ASErr getDictionaryValues(const AILiveEffectParameters &, PluginParams *, PluginParams);
+    ASErr putParamsToDictionaly(const AILiveEffectParameters &dict, PluginParams);
+
+    static void StaticHandleDenoAiAlert(const ai_deno::FunctionResult *result);
+
+    void HandleDenoAiAlert(ai_deno::FunctionResult *request);
 };
 
 #endif

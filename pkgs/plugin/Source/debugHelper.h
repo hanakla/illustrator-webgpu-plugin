@@ -2,6 +2,12 @@
 
 #include "IllustratorSDK.h"
 #include <iostream>
+#include <string>
+#include <sstream>
+#include "./libs/format.h"
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 template <typename T, size_t N>
 std::string arrayToString(T (&arr)[N])
@@ -16,8 +22,41 @@ std::string arrayToString(T (&arr)[N])
     return str;
 }
 
+template <typename... Args>
+inline void csl(const char *format, Args... args)
+{
+    if (AI_DENO_DEBUG) {
+        std::cout << string_format(format, args...) << std::endl;
+    }
+}
+
+void print_json(json value, std::string label)
+{
+    if (!AI_DENO_DEBUG)
+        return;
+    std::cout << "print_json:" << label << value.dump() << std::endl;
+}
+
+std::string stringify_ASErr(ASErr &err)
+{
+    if (err == kNoErr)
+    {
+        return "kNoErr";
+    }
+    else
+    {
+        char errStr[5] = {0};
+        std::memcpy(errStr, &err, 4);
+        std::ostringstream oss;
+        oss << "Unknown Error(code:" << errStr << " [raw: "<< err << "])";
+        return oss.str();
+    }
+}
+
 void print_AISlice(AISlice *slice, std::string title)
 {
+    if (!AI_DENO_DEBUG)
+        return;
     std::cout << "AISlice (" << title << "): " << std::endl;
     std::cout << "  top: " << slice->top << std::endl;
     std::cout << "  left: " << slice->left << std::endl;
@@ -30,6 +69,8 @@ void print_AISlice(AISlice *slice, std::string title)
 
 void print_AITile(AITile *tile, std::string title)
 {
+    if (!AI_DENO_DEBUG)
+        return;
     std::cout << "AITile (" << title << "): " << std::endl;
     std::cout << "  bounds: { " << "top: " << tile->bounds.top << ", left: " << tile->bounds.left << ", right: " << tile->bounds.right << ", bottom: " << tile->bounds.bottom << " }" << std::endl;
     std::cout << "  chnnelInterleave: " << arrayToString(tile->channelInterleave) << std::endl;

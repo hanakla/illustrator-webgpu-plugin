@@ -1,12 +1,12 @@
-#pragma once
-
-#include "ImgUiEditModal.h"
+#include "ImgUIEditModal.h"
 #include "json.hpp"
 using json = nlohmann::json;
 
+#import "../consts.h"
 #import "./ImgUIEditModal_osx.mm"
 
-int ImgUiEditModal::runModal(json nodes,
-                             std::function<void(void)> callbackFunc) {
-  return [ModalEntryObj runModal:nodes completion:callbackFunc];
+ImGuiModal::IModalImpl *ImGuiModal::createModal() {
+  std::cout << "Creating OSX modal" << std::endl;
+    ImGuiModal::IModalImpl *modal = new ImGuiModalOSX();
+  return modal;
 }

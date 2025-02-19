@@ -14,74 +14,82 @@
 #include "../deps/imgui/imgui.h"
 #include "../deps/imgui/misc/cpp/imgui_stdlib.h"
 
+#include "./ImgUiEditModal.h"
+
 #include "json.hpp"
 using json = nlohmann::json;
 
+#include "../consts.h"
 #include "ImgUiConfig.h"
 
 //
 // Headers
 //
 
-@interface ModalEntryObj : NSObject
-+ (int)runModal:(json)parms completion:(std::function<void(void)>)callbackFunc;
-@end
-
 @interface WindowController : NSWindowController {
   id<MTLDevice> device;
 }
 - (instancetype)initWithWindow:(NSWindow *)window;
-- (int)runModal:(json)params completion:(std::function<void(void)>)callbackFunc;
+- (ModalStatusCode)runModal:(json)renderTree
+                   onChange:(ImGuiModal::OnChangeCallback)onChange;
 - (void)releaseDialog;
 @end
 
 @interface MyImGuiView : MTKView {
-  json tree;
-  int m_result;
-  ImGuiWindowFlags m_flag;
-  std::function<void(void)> m_callbackFunc;
+  json currentRenderTree;
+  ModalStatusCode resultStatus;
+  ImGuiWindowFlags windowFlags;
+  ImGuiModal::OnChangeCallback onChangeCallback;
 }
-// @property(nonatomic, strong) id<MTLDevice> device;
 @property(nonatomic, strong) id<MTLCommandQueue> commandQueue;
 
 - (instancetype)initWithFrame:(NSRect)frameRect device:(id<MTLDevice>)device;
 
-- (void)setRenderTree:(json)tree;
-- (void)setCallback:(std::function<void(void)>)callbackFunc;
-- (int)getResult;
+- (void)setRenderTree:(json)renderTree;
+- (void)setOnChange:(ImGuiModal::OnChangeCallback)onChange;
+- (ModalStatusCode)getStatusCode;
 - (void)updateAndDrawView;
 @end
 
-//
-// Imples
-//
+class ImGuiModalOSX : public ImGuiModal::IModalImpl {
+public:
+  ImGuiModalOSX() {
+    std::cout << "Creating OSX modal!!!" << std::endl;
+    NSRect frame = NSMakeRect(0, 0, kMyDialogWidth, kMyDialogHeight);
 
-@implementation ModalEntryObj
-+ (int)runModal:(json)nodes completion:(std::function<void(void)>)callbackFunc {
-  int result = 0;
-
-  NSRect frame = NSMakeRect(0, 0, kMyDialogWidth, kMyDialogHeight);
-
-  // append "| NSWindowStyleMaskResizable" if it needs
-  NSWindow *window =
-      [[NSWindow alloc] initWithContentRect:frame
-                                  styleMask:NSWindowStyleMaskTitled
-                                    backing:NSBackingStoreBuffered
-                                      defer:YES];
-  window.titlebarAppearsTransparent = true;
-
-  WindowController *windowController =
-      [[WindowController alloc] initWithWindow:window];
-
-  if (windowController) {
-    result = [windowController runModal:nodes completion:callbackFunc];
-    [windowController releaseDialog];
-    windowController = nil;
+    // append "| NSWindowStyleMaskResizable" if it needs
+    NSWindow *window = this->window =
+        [[NSWindow alloc] initWithContentRect:frame
+                                    styleMask:NSWindowStyleMaskTitled
+                                      backing:NSBackingStoreBuffered
+                                        defer:YES];
+    window.titlebarAppearsTransparent = true;
   }
 
-  return result;
-}
-@end
+  ModalStatusCode runModal(const json &renderTree,
+                           ImGuiModal::OnChangeCallback onChange) override {
+    std::cout << "runModal" << std::endl;
+    ModalStatusCode result = ModalStatusCode::None;
+
+    WindowController *windowController = this->controller =
+        [[WindowController alloc] initWithWindow:window];
+
+    result = [windowController runModal:renderTree onChange:onChange];
+    [windowController releaseDialog];
+    windowController = nullptr;
+
+    return result;
+  }
+
+  void updateRenderTree(const json &renderTree) override {
+    [this->controller.window.contentView setRenderTree:renderTree];
+  }
+
+private:
+  ImGuiModal::OnChangeCallback onChangeCallback;
+  WindowController *controller;
+  NSWindow *window;
+};
 
 @implementation WindowController
 
@@ -147,34 +155,37 @@ using json = nlohmann::json;
   return [super initWithWindow:window];
 }
 
-- (int)runModal:(json)renderNodes
-     completion:(std::function<void(void)>)callbackFunc {
-  int result = 0;
+- (ModalStatusCode)runModal:(json)renderNodes
+                   onChange:(ImGuiModal::OnChangeCallback)callbackFunc {
+
+  std::cout << "runModal: " << renderNodes.dump() << std::endl;
+
+  ModalStatusCode result = ModalStatusCode::None;
   //    [self.window.contentView setParms:parms];
-  [self.window.contentView setCallback:callbackFunc];
+  [self.window.contentView setOnChange:callbackFunc];
 
   NSModalSession session = [[NSApplication sharedApplication]
       beginModalSessionForWindow:self.window];
 
-  callbackFunc();
+  callbackFunc(json::object());
 
-  std::cout << "setRenderTree" << std::endl;
   [self.window.contentView setRenderTree:renderNodes];
 
-  std::cout << "start loop" << std::endl;
+  std::cout << "tree: " << std::endl << renderNodes.dump(2) << std::endl;
   while ([self.window isVisible]) {
     if ([NSApp runModalSession:session] != NSModalResponseContinue)
       break;
+
     [self.window.contentView updateAndDrawView];
 
-    result = [self.window.contentView getResult];
+    result = [self.window.contentView getStatusCode];
 
-    if (result != 0)
+    if (result != ModalStatusCode::None)
       break;
   }
   [NSApp endModalSession:session];
 
-  if (result != 0)
+  if (result != ModalStatusCode::None)
     [self.window performClose:nil];
 
   return result;
@@ -196,28 +207,26 @@ using json = nlohmann::json;
   if (self) {
     self.device = device;
     self.commandQueue = [device newCommandQueue];
-    m_result = 0;
-    m_flag = ImGuiWindowFlags_None;
+    resultStatus = ModalStatusCode::None;
+    windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse;
   }
 
   return self;
 }
 
 - (void)setRenderTree:(json)tree {
-  std::cout << tree.dump() << std::endl;
-  self->tree = tree;
+  self->currentRenderTree = tree;
 }
 
-- (void)setCallback:(std::function<void(void)>)callbackFunc {
-  m_callbackFunc = callbackFunc;
+- (void)setOnChange:(ImGuiModal::OnChangeCallback)callbackFunc {
+  onChangeCallback = callbackFunc;
 }
 
-- (int)getResult {
-  return m_result;
+- (ModalStatusCode)getStatusCode {
+  return resultStatus;
 }
 
 - (void)updateAndDrawView {
-
   ImGuiIO &io = ImGui::GetIO();
   io.DisplaySize.x = self.bounds.size.width;
   io.DisplaySize.y = self.bounds.size.height;
@@ -248,39 +257,67 @@ using json = nlohmann::json;
     ImGui::SetNextWindowPos(ImVec2(0, 0), 0, ImVec2(0, 0));
 
     static bool is_open = true;
-    ImGui::Begin("polygon specs", &is_open, m_flag);
+    ImGui::Begin("polygon specs", &is_open, windowFlags);
 
     std::function<void(json)> renderNode = [&](json node) -> void {
-      if (!node.contains("type")) return;
+      if (!node.contains("type"))
+        return;
 
-      std::string type = tree["type"].get<std::string>();
+      std::string type = node["type"].template get<std::string>();
 
       if (type == "group") {
+
         ImGui::BeginGroup();
-        for (json &xx : tree["children"]) {
+        for (json &xx : node["children"]) {
           renderNode(xx);
         }
         ImGui::EndGroup();
-      } else if (type == "text") {
-        ImGui::Text("%s", node["text"].get<std::string>().c_str());
-      } else if (type == "textInput") {
-        std::string keyStr = node["key"].get<std::string>();
-        const char *key = keyStr.c_str();
-        std::string value = node["value"].get<std::string>();
 
-        ImGui::InputText(key, &value);
+      } else if (type == "text") {
+
+        std::string textString = node["text"].template get<std::string>();
+        const char *text = textString.c_str();
+        ImGui::Text("%s", text);
+
+      } else if (type == "textInput") {
+        std::string keyStr = node["key"].template get<std::string>();
+        const char *key = keyStr.c_str();
+        std::string value = node["value"].template get<std::string>();
+
+        ImGui::InputText(key, &value, ImGuiInputTextFlags_None);
+      } else if (type == "slider") {
+
+        std::string dataType = node["dataType"].template get<std::string>();
+        std::string label = node["label"].template get<std::string>();
+        int min = node["min"].template get<int>();
+        int max = node["max"].template get<int>();
+        int value = node["value"].template get<int>();
+
+        if (dataType == "int") {
+          if (ImGui::SliderInt(label.c_str(), &value, min, max)) {
+            onChangeCallback(
+                json::object({{node["key"].get<std::string>(), value}}));
+          }
+        } else if (dataType == "float") {
+          float fvalue = value;
+          if (ImGui::SliderFloat(label.c_str(), &fvalue, min, max)) {
+            value = fvalue;
+            onChangeCallback(
+                json::object({{node["key"].get<std::string>(), value}}));
+          }
+        }
       }
     };
 
-    renderNode(self->tree);
+    renderNode(self->currentRenderTree);
 
     ImGui::Spacing();
     if (ImGui::Button("Cancel")) {
-      m_result = 1;
+      resultStatus = ModalStatusCode::Cancel;
     }
     ImGui::SameLine();
     if (ImGui::Button("  OK  ")) {
-      m_result = 2;
+      resultStatus = ModalStatusCode::OK;
     }
 
     ImGui::End();
@@ -288,6 +325,7 @@ using json = nlohmann::json;
 
   // Rendering
   ImGui::Render();
+
   ImDrawData *draw_data = ImGui::GetDrawData();
 
   renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(
@@ -306,7 +344,6 @@ using json = nlohmann::json;
 }
 
 - (void)reshape {
-  [[self openGLContext] update];
   [self updateAndDrawView];
 }
 

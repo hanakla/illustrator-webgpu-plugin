@@ -38,6 +38,7 @@
 		A5F9AB362D638FB6007EE38C /* imgui_stdlib.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A0686C2D63700D006BE835 /* imgui_stdlib.cpp */; };
 		A5F9AB382D63A3DE007EE38C /* super-illustrator.h in Headers */ = {isa = PBXBuildFile; fileRef = A5F9AB372D63A3DE007EE38C /* super-illustrator.h */; };
 		A5F9AB3A2D63AC6A007EE38C /* consts.h in Headers */ = {isa = PBXBuildFile; fileRef = A5F9AB392D63AC6A007EE38C /* consts.h */; };
+		A5F9AB452D645B6C007EE38C /* debugHelper.h in Headers */ = {isa = PBXBuildFile; fileRef = A5F9AB442D645B6C007EE38C /* debugHelper.h */; };
 		C4A3F955134C5AA500128D2D /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4A3F954134C5AA500128D2D /* Cocoa.framework */; };
 /* End PBXBuildFile section */
 
@@ -340,6 +341,7 @@
 		A5F9AB112D637800007EE38C /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		A5F9AB372D63A3DE007EE38C /* super-illustrator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "super-illustrator.h"; path = "Source/super-illustrator.h"; sourceTree = "<group>"; };
 		A5F9AB392D63AC6A007EE38C /* consts.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = consts.h; path = Source/consts.h; sourceTree = "<group>"; };
+		A5F9AB442D645B6C007EE38C /* debugHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = debugHelper.h; path = Source/debugHelper.h; sourceTree = "<group>"; };
 		C4A3F954134C5AA500128D2D /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
@@ -355,6 +357,7 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A5F9AB252D637919007EE38C /* views */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A5F9AB352D637CF9007EE38C /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); name = views; path = Source/views; sourceTree = "<group>"; };
+		A5F9AB3D2D63E44A007EE38C /* libs */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = libs; path = Source/libs; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -394,8 +397,11 @@
 		2AE97C910BBC0FAB0041212F /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				A5F9AB252D637919007EE38C /* views */,
+				A5F9AB3D2D63E44A007EE38C /* libs */,
 				A5F9AB392D63AC6A007EE38C /* consts.h */,
 				A5F9AB372D63A3DE007EE38C /* super-illustrator.h */,
+				A5F9AB442D645B6C007EE38C /* debugHelper.h */,
 				6868C920150BA192003DAAF2 /* HelloWorldID.h */,
 				6868C921150BA192003DAAF2 /* HelloWorldPlugin.cpp */,
 				6868C922150BA192003DAAF2 /* HelloWorldPlugin.h */,
@@ -403,7 +409,6 @@
 				6868C924150BA192003DAAF2 /* HelloWorldSuites.h */,
 				68B2247115063ED00035B025 /* SDKAboutPluginsHelper.cpp */,
 				2A7772AA0BE6387700A9D493 /* Shared */,
-				A5F9AB252D637919007EE38C /* views */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -1237,6 +1242,7 @@
 				6868C925150BA192003DAAF2 /* HelloWorldID.h in Headers */,
 				6868C927150BA192003DAAF2 /* HelloWorldPlugin.h in Headers */,
 				6868C929150BA192003DAAF2 /* HelloWorldSuites.h in Headers */,
+				A5F9AB452D645B6C007EE38C /* debugHelper.h in Headers */,
 				A5F9AB382D63A3DE007EE38C /* super-illustrator.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1262,6 +1268,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A5F9AB252D637919007EE38C /* views */,
+				A5F9AB3D2D63E44A007EE38C /* libs */,
 			);
 			name = HelloWorld;
 			productName = HelloWorld;
@@ -1274,6 +1281,11 @@
 		508817C409F0C9740071BF1A /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				TargetAttributes = {
+					508817D309F0C9AD0071BF1A = {
+						LastSwiftMigration = 1600;
+					};
+				};
 			};
 			buildConfigurationList = 508817C509F0C9740071BF1A /* Build configuration list for PBXProject "HelloWorld" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -1444,7 +1456,10 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A190BBD325E3F5FB0001DF18 /* AIPluginDebug.xcconfig */;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adobe.illustrator.plugins.HelloWorld;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
 			};
 			name = debug;
 		};
@@ -1452,7 +1467,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A190BBD425E3F5FB0001DF18 /* AIPluginRelease.xcconfig */;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adobe.illustrator.plugins.HelloWorld;
+				SWIFT_VERSION = 6.0;
 			};
 			name = release;
 		};

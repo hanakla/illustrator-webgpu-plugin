@@ -43,12 +43,14 @@ use std::time::Duration;
 use sys_traits::impls::RealSys;
 
 pub struct RuntimeInitOptions {
+    pub extensions: Vec<deno_runtime::deno_core::Extension>,
     pub timeout: Duration,
 }
 
 impl Default for RuntimeInitOptions {
     fn default() -> Self {
         Self {
+            extensions: vec![],
             timeout: Duration::MAX,
         }
     }
@@ -62,8 +64,8 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn new(option: RuntimeInitOptions) -> Result<Self, Error> {
-        let runtime_options = runtime_options_factory();
+    pub fn new(option: &mut RuntimeInitOptions) -> Result<Self, Error> {
+        let runtime_options = runtime_options_factory(option);
         let bootstrap_options = BootstrapOptions {
             ..Default::default()
         };
@@ -342,7 +344,7 @@ impl AsyncBridgeExt for Runtime {
     }
 }
 
-fn runtime_options_factory() -> RuntimeOptions {
+fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
     // let fs = RealSys::default();
     // let arcFs = Arc::new(fs.clone());
     //
@@ -357,8 +359,12 @@ fn runtime_options_factory() -> RuntimeOptions {
     //   sys: fs.clone(),
     // };
 
+    let extensions = get_all_extensions();
+    // let extra_extensions = options.extensions;
+    // extensions.extend(extra_extensions);
+
     let runtime_options = RuntimeOptions {
-        extensions: get_all_extensions(),
+        extensions,
         extension_transpiler: Some(Rc::new(|specifier, source| {
             deno_runtime::transpile::maybe_transpile_source(specifier, source)
         })),

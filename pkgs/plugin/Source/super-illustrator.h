@@ -5,12 +5,14 @@
 
 extern "C" AIArtSetSuite *sAIArtSet;
 extern "C" AIDictionarySuite *sAIDictionary;
+extern "C" AILiveEffectSuite *sAILiveEffect;
 
 namespace suai
 {
     template <typename KeyType, typename ValueType>
     static ValueType mapValue(const KeyType &key, const ValueType &defaultValue, const std::unordered_map<KeyType, ValueType> &valueMap);
 
+    std::string charToUnicodeStringUTF8(const char *str);
     std::string unicodeStringToStdString(const ai::UnicodeString &str);
 
     enum RasterType
@@ -162,79 +164,182 @@ namespace suai
         }
     };
 
-    namespace dict {
-        AIBoolean getBoolean(const AIDictionaryRef &dict, std::string key, AIBoolean defaultValue) {
-            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+    class LiveEffect
+    {
+    private:
+        AILiveEffectHandle effectHandle;
 
-            if (sAIDictionary->IsKnown(dict, dictKey)) {
+    public:
+        LiveEffect(AILiveEffectHandle effectHandle) : effectHandle(effectHandle) {}
+
+        std::string getName()
+        {
+            const char *effectName = NULL;
+            sAILiveEffect->GetLiveEffectName(effectHandle, &effectName);
+            return charToUnicodeStringUTF8(effectName);
+        }
+
+        std::string getTitle()
+        {
+            const char *effectTitle = NULL;
+            sAILiveEffect->GetLiveEffectTitle(effectHandle, &effectTitle);
+            return charToUnicodeStringUTF8(effectTitle);
+        }
+    };
+
+    namespace dict
+    {
+        AIDictKey getKey(std::string name)
+        {
+            const char *_k = name.c_str();
+            AIDictKey key = sAIDictionary->Key(_k);
+            return key;
+        }
+
+        bool isKnown(const AILiveEffectParameters &dict, AIDictKey key)
+        {
+            return sAIDictionary->IsKnown(dict, key);
+        }
+
+        bool isKnown(const AILiveEffectParameters &dict, std::string name)
+        {
+            AIDictKey key = dict::getKey(name);
+            return sAIDictionary->IsKnown(dict, key);
+        }
+
+        AIBoolean getBoolean(const AILiveEffectParameters &dict, const std::string &key, const AIBoolean &defaultValue, ASErr *error = nullptr)
+        {
+            AIDictKey dictKey = dict::getKey(key);
+
+            ASErr err = kNoErr;
+            if (dict::isKnown(dict, key))
+            {
                 AIBoolean value;
-                sAIDictionary->GetBooleanEntry(dict, dictKey, &value);
+                err = sAIDictionary->GetBooleanEntry(dict, dictKey, &value);
+                if (error != nullptr)
+                    *error = err;
                 return value;
-            } else {
+            }
+            else
+            {
                 return defaultValue;
             }
         }
 
-        ai::int32 getInt(const AIDictionaryRef &dict, std::string key, ai::int32 defaultValue) {
-            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+        ai::int32 getInt(const AILiveEffectParameters &dict, const std::string &key, const ai::int32 &defaultValue, ASErr *error = nullptr)
+        {
+            ASErr err = kNoErr;
+            AIDictKey dictKey = dict::getKey(key);
 
-            if (sAIDictionary->IsKnown(dict, dictKey)) {
+            if (dict::isKnown(dict, key))
+            {
                 ai::int32 value;
-                sAIDictionary->GetIntegerEntry(dict, dictKey, &value);
+                err = sAIDictionary->GetIntegerEntry(dict, dictKey, &value);
+                if (error != nullptr)
+                    *error = err;
                 return value;
-            } else {
+            }
+            else
+            {
                 return defaultValue;
             }
         }
 
-        std::string getString(const AIDictionaryRef &dict, std::string key, std::string defaultValue) {
-            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+        std::string getString(const AILiveEffectParameters &dict, const std::string &key, const std::string &defaultValue, ASErr *error = nullptr)
+        {
+            *error = kNoErr;
+            AIDictKey dictKey = dict::getKey(key);
 
-            if (sAIDictionary->IsKnown(dict, dictKey)) {
-                const char* string;
-                sAIDictionary->GetStringEntry(dict, dictKey, &string);
-                
+            if (dict::isKnown(dict, key))
+            {
+                const char *string;
+                *error = sAIDictionary->GetStringEntry(dict, dictKey, &string);
+
                 ai::UnicodeString str(string);
+
                 return unicodeStringToStdString(str);
-            } else {
-                return defaultValue;
             }
+
+            return defaultValue;
         }
 
-        AIReal getReal(const AIDictionaryRef &dict, std::string key, AIReal defaultValue) {
-            AIDictKey dictKey = sAIDictionary->Key(key.c_str());
+        AIReal getReal(const AILiveEffectParameters &dict, std::string key, AIReal defaultValue)
+        {
+            const char *_k = key.c_str();
+            AIDictKey dictKey = sAIDictionary->Key(_k);
 
-            if (sAIDictionary->IsKnown(dict, dictKey)) {
+            if (sAIDictionary->IsKnown(dict, dictKey))
+            {
                 AIReal value;
                 sAIDictionary->GetRealEntry(dict, dictKey, &value);
                 return value;
-            } else {
+            }
+            else
+            {
                 return defaultValue;
             }
         }
 
-        ASErr setBoolean(const AIDictionaryRef &dict, std::string key, AIBoolean value) {
+        ASErr setBoolean(const AILiveEffectParameters &dict, std::string key, AIBoolean value)
+        {
             AIDictKey dictKey = sAIDictionary->Key(key.c_str());
             return sAIDictionary->SetBooleanEntry(dict, dictKey, value);
         }
 
-        ASErr setInt(const AIDictionaryRef &dict, std::string key, ai::int32 value) {
+        ASErr setInt(const AILiveEffectParameters &dict, std::string key, ai::int32 value)
+        {
             AIDictKey dictKey = sAIDictionary->Key(key.c_str());
             return sAIDictionary->SetIntegerEntry(dict, dictKey, value);
         }
 
-        ASErr setString(const AIDictionaryRef &dict, std::string key, std::string value) {
+        ASErr setString(const AILiveEffectParameters &dict, std::string key, std::string value)
+        {
             AIDictKey dictKey = sAIDictionary->Key(key.c_str());
             ai::UnicodeString unicodeStr(value.c_str(), kAIUTF8CharacterEncoding);
             return sAIDictionary->SetUnicodeStringEntry(dict, dictKey, unicodeStr);
         }
 
-        ASErr setReal(const AIDictionaryRef &dict, std::string key, AIReal value) {
+        ASErr setReal(const AILiveEffectParameters &dict, std::string key, AIReal value)
+        {
             AIDictKey dictKey = sAIDictionary->Key(key.c_str());
             return sAIDictionary->SetRealEntry(dict, dictKey, value);
         }
     }
 
+    namespace str {
+        char* strdup(const std::string &str) {
+            char *ptr = strdup(str.c_str());
+            return ptr;
+        }
+        
+        char* strdup(const ai::UnicodeString &str) {
+            char *ptr = strdup(str.as_UTF8().data());
+            return ptr;
+        }
+
+        ai::UnicodeString toAiUnicodeStringUtf8(const std::string &str) {
+            return ai::UnicodeString(str.c_str(), kAIUTF8CharacterEncoding);
+        }
+    
+        ai::UnicodeString toAiUnicodeStringUtf8(const char *str) {
+            if (str == nullptr) return ai::UnicodeString();
+            return ai::UnicodeString(str, kAIUTF8CharacterEncoding);
+        }
+    }
+
+    ai::UnicodeString charToUnicodeString(const char *str)
+    {
+        if (str == nullptr)
+            return ai::UnicodeString();
+        return ai::UnicodeString(str, kAIUTF8CharacterEncoding);
+    }
+
+    std::string charToUnicodeStringUTF8(const char *str)
+    {
+        if (str == nullptr)
+            return "";
+        return ai::UnicodeString(str, kAIUTF8CharacterEncoding).as_UTF8();
+    }
 
     std::string unicodeStringToStdString(const ai::UnicodeString &str)
     {
@@ -244,14 +349,13 @@ namespace suai
     template <typename KeyType, typename ValueType>
     static ValueType mapValue(const KeyType &key, const ValueType &defaultValue, const std::unordered_map<KeyType, ValueType> &valueMap)
     {
-        auto it = valueMap.find(key);
-        if (it != valueMap.end())
+        try
         {
-            return it->second;
+            return valueMap.at(key);
         }
-        else
+        catch (const std::out_of_range &)
         {
-            return defaultValue; // キーが見つからない場合のデフォルト値
+            return defaultValue;
         }
     }
 }

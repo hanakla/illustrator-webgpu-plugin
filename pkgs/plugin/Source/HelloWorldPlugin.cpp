@@ -2,10 +2,15 @@
 #include <memory>
 #include <numeric>
 #include <regex>
+#include <functional>
 
 #include "consts.h"
+#include "./libs/regex.h"
 #include "HelloWorldPlugin.h"
 #include "HelloWorldSuites.h"
+#include "./views/ImgUIEditModal.h"
+
+#include "debugHelper.h"
 
 #ifndef CHKERR
 #define CHKERR aisdk::check_ai_error(error)
@@ -26,68 +31,36 @@ void FixupReload(Plugin *plugin)
 HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef)
     : Plugin(pluginRef),
       fLiveEffect(nullptr),
-      aiDenoMain(nullptr),
-      denoModuleRef(nullptr),
-      denoRuntimeRef(nullptr)
+      aiDenoMain(nullptr)
 {
     strncpy(fPluginName, kHelloWorldPluginName, kMaxStringLength);
 }
 
 HelloWorldPlugin::~HelloWorldPlugin()
 {
+//    delete aiDenoMain;
 }
 
 ASErr HelloWorldPlugin::StartupPlugin(SPInterfaceMessage *message)
 {
     ASErr error = kNoErr;
-
-    std::cout << "Start up" << std::endl;
+    
+    csl("ai-deno: current err %d", error);
 
     try
     {
+        csl("ai-deno: Start up");
         error = Plugin::StartupPlugin(message);
         CHKERR;
 
-        aiDenoMain = ai_deno::initialize();
+        csl("ai-deno: Loading live effects");
+        aiDenoMain = ai_deno::initialize(&HelloWorldPlugin::StaticHandleDenoAiAlert);
         error = this->InitLiveEffect(message);
         CHKERR;
-
-        denoRuntimeRef = ai_deno::create_runtime();
-        denoModuleRef = ai_deno::create_module(
-            "index.ts",
-            R"END(
-            // import {} from "jsr:@std/fs";
-            // import {createCanvas} from "npm:@napi-rs/canvas";
-
-            export const loadPlugins = async () => {
-                // const canvas = createCanvas(200, 200);
-                // const ctx = canvas.getContext("2d");
-                // ctx.fillStyle = "red";
-                // ctx.fillRect(0, 0, 200, 200);
-                // console.log(canvas.toBuffer());
-            }
-
-            console.log(navigator.gpu, Deno.cwd());
-            export default (input: Uint8ClampedArray) => {
-                console.log("Deno code running", input.byteLength / 4, input);
-
-                // Random color
-                for (let i = 0; i < input.length; i += 4) {
-                    input[i] = Math.random() * 255;
-                    input[i + 1] = Math.random() * 255;
-                    input[i + 2] = Math.random() * 255;
-                    input[i + 3] = i > 2000 ? 0 : 255;
-                }
-
-                // return new Uint8Array(input.length);
-            }
-        )END");
-
-        // ai_deno::execute_deno(handle, moduleHandle, "", nullptr);
     }
     catch (std::exception &ex)
     {
-        std::cout << "ヷ！死んじゃった……: " << ex.what() << std::endl;
+        std::cout << "ヷ！死んじゃった……: " << stringify_ASErr(error) << " what:" << ex.what() << std::endl;
     }
 
     //	sAIUser->MessageAlert(ai::UnicodeString(returns));
@@ -108,24 +81,27 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage *message)
     ASErr error = kNoErr;
     short filterIndex = 0;
 
-    std::cout << "Init Live Effect" << std::endl;
+    csl("✨️ Init Live Effect");
     ai_deno::FunctionResult *effectResult = ai_deno::get_live_effects(aiDenoMain);
+    csl("OKOK");
     if (!effectResult->success)
     {
-        std::cout << "Failed to get live effects" << std::endl;
+        csl("Failed to get live effects");
         return kCantHappenErr;
     }
 
+    csl("Received effects");
+    csl("Received effects2 %s", effectResult->json);
     json effects = json::parse(effectResult->json);
-    ai_deno::dispose_function_result(effectResult);
+    // ai_deno::dispose_function_result(effectResult);
     // delete effectResult;
 
-    std::cout << "Effects: " << effects.dump() << std::endl;
+    csl("Received effects: %s", effects.dump(2).c_str());
 
     std::vector<AILiveEffectData> effectData;
     for (auto &effectDef : effects)
     {
-        std::cout << "Effect: " << effectDef << std::endl;
+        csl(" Loading deno-ai effect: %s", effectDef.dump().c_str());
 
         AILiveEffectData effect;
         effect.self = message->d.self;
@@ -134,9 +110,9 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage *message)
         effect.name = string_format_to_char("%s%s",
                                             EFFECT_PREFIX.c_str(),
                                             effectDef["id"].get<std::string>().c_str());
-        effect.title = ai::UnicodeString(effectDef["title"].get<std::string>().c_str(), kAIUTF8CharacterEncoding)
-                           .as_UTF8()
-                           .data();
+
+        effect.title = suai::str::strdup(
+            suai::str::toAiUnicodeStringUtf8(effectDef["title"].get<std::string>()));
         effect.majorVersion = effectDef["version"]["major"].get<int>();
         effect.minorVersion = effectDef["version"]["minor"].get<int>();
         effect.prefersAsInput = AIStyleFilterPreferredInputArtType::kInputArtDynamic;
@@ -164,10 +140,15 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
     std::cout << "GO LIVE!! EFFECT!!!" << std::endl;
 
     ASErr error = kNoErr;
-    PluginParams params;
-    this->getDictionaryValues(message->parameters, params);
 
-    std::cout << "GET DIC!" << std::endl;
+    PluginParams params;
+    error = this->getDictionaryValues(
+        message->parameters,
+        &params,
+        PluginParams{
+            .effectName = "__FAILED_TO_GET_EFFECT_NAME__",
+            .params = json(),
+        });
 
     // clang-format off
     AIRasterizeSettings settings = suai::createAIRasterSetting({
@@ -194,6 +175,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
 
         AIArtHandle rasterArt;
         error = sAIArt->NewArt(AIArtType::kRasterArt, AIPaintOrder::kPlaceDefault, art, &rasterArt); // CHKERR;
+
+        // sAIArt->
 
         error = sAIRasterize->Rasterize(
             artSet->ToAIArtSet(),
@@ -222,8 +205,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
         AITile workTile = {0};
         workTile.colBytes = bytes;
 
-        size_t width = artSlice.right - artSlice.left;
-        size_t height = artSlice.bottom - artSlice.top;
+        uint32 width = artSlice.right - artSlice.left;
+        uint32 height = artSlice.bottom - artSlice.top;
 
         size_t dataSize = width * height * bytes;
         workTile.data = new unsigned char[dataSize];
@@ -242,20 +225,46 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
         const ai::uint32 totalPixels = width * height;
         const ai::uint32 pixelStride = workTile.colBytes;
         ai::uint8 *pixelData = static_cast<ai::uint8 *>(workTile.data);
-        uintptr_t byteLingth = totalPixels * pixelStride;
+        uintptr_t byteLength = totalPixels * pixelStride;
 
-        ai_deno::ArrayBufferRef input = ai_deno::ArrayBufferRef{
-            .ptr = (void *)pixelData,
-            .len = byteLingth,
+        print_AISlice(&artSlice, "artSlice");
+
+        ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
+            .width = width,
+            .height = height,
+            .data_ptr = (void *)pixelData,
+            .byte_length = byteLength,
         };
 
-        ai_deno::ArrayBufferRef *result = ai_deno::execute_deno(
-            denoRuntimeRef,
-            denoModuleRef,
+        ai_deno::DoLiveEffectResult *result = ai_deno::do_live_effect(
+            aiDenoMain,
+            params.effectName.c_str(),
+            params.params.dump().c_str(),
             &input);
 
-        if (result != nullptr)
+        // ai_deno::ArrayBufferRef *result = ai_deno::execute_deno(
+        //     denoRuntimeRef,
+        //     denoModuleRef,
+        //     &input);
+
+        if (result != nullptr && result->success)
         {
+            // clang-format off
+            std::cout << "Result: \n "
+                << "  width: " << result->data->width << "\n"
+                << "  height: " << result->data->height << "\n"
+                << "  byte_length: " << result->data->byte_length << "\n"
+                << "  data_ptr: " << result->data->data_ptr << "\n"
+                << std::endl;
+            // clang-format on
+
+            if (pixelData == result->data->data_ptr)
+            {
+                std::cout << "Effect: Same data pointer" << std::endl;
+            }
+
+            workTile.data = result->data->data_ptr;
+
             error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
         }
 
@@ -285,15 +294,11 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
     return error;
 }
 
-void HelloWorldPlugin::onChangeCallback()
-{
-    std::cout << "Change callback" << std::endl;
-}
-
 ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage *message)
 {
     ASErr error = kNoErr;
     std::cout << "EDIT LIVE!! EFFECT!!!" << std::endl;
+    suai::LiveEffect *effect = new suai::LiveEffect(message->effect);
 
     try
     {
@@ -312,40 +317,60 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage *m
         //            // このため、編集中の設定値は一時的な構造体に保持する。
         //            m_tmpParms = m_parms;
 
-        PluginParams *params;
-        getDictionaryValues(message->parameters, *params);
-
-        const char* effectName = NULL;
-        error = sAILiveEffect->GetLiveEffectName(message->effect, &effectName);
+        std::string effectName = effect->getName();
         CHKERR;
 
-        std::string effectId(effectName);
-        effectId = std::regex_replace(effectId, std::regex("^" + std::string(EFFECT_PREFIX)), "");
+        std::string normalizeEffectId = std::regex_replace(effectName, std::regex("^" + escapeStringRegexp(EFFECT_PREFIX)), "");
 
-        ai_deno::FunctionResult *nodeTreeResult = ai_deno::get_live_effect_view_tree(aiDenoMain, effectId.c_str(), params->effectName.c_str());
-        if (!nodeTreeResult->success) {
-            std::cerr << "Failed to get live effect view tree" << std::endl;
-            return kCantHappenErr;
-        }
+        PluginParams paramsDict;
+        error = getDictionaryValues(message->parameters, &paramsDict, PluginParams{
+                                                                          .effectName = normalizeEffectId,
+                                                                          .params = json::object(),
+                                                                      });
+        CHKERR;
 
-        json nodeTree = json::parse(nodeTreeResult->json);
-
-        std::cout << nodeTree.dump() << std::endl;
-
-        std::function<void(void)> getCallback = std::bind(&HelloWorldPlugin::onChangeCallback, this);
+        json initialParams(paramsDict.params);
+        json nodeTree;
+        ImGuiModal::IModalImpl *modal;
 
 #ifdef MAC_ENV
-        int dialogResult = ImgUiEditModal::runModal(nodeTree, getCallback);
+        modal = ImGuiModal::createModal();
 #else
-        // Illustrator のメインウィンドウのハンドルを取得する。
-        // このハンドルを親としてCreateWindowでダイアログを作成しても、
-        // メインウィンドウ以外の分離した書類ウィンドウやパレット類に対しては
-        // モーダルにならない。この点の対応はmyImGuiDialog側で行なっている。
         AIWindowRef hwndParent;
         error = sAIAppContext->GetPlatformAppWindow(&hwndParent);
         CHKERR;
-        int dialogResult = myImGuiDialog::runModal((HWND)hwndParent, &m_tmpParms, getCallback);
+        int dialogResult = myImGuiDialog::runModal((HWND)hwndParent);
 #endif
+
+        ImGuiModal::OnChangeCallback modaloOnChangeCallback = [paramsDict, initialParams, &nodeTree, &modal, this](json patch)
+        {
+            std::cout << "updated param: " << patch.dump() << std::endl;
+            json nextParams(initialParams);
+            nextParams.merge_patch(patch);
+
+            ai_deno::FunctionResult *result = ai_deno::get_live_effect_view_tree(
+                this->aiDenoMain,
+                paramsDict.effectName.c_str(),
+                nextParams.dump().c_str());
+
+            if (!result->success)
+            {
+                std::cerr << "Failed to get live effect view tree" << std::endl;
+            }
+            else
+            {
+                nodeTree = json::parse(result->json);
+                ai_deno::dispose_function_result(result);
+                modal->updateRenderTree(nodeTree);
+
+                csl("View tree updated: %s", result->json);
+            }
+        };
+
+        modaloOnChangeCallback(initialParams);
+
+        ModalStatusCode dialogResult = modal->runModal(nodeTree, modaloOnChangeCallback);
+
         // dialogResult = 0:close, 1:cancel, 2:OK
         if (dialogResult == 2)
         {
@@ -406,14 +431,15 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage *m
     return error;
 }
 
-ASErr HelloWorldPlugin::getDictionaryValues(const AILiveEffectParameters &dict, PluginParams &params)
+ASErr HelloWorldPlugin::getDictionaryValues(const AILiveEffectParameters &dict, PluginParams *params, PluginParams defaultParams)
 {
     ASErr error = kNoErr;
 
-    params.effectName = suai::dict::getString(dict, AI_DENO_DICT_EFFECT_NAME, "");
+    std::string effectName = suai::dict::getString(dict, AI_DENO_DICT_EFFECT_NAME, defaultParams.effectName, &error);
+    std::string paramsJson = suai::dict::getString(dict, AI_DENO_DICT_PARAMS, std::string(defaultParams.params.dump()), &error);
 
-    std::string paramsJson = suai::dict::getString(dict, AI_DENO_DICT_PARAMS, "{}");
-    params.params = json::parse(paramsJson);
+    params->effectName = effectName + "";
+    params->params = json::parse(paramsJson);
 
     return error;
 }
@@ -421,13 +447,31 @@ ASErr HelloWorldPlugin::getDictionaryValues(const AILiveEffectParameters &dict, 
 ASErr HelloWorldPlugin::putParamsToDictionaly(const AILiveEffectParameters &dict, PluginParams params)
 {
     ASErr error = kNoErr;
-    AIDictKey key;
 
     suai::dict::setString(dict, AI_DENO_DICT_EFFECT_NAME, params.effectName);
     suai::dict::setString(dict, AI_DENO_DICT_PARAMS, params.params.dump());
 
     return error;
 }
+
+void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::FunctionResult *request)
+{
+    json req = json(request->json);
+
+    if (req.contains("kind") && req["kind"] == "alert")
+    {
+        std::string message(req["message"].get<std::string>());
+        sAIUser->MessageAlert(suai::str::toAiUnicodeStringUtf8(message));
+    }
+    else
+    {
+        std::cerr << "Unknown request: " << req.dump() << std::endl;
+    }
+}
+
+// void HelloWorldPlugin::HandleDenoAiAlert(ai_deno::FunctionResult *request)
+//{
+// }
 
 // ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
 //{
