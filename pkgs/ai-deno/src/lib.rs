@@ -6,10 +6,18 @@ extern crate once_cell;
 // use rustyscript::{Module, Runtime, RuntimeOptions};
 use crate::deno::deno_runtime::deno_core::error::JsError;
 use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInitOptions};
+
 use deno_core::{anyhow, serde_json::json};
 use deno_runtime::deno_core::v8;
+use deno_runtime::deno_core::{JsRuntime, PollEventLoopOptions};
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Display;
+use std::future::{self, Future};
+use std::pin::Pin;
+use std::rc::Rc;
+use std::sync::{mpsc, Arc};
+use std::time::{Duration, Instant};
+use tokio::runtime;
 
 mod deno;
 mod ext;
@@ -39,10 +47,14 @@ pub struct NewFunctionResult<T> {
 }
 
 impl<T> NewFunctionResult<T> {
-    pub fn failed_default() -> NewFunctionResult<T> {
+    pub fn failed_default(message: &str) -> NewFunctionResult<T> {
         NewFunctionResult {
             success: false,
-            data: std::ptr::null_mut(),
+            data: json!({
+                "message": message,
+            })
+            .to_string()
+            .as_ptr() as *mut T,
         }
     }
 }
@@ -69,7 +81,11 @@ impl FunctionResult {
     }
 }
 
-pub type DoLiveEffectResult = NewFunctionResult<ImageDataPayload>;
+#[repr(C)]
+pub struct DoLiveEffectResult {
+    pub success: bool,
+    pub data: *mut ImageDataPayload,
+}
 
 pub struct AlertPayload {}
 
@@ -131,33 +147,12 @@ pub extern "C" fn dispose_function_result(result: *mut FunctionResult) {
 }
 
 #[no_mangle]
-pub extern "C" fn dispose_do_live_effect_result(result: *mut DoLiveEffectResult) {
-    if result.is_null() {
-        return;
-    }
-
-    unsafe {
-        // if !(*result).data.is_null() {
-        //     drop(Box::from_raw((*result).data));
-        // }
-        drop(Box::from_raw(result));
-    }
-}
-
-#[no_mangle]
 pub extern "C" fn get_live_effects(ai_main_ref: OpaqueAiMain) -> *mut FunctionResult {
-    println!("🦕rust: get_live_effects");
-
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
 
     let result = execute_exported_function(ai_main, "getLiveEffects", |scope| Ok(vec![]));
 
-    println!("🦕rust: get_live_effects result: {}", result);
-
-    // Boxで確保して、所有権を維持する
     let boxed_result = Box::new(result);
-
-    // ヒープに確保した結果をポインタとして返す
     Box::into_raw(boxed_result)
 }
 
@@ -182,7 +177,7 @@ pub extern "C" fn get_live_effect_view_tree(
         Ok(args)
     });
 
-    print!("get_live_effect_view_tree result: {}", result);
+    // print!("get_live_effect_view_tree result: {}", result);
 
     let boxed = Box::new(result);
 
@@ -197,15 +192,16 @@ extern "C" fn do_live_effect(
     image_data: *mut ImageDataPayload,
 ) -> *mut DoLiveEffectResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
+
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy() };
     let params = unsafe { CStr::from_ptr(params).to_string_lossy() }.clone();
     let image_data = unsafe { &mut *image_data };
-
-    let is_new_buffer = false;
     let source_buffer_ptr = unsafe { (*image_data).data_ptr };
 
+    let t = Instant::now();
     println!("do_live_effect: effect_id = {}", effect_id);
-    let result = execute_export_function_and_raw_return(ai_main, "doLiveEffect", |scope| {
+
+    let result = execute_export_function_and_raw_return(ai_main, "doLiveEffect", move |scope| {
         let effect_id = v8::String::new(scope, effect_id.to_string().as_str()).unwrap();
         let effect_id = v8::Local::new(scope, effect_id);
 
@@ -244,45 +240,110 @@ extern "C" fn do_live_effect(
     })
     .unwrap();
 
-    let scope = &mut ai_main.main_runtime.deno_runtime().handle_scope();
+    let deno_runtime = &mut ai_main.main_runtime.deno_runtime();
+    let scope = &mut deno_runtime.handle_scope();
 
-    let obj = v8::Local::<v8::Value>::new(scope, result)
-        .to_object(scope)
-        .unwrap();
+    let print_js_object = {
+        let source = v8::String::new(scope, "(value)=>console.log(value)").unwrap();
+        let script = v8::Script::compile(scope, source, None).unwrap();
+        let __fn = script.run(scope).unwrap();
+        let __fn = v8::Local::<v8::Function>::try_from(__fn).unwrap();
+        let undefined = v8::undefined(scope);
 
-    let property = v8::String::new(scope, "success").unwrap();
-    let width = obj
-        .get(scope, property.into())
-        .unwrap()
-        .int32_value(scope)
-        .unwrap();
+        move |scope: &mut v8::HandleScope, value: v8::Local<v8::Value>| {
+            let args = vec![value];
+            __fn.call(scope, undefined.into(), &args);
+        }
+    };
 
-    let property = v8::String::new(scope, "width").unwrap();
-    let height = obj
-        .get(scope, property.into())
-        .unwrap()
-        .int32_value(scope)
-        .unwrap();
+    let result = v8::Local::<v8::Value>::new(scope, result);
 
-    let property = v8::String::new(scope, "data").unwrap();
-    let buffer = obj.get(scope, property.into()).unwrap();
-    let buffer = v8::Local::<v8::Uint8ClampedArray>::try_from(buffer).unwrap();
-    let buffer = buffer.get_backing_store().unwrap();
-    let len = buffer.byte_length();
-    let is_new_buffer = buffer.data().unwrap().as_ptr() == source_buffer_ptr;
-    println!("is_new_buffer: {}", is_new_buffer);
+    // print_js_object(scope, result);
 
-    let boxed = Box::new(DoLiveEffectResult {
-        success: true,
-        data: &mut ImageDataPayload {
-            width: width as u32,
-            height: height as u32,
-            data_ptr: Box::into_raw(Box::new(buffer.data())) as *mut c_void,
-            byte_length: len,
-        },
-    });
+    // if !result.is_promise() {
+    //     return Box::into_raw(Box::new(DoLiveEffectResult::failed_default(
+    //         "doLiveEffect did not return a promise",
+    // //     )));
+    // // }
 
-    Box::into_raw(boxed)
+    // let promise = v8::Local::<v8::Promise>::try_from(result).unwrap();
+
+    // let result = promise.result(scope);
+
+    if !result.is_object() {
+        return Box::into_raw(Box::new(DoLiveEffectResult {
+            success: false,
+            data: std::ptr::null_mut(),
+        }));
+    }
+
+    let returned = (|| -> Result<DoLiveEffectResult, anyhow::Error> {
+        let obj = v8::Local::<v8::Value>::try_from(result)?;
+        let obj = v8::Local::<v8::Object>::try_from(obj)?;
+
+        let property = v8::String::new(scope, "width").unwrap();
+        let width = obj
+            .get(scope, property.into())
+            .unwrap()
+            .int32_value(scope)
+            .unwrap();
+
+        let property = v8::String::new(scope, "height").unwrap();
+        let height = obj
+            .get(scope, property.into())
+            .unwrap()
+            .int32_value(scope)
+            .unwrap();
+
+        let property = v8::String::new(scope, "data").unwrap();
+        let buffer = obj.get(scope, property.into()).unwrap();
+        let buffer = v8::Local::<v8::Uint8ClampedArray>::try_from(buffer)?;
+        let buffer = buffer.get_backing_store().unwrap();
+
+        let len = buffer.byte_length();
+
+        let is_new_buffer = buffer.data().unwrap().as_ptr() == source_buffer_ptr;
+
+        let data_ptr = Box::into_raw(Box::new(buffer.data())) as *mut c_void;
+        println!("data_ptr(rust): {:p}", data_ptr);
+
+        Ok(DoLiveEffectResult {
+            success: true,
+            data: Box::into_raw(Box::new(ImageDataPayload {
+                width: width as u32,
+                height: height as u32,
+                data_ptr,
+                byte_length: len,
+            })),
+        })
+    })();
+
+    println!("do_live_effect: elapsed = {:?}", t.elapsed());
+
+    match returned {
+        Ok(result) => Box::into_raw(Box::new(result)),
+        Err(e) => {
+            eprintln!("do_live_effect: error: {}", e);
+            Box::into_raw(Box::new(DoLiveEffectResult {
+                success: false,
+                data: std::ptr::null_mut(),
+            }))
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn dispose_do_live_effect_result(result: *mut DoLiveEffectResult) {
+    if result.is_null() {
+        return;
+    }
+
+    unsafe {
+        // if !(*result).data.is_null() {
+        //     drop(Box::from_raw((*result).data));
+        // }
+        drop(Box::from_raw(result));
+    }
 }
 
 // #[no_mangle]
@@ -382,53 +443,128 @@ fn execute_export_function_and_raw_return<'a>(
     ai_main: &mut AiMain,
     function_name: &str,
     args_factory: impl for<'b> FnOnce(
-        &mut v8::HandleScope<'b>,
-    ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>,
+            &mut v8::HandleScope<'b>,
+        ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>
+        + 'static,
 ) -> Option<v8::Global<v8::Value>> {
-    // let failed_res = FunctionResult {
-    //     success: false,
-    //     json: CString::new("{}".to_string()).unwrap().into_raw(),
-    // };
+    let tokio_runtime = ai_main.main_runtime.tokio_runtime();
+    let ai_main_ptr = ai_main as *mut AiMain;
+    let ai_main: &'static mut AiMain = unsafe { &mut *ai_main_ptr };
 
-    let runtime = &mut ai_main.main_runtime;
+    let fn_name_arc = Arc::new(function_name.to_string());
 
-    let fn_ref = match ai_main
-        .main_module
-        .get_export_function_by_name(runtime, function_name)
-    {
-        Ok(fn_ref) => fn_ref,
+    println!("Starting execute_export_function_and_raw_return");
+
+    // It's required for WebGPU async methods
+    let localset = tokio::task::LocalSet::new();
+    let result = localset.block_on(&tokio_runtime, async move {
+        // let proc: Pin<
+        //     Box<dyn Future<Output = Result<Box<v8::Global<v8::Value>>, anyhow::Error>> + 'static>,
+        // > = Box::pin(
+
+        // It's required for WebGPU async methods
+        tokio::task::spawn_local(async move {
+            let runtime = &mut ai_main.main_runtime;
+            let function_name = fn_name_arc.as_str();
+
+            let fn_ref = match ai_main
+                .main_module
+                .get_export_function_by_name(runtime, function_name)
+            {
+                Ok(fn_ref) => fn_ref,
+                Err(e) => return Err(anyhow::anyhow!("Error getting export function: {}", e)),
+            };
+
+            let deno_runtime = runtime.deno_runtime();
+
+            // let fn_ref = v8::Local::<v8::Function>::new(handle_scope, fn_ref);
+            let args = {
+                let handle_scope = &mut deno_runtime.handle_scope();
+                let args = args_factory(handle_scope).unwrap();
+                args.iter()
+                    .map(|v| v8::Global::new(handle_scope, *v))
+                    .collect::<Vec<_>>()
+            };
+
+            println!("Executing function: {}", function_name);
+
+            let call = deno_runtime.call_with_args(&fn_ref, &args);
+            let ret = deno_runtime
+                .with_event_loop_promise(call, PollEventLoopOptions::default())
+                .await;
+
+            // Wrap result as promise for unificate after processing
+            // let wrapped_result = if ret.is_promise() {
+            //     v8::Global::<v8::Promise>::new(
+            //         handle_scope,
+            //         v8::Local::<v8::Promise>::try_from(ret).unwrap(),
+            //     )
+            // } else {
+            //     let resolver = v8::PromiseResolver::new(handle_scope).unwrap();
+            //     resolver.resolve(handle_scope, ret);
+            //     let promise = resolver.get_promise(handle_scope);
+            //     v8::Global::<v8::Promise>::new(handle_scope, promise)
+            // }
+
+            // let deno_runtime = deno_runtime_ref.get();
+            // let deno_runtime = unsafe { &mut *deno_runtime };
+
+            // if ret.is_promise() {
+            //     // Wait for the promise to resolve
+            //     println!("Waiting for promise to resolve");
+            //     let promise = v8::Local::<v8::Promise>::try_from(ret).unwrap();
+
+            //     print!(
+            //         "Promise state: {}",
+            //         if promise.state() == v8::PromiseState::Pending {
+            //             "Pending"
+            //         } else {
+            //             "Not pending"
+            //         }
+            //     );
+
+            //     while promise.state() == v8::PromiseState::Pending {
+            //         deno_runtime
+            //             .run_event_loop(PollEventLoopOptions::default())
+            //             .await?;
+
+            //         std::thread::sleep(Duration::from_millis(10));
+            //     }
+            //     println!("Promise fullfilled");
+
+            //     let handle_scope = &mut deno_runtime.handle_scope();
+            //     let value = promise.result(handle_scope);
+            //     v8::Global::<v8::Value>::new(handle_scope, value)
+            // } else {
+            //     let handle_scope = &mut deno_runtime.handle_scope();
+            //     v8::Global::<v8::Value>::new(handle_scope, ret)
+            // }
+
+            let handle_scope = &mut deno_runtime.handle_scope();
+
+            match ret {
+                Ok(ret) => Ok(Box::new(v8::Global::<v8::Value>::new(handle_scope, ret))),
+                Err(e) => Err(e.into()),
+            }
+        })
+        .await
+    });
+
+    println!("Finished execute_export_function_and_raw_return");
+
+    match result {
+        Ok(result) => match result {
+            Ok(result) => Some(*result),
+            Err(e) => {
+                eprintln!("ai-deno: Error executing function: {}", e);
+                None
+            }
+        },
         Err(e) => {
-            return None;
-            // return Box::into_raw(Box::new(failed_res));
+            eprintln!("ai-deno: JoinError {}", e);
+            None
         }
-    };
-
-    let handle_scope = &mut runtime.deno_runtime().handle_scope();
-    let fn_ref = v8::Local::<v8::Function>::new(handle_scope, fn_ref);
-
-    let scope = &mut v8::TryCatch::new(handle_scope);
-    let undefined = v8::undefined(scope);
-    let args = args_factory(scope).unwrap();
-
-    let result = fn_ref.call(scope, undefined.into(), &args);
-
-    if let Some(err) = scope.exception() {
-        let error = JsError::from_v8_exception(scope, err);
-        println!("{:?}", error);
-        // return Box::into_raw(Box::new(failed_res));
-        return None;
     }
-
-    let result = match result {
-        Some(result) => result,
-        None => {
-            // println!("Error: function call returned None");
-            // return Box::into_raw(Box::new(failed_res));
-            return None;
-        }
-    };
-
-    Some(v8::Global::<v8::Value>::new(scope, result))
 }
 
 fn execute_exported_function<'a>(

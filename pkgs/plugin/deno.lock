@@ -1,14 +1,30 @@
 {
   "version": "4",
   "specifiers": {
+    "jsr:@es-toolkit/es-toolkit@*": "1.31.0",
     "jsr:@qnighy/dedent@*": "0.1.2",
+    "jsr:@std/fs@*": "1.0.10",
+    "jsr:@std/path@*": "1.0.8",
+    "jsr:@std/path@^1.0.8": "1.0.8",
     "npm:@adobe/spectrum-tokens@*": "12.28.0",
     "npm:@adobe/spectrum-tokens@^12.28.0": "12.28.0",
     "npm:parse-css-color@*": "0.2.1"
   },
   "jsr": {
+    "@es-toolkit/es-toolkit@1.31.0": {
+      "integrity": "58479e1c72e58177a937bafd342504f32e1cdc922603835f06af9ef79f8203ed"
+    },
     "@qnighy/dedent@0.1.2": {
       "integrity": "9e420cff5b0082dba168385c9dfc56f25ef9a07999605e5fc9bc2058529998ee"
+    },
+    "@std/fs@1.0.10": {
+      "integrity": "bf041f9d7a0a460817f0421be8946d0e06011b3433e6c83a215628de5e3c7c2c",
+      "dependencies": [
+        "jsr:@std/path@^1.0.8"
+      ]
+    },
+    "@std/path@1.0.8": {
+      "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
     }
   },
   "npm": {

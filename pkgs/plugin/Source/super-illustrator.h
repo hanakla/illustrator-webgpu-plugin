@@ -345,7 +345,7 @@ namespace suai {
            {kCantHappenErr, "kCantHappenErr"},
            {kNoDocumentErr, "kNoDocumentErr"},
            {kSelectorClashErr, "kSelectorClashErr"},
-           //    {kDashBufferTooShortError, "kDashBufferTooShortError"},
+           //    {kDashBufferTooShortError, "kDashBufferTooShortError"},let scope = &mut deno_runtime.handle_scope();
            //    {kNoStrokeParamsError, "kNoStrokeParamsError"},
            //    {kDashArrayTooBigError, "kDashArrayTooBigError"},
            //    {kNoDashError, "kNoDashError"},

@@ -1,5 +1,9 @@
-import { Effect, StyleFilterFlag } from "../types.ts";
+import { createCanvas } from "jsr:@gfx/canvas@0.5.6";
+import { Effect, StyleFilterFlag, DoLiveEffectPayload } from "../types.ts";
 import { ui } from "../ui.ts";
+
+const gpuAdapter = await navigator.gpu.requestAdapter();
+const device = await gpuAdapter!.requestDevice();
 
 export const blurEffect: Effect<{ radius: number }> = {
   id: "blur-v1",
@@ -16,9 +20,21 @@ export const blurEffect: Effect<{ radius: number }> = {
     },
   },
   doLiveEffect: async (params, input) => {
-    console.log("Deno code running", input.buffer.byteLength / 4, input);
+    console.log("Deno code running", input.data.byteLength / 4);
 
-    function generateGaussianKernel(radius) {
+    console.log({
+      width: input.width,
+      height: input.height,
+      byteLength: input.data.byteLength,
+    });
+
+    console.time("gaussianBlurWebGPU");
+    const result = await gaussianBlurWebGPU(input, params.radius);
+    console.timeEnd("gaussianBlurWebGPU");
+
+    return result;
+
+    function generateGaussianKernel(radius: number) {
       const size = radius * 2 + 1;
       const kernel = new Array(size * size);
 
@@ -46,8 +62,22 @@ export const blurEffect: Effect<{ radius: number }> = {
       return { kernel, size };
     }
 
-    async function gaussianBlurWebGPU(imageData, radius) {
-      console.log(`ぼかしの強さ: ${radius}ピクセル`);
+    async function gaussianBlurWebGPU(
+      imageData: DoLiveEffectPayload,
+      radius: number
+    ) {
+      console.log(`ぼかしの強さ: ${radius}ピクセル`, Deno.cwd());
+
+      // Deno.writeFile(
+      //   "input.bmp.json",
+      //   new TextEncoder().encode(
+      //     JSON.stringify({
+      //       width: imageData.width,
+      //       height: imageData.height,
+      //       data: imageData.data,
+      //     })
+      //   )
+      // );
 
       const device = await initWebGPU();
       const { width, height, data } = imageData;
@@ -65,7 +95,6 @@ export const blurEffect: Effect<{ radius: number }> = {
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       });
 
-      // 出力バッファ作成 - COPY_DST フラグを追加して対応
       const outputBuffer = device.createBuffer({
         size: bufferSize,
         usage:
@@ -74,13 +103,22 @@ export const blurEffect: Effect<{ radius: number }> = {
           GPUBufferUsage.COPY_SRC,
       });
 
-      // 結果読み取り用のバッファを別途作成
       const resultBuffer = device.createBuffer({
         size: bufferSize,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
       });
 
       device.queue.writeBuffer(inputBuffer, 0, data);
+
+      const uniformBuffer = device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      device.queue.writeBuffer(
+        uniformBuffer,
+        0,
+        new Float32Array([width, height, radius, size])
+      );
 
       const shaderModule = device.createShaderModule({
         code: `
@@ -92,16 +130,24 @@ export const blurEffect: Effect<{ radius: number }> = {
             values: array<f32>,
         };
 
+        struct Uniforms {
+            width: u32,
+            height: u32,
+            radius: i32,
+            kernelSize: i32,
+        };
+
         @group(0) @binding(0) var<storage, read> inputImage: ImageData;
         @group(0) @binding(1) var<storage, read_write> outputImage: ImageData;
         @group(0) @binding(2) var<storage, read> kernelData: KernelData;
+        @group(0) @binding(3) var<uniform> uniforms: Uniforms;
 
         @compute @workgroup_size(8, 8)
         fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-            let width = ${width}u;
-            let height = ${height}u;
-            let radius = ${radius}i;
-            let kernelSize = ${size}i;
+            let width = uniforms.width;
+            let height = uniforms.height;
+            let radius = uniforms.radius;
+            let kernelSize = uniforms.kernelSize;
 
             if (id.x >= width || id.y >= height) {
                 return;
@@ -134,7 +180,6 @@ export const blurEffect: Effect<{ radius: number }> = {
                 }
             }
 
-            // 重みの合計が0より大きい場合のみ正規化
             if (weightSum > 0.0) {
                 color = color / weightSum;
             }
@@ -155,6 +200,10 @@ export const blurEffect: Effect<{ radius: number }> = {
           { binding: 0, resource: { buffer: inputBuffer } },
           { binding: 1, resource: { buffer: outputBuffer } },
           { binding: 2, resource: { buffer: kernelBuffer } },
+          {
+            binding: 3,
+            resource: { buffer: uniformBuffer },
+          },
         ],
       });
 
@@ -169,7 +218,6 @@ export const blurEffect: Effect<{ radius: number }> = {
       passEncoder.end();
       device.queue.submit([commandEncoder.finish()]);
 
-      // コマンドエンコーダを作成して出力バッファから結果バッファへコピー
       const copyEncoder = device.createCommandEncoder();
       copyEncoder.copyBufferToBuffer(
         outputBuffer,
@@ -181,6 +229,7 @@ export const blurEffect: Effect<{ radius: number }> = {
       device.queue.submit([copyEncoder.finish()]);
 
       // 結果バッファからデータを読み取り
+      console.log("reading");
       await resultBuffer.mapAsync(GPUMapMode.READ);
       const resultArray = new Uint8Array(resultBuffer.getMappedRange());
       const outputImageData = new ImageData(
@@ -189,10 +238,25 @@ export const blurEffect: Effect<{ radius: number }> = {
         height
       );
       resultBuffer.unmap();
+      console.log("read");
 
       return outputImageData;
     }
-    return input;
+
+    async function initWebGPU() {
+      if (!navigator.gpu) {
+        throw new Error("WebGPU not supported!");
+      }
+
+      // const adapter = await navigator.gpu.requestAdapter();
+      // if (!adapter) {
+      //   throw new Error("Failed to get GPU adapter!");
+      // }
+
+      // const device = await adapter.requestDevice();
+      // return device;
+      return device;
+    }
   },
   editLiveEffectParameters: (params) => JSON.stringify(params),
   renderUI: (params) => {

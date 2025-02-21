@@ -11,7 +11,7 @@ export const randomNoiseEffect: Effect<{}> = {
   },
   paramSchema: {},
   doLiveEffect: async (params, input) => {
-    const buffer = input.buffer;
+    const buffer = input.data;
     console.log("Deno code running", buffer.byteLength / 4, buffer);
 
     // Random color

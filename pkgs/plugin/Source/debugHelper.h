@@ -21,14 +21,98 @@ std::string arrayToString(T (&arr)[N]) {
 
 template <typename... Args>
 void csl(const char* format, Args... args) {
-  if (AI_DENO_DEBUG) {
-    std::cout << string_format(format, args...) << std::endl;
+  if (AI_DENO_DEBUG) { std::cout << string_format(format, args...) << std::endl; }
+}
+
+class dbg__Measuring {
+ public:
+  const char* label;
+
+  dbg__Measuring(const char* label = nullptr) : label(label) {
+    start = std::chrono::system_clock::now();
   }
+
+  double elapsed() {
+    end = std::chrono::system_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  }
+
+ private:
+  std::chrono::system_clock::time_point start, end;
+};
+
+std::stack<dbg__Measuring> dbg_cstCurrent;
+
+dbg__Measuring timeStart(const char* label) {
+  auto m = new dbg__Measuring(label);
+  dbg_cstCurrent.push(*m);
+  return *m;
+}
+
+void timeEnd() {
+  if (!AI_DENO_DEBUG) return;
+
+  dbg__Measuring* m = &dbg_cstCurrent.top();
+  dbg_cstCurrent.pop();
+  if (m == nullptr) return;
+
+  std::cout << m->label
+            << " Elapsed: " << string_format("%.2f", m->elapsed()) << "ms"
+            << std::endl;
 }
 
 void print_json(json value, std::string label) {
   if (!AI_DENO_DEBUG) return;
   std::cout << "print_json:" << label << value.dump() << std::endl;
+}
+
+void print_stringBin(const char* str, std::string label) {
+  if (!AI_DENO_DEBUG) return;
+  std::cout << "print_stringBin(char*):" << label << std::endl;
+
+  std::stringstream ss;
+
+  size_t l = strlen(str);
+  for (size_t i = 0; i < l; i++) {
+    ss << std::hex << std::uppercase << (int)str[i] << " ";
+  }
+
+  std::cout << "  hex: " << ss.str() << std::endl;
+  std::cout << "  str: " << str << std::endl;
+}
+
+void print_stringBin(const std::string& str, std::string label) {
+  if (!AI_DENO_DEBUG) return;
+  std::cout << "print_stringBin:" << label << std::endl;
+
+  std::stringstream ss;
+
+  for (size_t i = 0; i < str.size(); i++) {
+    ss << std::hex << std::uppercase << (int)str[i];
+  }
+
+  std::cout << "  hex: " << ss.str() << std::endl;
+  std::cout << "  str: " << str << std::endl;
+}
+
+void print_AddLiveEffectMenuData(const AddLiveEffectMenuData* data) {
+  if (!AI_DENO_DEBUG) return;
+  std::cout << "AddLiveEffectMenuData:" << std::endl;
+  std::cout << "  title: " << data->title << std::endl;
+  std::cout << "  category: " << data->category << std::endl;
+  std::cout << std::endl;
+}
+
+void print_AILiveEffectData(const AILiveEffectData* data) {
+  if (!AI_DENO_DEBUG) return;
+  std::cout << "AILiveEffectData:" << std::endl;
+  std::cout << "  name: " << data->name << std::endl;
+  std::cout << "  title: " << data->title << std::endl;
+  std::cout << "  majorVersion: " << data->majorVersion << std::endl;
+  std::cout << "  minorVersion: " << data->minorVersion << std::endl;
+  std::cout << "  prefersAsInput: " << data->prefersAsInput << std::endl;
+  std::cout << "  styleFilterFlags: " << data->styleFilterFlags << std::endl;
+  std::cout << std::endl;
 }
 
 std::string stringify_ASErr(ASErr& err) {
@@ -60,8 +144,7 @@ void print_AITile(AITile* tile, std::string title) {
   if (!AI_DENO_DEBUG) return;
   std::cout << "AITile (" << title << "): " << std::endl;
   std::cout << "  bounds: { " << "top: " << tile->bounds.top
-            << ", left: " << tile->bounds.left
-            << ", right: " << tile->bounds.right
+            << ", left: " << tile->bounds.left << ", right: " << tile->bounds.right
             << ", bottom: " << tile->bounds.bottom << " }" << std::endl;
   std::cout << "  chnnelInterleave: " << arrayToString(tile->channelInterleave)
             << std::endl;
@@ -83,9 +166,9 @@ void dbg_printPixels(
     if (i + 3 >= totalPixels * pixelStride) break;
 
     ai::uint8* pixel = pixelData + i;
-    std::cout << "[" << static_cast<int>(pixel[0]) << ","
-              << static_cast<int>(pixel[1]) << "," << static_cast<int>(pixel[2])
-              << "," << static_cast<int>(pixel[3]) << "] ";
+    std::cout << "[" << static_cast<int>(pixel[0]) << "," << static_cast<int>(pixel[1])
+              << "," << static_cast<int>(pixel[2]) << "," << static_cast<int>(pixel[3])
+              << "] ";
 
     if ((i / pixelStride + 1) % 10 == 0) std::cout << std::endl;
   }
@@ -143,27 +226,20 @@ void dbg_printRasterizeSettings(const AIRasterizeSettings& settings) {
     optionsStr = "None";
   } else {
     if (settings.options & kRasterizeOptionsDoLayers) optionsStr += "DoLayers|";
-    if (settings.options & kRasterizeOptionsAgainstBlack)
-      optionsStr += "AgainstBlack|";
-    if (settings.options & kRasterizeOptionsDontAlign)
-      optionsStr += "DontAlign|";
-    if (settings.options & kRasterizeOptionsOutlineText)
-      optionsStr += "OutlineText|";
+    if (settings.options & kRasterizeOptionsAgainstBlack) optionsStr += "AgainstBlack|";
+    if (settings.options & kRasterizeOptionsDontAlign) optionsStr += "DontAlign|";
+    if (settings.options & kRasterizeOptionsOutlineText) optionsStr += "OutlineText|";
     if (settings.options & kRasterizeOptionsHinted) optionsStr += "Hinted|";
-    if (settings.options & kRasterizeOptionsUseEffectsRes)
-      optionsStr += "UseEffectsRes|";
-    if (settings.options & kRasterizeOptionsUseMinTiles)
-      optionsStr += "UseMinTiles|";
+    if (settings.options & kRasterizeOptionsUseEffectsRes) optionsStr += "UseEffectsRes|";
+    if (settings.options & kRasterizeOptionsUseMinTiles) optionsStr += "UseMinTiles|";
     if (settings.options & kRasterizeOptionsCMYKWhiteMatting)
       optionsStr += "CMYKWhiteMatting|";
     if (settings.options & kRasterizeOptionsSpotColorRasterOk)
       optionsStr += "SpotColorRasterOk|";
-    if (settings.options & kRasterizeOptionsNChannelOk)
-      optionsStr += "NChannelOk|";
+    if (settings.options & kRasterizeOptionsNChannelOk) optionsStr += "NChannelOk|";
     if (settings.options & kFillBlackAndIgnoreTransparancy)
       optionsStr += "FillBlackAndIgnoreTransparency|";
-    if (settings.options & kRaterizeSharedSpace)
-      optionsStr += "RasterizeSharedSpace|";
+    if (settings.options & kRaterizeSharedSpace) optionsStr += "RasterizeSharedSpace|";
     if (!optionsStr.empty()) {
       optionsStr.pop_back();  // Remove trailing '|'
     }
@@ -183,21 +259,17 @@ void dbg_printRasterizeSettings(const AIRasterizeSettings& settings) {
   }
 
   std::cout << "AIRasterizeSettings:" << std::endl;
-  std::cout << "  Type: " << typeStr << " (" << settings.type << ")"
-            << std::endl;
+  std::cout << "  Type: " << typeStr << " (" << settings.type << ")" << std::endl;
   std::cout << "  Resolution: "
-            << (settings.resolution <= 0
-                    ? "Default 72 dpi"
-                    : std::to_string(settings.resolution) + " dpi")
+            << (settings.resolution <= 0 ? "Default 72 dpi"
+                                         : std::to_string(settings.resolution) + " dpi")
             << std::endl;
-  std::cout << "  Antialiasing: " << (settings.antialiasing < 2 ? "Off" : "On")
-            << " (" << settings.antialiasing << ")" << std::endl;
+  std::cout << "  Antialiasing: " << (settings.antialiasing < 2 ? "Off" : "On") << " ("
+            << settings.antialiasing << ")" << std::endl;
   std::cout << "  Options: " << optionsStr << " (" << settings.options << ")"
             << std::endl;
-  std::cout << "  Color Conversion Purpose: " << settings.ccoptions.purpose
-            << std::endl;
-  std::cout << "  Preserve Spot Colors: "
-            << (settings.preserveSpotColors ? "Yes" : "No") << " ("
-            << settings.preserveSpotColors << ")" << std::endl;
+  std::cout << "  Color Conversion Purpose: " << settings.ccoptions.purpose << std::endl;
+  std::cout << "  Preserve Spot Colors: " << (settings.preserveSpotColors ? "Yes" : "No")
+            << " (" << settings.preserveSpotColors << ")" << std::endl;
   std::cout << std::endl;
 }

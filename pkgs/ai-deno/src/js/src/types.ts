@@ -90,7 +90,7 @@ export enum StyleFilterFlag {
 export type DoLiveEffectPayload = {
   width: number;
   height: number;
-  buffer: Uint8ClampedArray;
+  data: Uint8ClampedArray;
 };
 
 export type Effect<T extends object> = {

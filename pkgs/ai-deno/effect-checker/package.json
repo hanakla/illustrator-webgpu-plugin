@@ -1,0 +1,11 @@
+{
+  "name": "effect-checker",
+  "packageManager": "yarn@4.6.0",
+  "scripts": {
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "vite": "^6.1.1"
+  }
+}

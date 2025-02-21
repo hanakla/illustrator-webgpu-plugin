@@ -45,6 +45,9 @@ ASErr HelloWorldPlugin::StartupPlugin(SPInterfaceMessage* message) {
     aiDenoMain = ai_deno::initialize(&HelloWorldPlugin::StaticHandleDenoAiAlert);
     error      = this->InitLiveEffect(message);
     CHKERR();
+  } catch (ai::Error& ex) {
+    error = ex;
+    std::cout << "ヷ！死んじゃった……: " << ex.what() << std::endl;
   } catch (std::exception& ex) {
     std::cout << "ヷ！死んじゃった……: " << stringify_ASErr(error) << " what:" << ex.what()
               << std::endl;
@@ -85,9 +88,9 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
     effect.self = message->d.self;
 
     std::string name;
-    effect.name = string_format_to_char(
+    effect.name = suai::str::strdup(string_format_to_char(
         "%s%s", EFFECT_PREFIX.c_str(), effectDef["id"].get<std::string>().c_str()
-    );
+    ));
 
     // char *title =
     // ai::UnicodeString(effectDef["title"].get<std::string>().c_str(),
@@ -105,8 +108,10 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
     AddLiveEffectMenuData menu;
     menu.category =
         ai::UnicodeString("Deno Effectors", kAIUTF8CharacterEncoding).as_UTF8().data();
-    menu.title = effect.title;
-    error      = sAILiveEffect->AddLiveEffect(&effect, &this->fEffects[filterIndex]);
+    menu.title = suai::str::strdup(
+        suai::str::toAiUnicodeStringUtf8(effectDef["title"].get<std::string>())
+    );
+    error = sAILiveEffect->AddLiveEffect(&effect, &this->fEffects[filterIndex]);
     CHKERR();
 
     error = sAILiveEffect->AddLiveEffectMenuItem(
@@ -166,10 +171,12 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
     // sAIArt->
 
+    timeStart("Rasterize");
     error = sAIRasterize->Rasterize(
         artSet->ToAIArtSet(), &settings, &bounds, AIPaintOrder::kPlaceAbove, art,
         &rasterArt, NULL
     );
+    timeEnd();
     CHKERR();
 
     AIRasterRecord info;
@@ -211,6 +218,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
 
+    print_AITile(&workTile, "workTile");
     print_AISlice(&artSlice, "artSlice");
 
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
@@ -224,10 +232,16 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         aiDenoMain, params.effectName.c_str(), params.params.dump().c_str(), &input
     );
 
+    //    print_json(result->data);
+
     // ai_deno::ArrayBufferRef *result = ai_deno::execute_deno(
     //     denoRuntimeRef,
     //     denoModuleRef,
     //     &input);
+
+    csl("Result: %s", result->success ? "true" : "false");
+    csl("  Original bytes: %d", byteLength);
+    csl("  Result bytes: %d", result->data->byte_length);
 
     if (result != nullptr && result->success) {
       // clang-format off
@@ -235,17 +249,26 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
                 << "  width: " << result->data->width << "\n"
                 << "  height: " << result->data->height << "\n"
                 << "  byte_length: " << result->data->byte_length << "\n"
-                << "  data_ptr: " << result->data->data_ptr << "\n"
+                << "  data_ptr: " << std::hex << (void*)result->data->data_ptr
                 << std::endl;
       // clang-format on
 
-      if (pixelData == result->data->data_ptr) {
-        std::cout << "Effect: Same data pointer" << std::endl;
-      }
-
       workTile.data = result->data->data_ptr;
+      // workTile.rowBytes = result->data->width * 4;
+      // workTile.colBytes = 4;
+      // workTile.bounds   = artSlice;
 
       error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
+      CHKERR();
+
+      // ai_deno::dispose_do_live_effect_result(result);
+
+      if (pixelData == result->data->data_ptr) {
+        std::cout << "Effect: Same data pointer" << std::endl;
+      } else {
+        std::cout << "Effect: Different data pointer" << std::endl;
+        // delete[] pixelData;
+      }
     }
 
     // for (ai::uint32 i = 0; i < totalPixels * pixelStride; i += pixelStride)
@@ -337,13 +360,15 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
                                                            &currentParams, &nodeTree,
                                                            &modal, this](json patch) {
       if (isModalOpened) isPreviewed = true;
+      csl("onChange: {}", patch.dump().c_str());
 
       currentParams.merge_patch(patch);
       pluginParams.params = currentParams;
       error = this->putParamsToDictionaly(message->parameters, pluginParams);
       CHKERR();
 
-      sAILiveEffect->UpdateParameters(message->context);
+      error = sAILiveEffect->UpdateParameters(message->context);
+      CHKERR();
 
       ai_deno::FunctionResult* result = ai_deno::get_live_effect_view_tree(
           this->aiDenoMain, pluginParams.effectName.c_str(), currentParams.dump().c_str()
@@ -374,6 +399,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
         CHKERR();
       } else {
         // Revert to original state
+        pluginParams.params = initialParams;
         putParamsToDictionaly(message->parameters, pluginParams);
         sAILiveEffect->UpdateParameters(message->context);
       }

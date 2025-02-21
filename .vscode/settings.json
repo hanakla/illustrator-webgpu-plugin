@@ -1,6 +1,9 @@
 {
   "deno.enable": true,
-  "rust-analyzer.linkedProjects": ["pkgs/ai-deno/Cargo.toml"],
+  "rust-analyzer.linkedProjects": [
+    "pkgs/ai-deno/Cargo.toml",
+    "rust-sandbox/Cargo.toml"
+  ],
   "editor.formatOnSave": true,
   "[cpp]": {
     "editor.defaultFormatter": "ms-vscode.cpptools"

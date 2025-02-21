@@ -28,6 +28,8 @@ var ui = {
 };
 
 // src/js/src/live-effects/blurEffect.ts
+var gpuAdapter = await navigator.gpu.requestAdapter();
+var device = await gpuAdapter.requestDevice();
 var blurEffect = {
   id: "blur-v1",
   title: "Gausian Blur V1",
@@ -43,7 +45,16 @@ var blurEffect = {
     }
   },
   doLiveEffect: async (params, input) => {
-    console.log("Deno code running", input.buffer.byteLength / 4, input);
+    console.log("Deno code running", input.data.byteLength / 4);
+    console.log({
+      width: input.width,
+      height: input.height,
+      byteLength: input.data.byteLength
+    });
+    console.time("gaussianBlurWebGPU");
+    const result = await gaussianBlurWebGPU(input, params.radius);
+    console.timeEnd("gaussianBlurWebGPU");
+    return result;
     function generateGaussianKernel(radius) {
       const size = radius * 2 + 1;
       const kernel = new Array(size * size);
@@ -66,30 +77,39 @@ var blurEffect = {
       return { kernel, size };
     }
     async function gaussianBlurWebGPU(imageData, radius) {
-      console.log(`\u307C\u304B\u3057\u306E\u5F37\u3055: ${radius}\u30D4\u30AF\u30BB\u30EB`);
-      const device = await initWebGPU();
+      console.log(`\u307C\u304B\u3057\u306E\u5F37\u3055: ${radius}\u30D4\u30AF\u30BB\u30EB`, Deno.cwd());
+      const device2 = await initWebGPU();
       const { width, height, data } = imageData;
       const { kernel, size } = generateGaussianKernel(radius);
-      const kernelBuffer = device.createBuffer({
+      const kernelBuffer = device2.createBuffer({
         size: kernel.length * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
       });
-      device.queue.writeBuffer(kernelBuffer, 0, new Float32Array(kernel));
+      device2.queue.writeBuffer(kernelBuffer, 0, new Float32Array(kernel));
       const bufferSize = width * height * 4;
-      const inputBuffer = device.createBuffer({
+      const inputBuffer = device2.createBuffer({
         size: bufferSize,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
       });
-      const outputBuffer = device.createBuffer({
+      const outputBuffer = device2.createBuffer({
         size: bufferSize,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
       });
-      const resultBuffer = device.createBuffer({
+      const resultBuffer = device2.createBuffer({
         size: bufferSize,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
       });
-      device.queue.writeBuffer(inputBuffer, 0, data);
-      const shaderModule = device.createShaderModule({
+      device2.queue.writeBuffer(inputBuffer, 0, data);
+      const uniformBuffer = device2.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      device2.queue.writeBuffer(
+        uniformBuffer,
+        0,
+        new Float32Array([width, height, radius, size])
+      );
+      const shaderModule = device2.createShaderModule({
         code: `
         struct ImageData {
             data: array<u32>,
@@ -99,16 +119,24 @@ var blurEffect = {
             values: array<f32>,
         };
 
+        struct Uniforms {
+            width: u32,
+            height: u32,
+            radius: i32,
+            kernelSize: i32,
+        };
+
         @group(0) @binding(0) var<storage, read> inputImage: ImageData;
         @group(0) @binding(1) var<storage, read_write> outputImage: ImageData;
         @group(0) @binding(2) var<storage, read> kernelData: KernelData;
+        @group(0) @binding(3) var<uniform> uniforms: Uniforms;
 
         @compute @workgroup_size(8, 8)
         fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-            let width = ${width}u;
-            let height = ${height}u;
-            let radius = ${radius}i;
-            let kernelSize = ${size}i;
+            let width = uniforms.width;
+            let height = uniforms.height;
+            let radius = uniforms.radius;
+            let kernelSize = uniforms.kernelSize;
 
             if (id.x >= width || id.y >= height) {
                 return;
@@ -141,7 +169,6 @@ var blurEffect = {
                 }
             }
 
-            // \u91CD\u307F\u306E\u5408\u8A08\u304C0\u3088\u308A\u5927\u304D\u3044\u5834\u5408\u306E\u307F\u6B63\u898F\u5316
             if (weightSum > 0.0) {
                 color = color / weightSum;
             }
@@ -150,19 +177,23 @@ var blurEffect = {
             outputImage.data[index] = finalPixel;
         }`
       });
-      const pipeline = device.createComputePipeline({
+      const pipeline = device2.createComputePipeline({
         layout: "auto",
         compute: { module: shaderModule, entryPoint: "main" }
       });
-      const bindGroup = device.createBindGroup({
+      const bindGroup = device2.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: inputBuffer } },
           { binding: 1, resource: { buffer: outputBuffer } },
-          { binding: 2, resource: { buffer: kernelBuffer } }
+          { binding: 2, resource: { buffer: kernelBuffer } },
+          {
+            binding: 3,
+            resource: { buffer: uniformBuffer }
+          }
         ]
       });
-      const commandEncoder = device.createCommandEncoder();
+      const commandEncoder = device2.createCommandEncoder();
       const passEncoder = commandEncoder.beginComputePass();
       passEncoder.setPipeline(pipeline);
       passEncoder.setBindGroup(0, bindGroup);
@@ -171,8 +202,8 @@ var blurEffect = {
         Math.ceil(height / 8)
       );
       passEncoder.end();
-      device.queue.submit([commandEncoder.finish()]);
-      const copyEncoder = device.createCommandEncoder();
+      device2.queue.submit([commandEncoder.finish()]);
+      const copyEncoder = device2.createCommandEncoder();
       copyEncoder.copyBufferToBuffer(
         outputBuffer,
         0,
@@ -180,7 +211,8 @@ var blurEffect = {
         0,
         bufferSize
       );
-      device.queue.submit([copyEncoder.finish()]);
+      device2.queue.submit([copyEncoder.finish()]);
+      console.log("reading");
       await resultBuffer.mapAsync(GPUMapMode.READ);
       const resultArray = new Uint8Array(resultBuffer.getMappedRange());
       const outputImageData = new ImageData(
@@ -189,9 +221,15 @@ var blurEffect = {
         height
       );
       resultBuffer.unmap();
+      console.log("read");
       return outputImageData;
     }
-    return input;
+    async function initWebGPU() {
+      if (!navigator.gpu) {
+        throw new Error("WebGPU not supported!");
+      }
+      return device;
+    }
   },
   editLiveEffectParameters: (params) => JSON.stringify(params),
   renderUI: (params) => {
@@ -221,7 +259,7 @@ var randomNoiseEffect = {
   },
   paramSchema: {},
   doLiveEffect: async (params, input) => {
-    const buffer = input.buffer;
+    const buffer = input.data;
     console.log("Deno code running", buffer.byteLength / 4, buffer);
     for (let i = 0; i < buffer.length; i += 4) {
       buffer[i] = Math.random() * 255;
@@ -248,28 +286,39 @@ var getEffectViewNode = (id, state) => {
   const effect = findEffect(id);
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
-  return effect.renderUI({
-    ...defaultValues,
-    ...state
-  });
+  try {
+    return effect.renderUI({
+      ...defaultValues,
+      ...state
+    });
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
 };
 var doLiveEffect = async (id, state, width, height, data) => {
   const effect = findEffect(id);
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
-  const result = await effect.doLiveEffect(
-    {
-      ...defaultValues,
-      ...state
-    },
-    {
-      width,
-      height,
-      buffer: data
+  try {
+    const result = await effect.doLiveEffect(
+      {
+        ...defaultValues,
+        ...state
+      },
+      {
+        width,
+        height,
+        data
+      }
+    );
+    if (typeof result.width !== "number" || typeof result.height !== "number" || !(result.data instanceof Uint8ClampedArray)) {
+      throw new Error("Invalid result from doLiveEffect");
     }
-  );
-  if (typeof result.width !== "number" || typeof result.height !== "number" || !(result.buffer instanceof Uint8ClampedArray)) {
-    throw new Error("Invalid result from doLiveEffect");
+    return result;
+  } catch (e) {
+    console.error(e);
+    throw e;
   }
 };
 var getDefaultValus = (effectId) => {

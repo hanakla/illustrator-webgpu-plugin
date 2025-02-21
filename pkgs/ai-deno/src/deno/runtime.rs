@@ -51,8 +51,8 @@ use deno_runtime::worker::{WorkerOptions, WorkerServiceOptions};
 use deno_runtime::{
     deno_broadcast_channel, deno_cache, deno_canvas, deno_console, deno_core, deno_cron,
     deno_crypto, deno_fetch, deno_ffi, deno_fs, deno_http, deno_io, deno_kv, deno_napi, deno_net,
-    deno_os, deno_permissions, deno_process, deno_telemetry, deno_tls, deno_url, deno_web,
-    deno_webgpu, deno_webidl, deno_websocket, deno_webstorage, runtime, BootstrapOptions,
+    deno_node, deno_os, deno_permissions, deno_process, deno_telemetry, deno_tls, deno_url,
+    deno_web, deno_webgpu, deno_webidl, deno_websocket, deno_webstorage, runtime, BootstrapOptions,
 };
 use homedir::my_home;
 use node_resolver::errors::{PackageFolderResolveErrorKind, PackageNotFoundError};
@@ -117,12 +117,12 @@ impl Runtime {
         })
     }
 
-    // pub fn tokio_rutime(&mut self) -> Rc<tokio::runtime::Runtime> {
-    //     self.tokio.tokio_runtime()
-    // }
-
     pub fn deno_runtime(&mut self) -> &mut JsRuntime {
         self.deno_runtime.rt_mut()
+    }
+
+    pub fn tokio_runtime(&self) -> std::rc::Rc<tokio::runtime::Runtime> {
+        self.tokio.tokio_runtime()
     }
 
     pub fn call_module_function(

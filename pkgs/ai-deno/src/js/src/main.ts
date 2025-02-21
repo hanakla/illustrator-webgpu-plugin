@@ -21,10 +21,15 @@ export const getEffectViewNode = (id: string, state: any): UINode => {
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
 
-  return effect.renderUI({
-    ...defaultValues,
-    ...state,
-  });
+  try {
+    return effect.renderUI({
+      ...defaultValues,
+      ...state,
+    });
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
 };
 
 export const doLiveEffect = async (
@@ -38,24 +43,31 @@ export const doLiveEffect = async (
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
 
-  const result = await effect.doLiveEffect(
-    {
-      ...defaultValues,
-      ...state,
-    },
-    {
-      width,
-      height,
-      buffer: data,
-    }
-  );
+  try {
+    const result = await effect.doLiveEffect(
+      {
+        ...defaultValues,
+        ...state,
+      },
+      {
+        width,
+        height,
+        data,
+      }
+    );
 
-  if (
-    typeof result.width !== "number" ||
-    typeof result.height !== "number" ||
-    !(result.buffer instanceof Uint8ClampedArray)
-  ) {
-    throw new Error("Invalid result from doLiveEffect");
+    if (
+      typeof result.width !== "number" ||
+      typeof result.height !== "number" ||
+      !(result.data instanceof Uint8ClampedArray)
+    ) {
+      throw new Error("Invalid result from doLiveEffect");
+    }
+
+    return result;
+  } catch (e) {
+    console.error(e);
+    throw e;
   }
 };
 

@@ -1,2 +1,4 @@
 .DS_Store
 sdk/
+input.bmp.json
+output.png

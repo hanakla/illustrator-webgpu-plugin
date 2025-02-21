@@ -47,7 +47,11 @@ impl Module {
 
 impl Display for Module {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Module {{ filename: {:?}, contents: {:?} }}", self.filename, self.contents)
+        write!(
+            f,
+            "Module {{ filename: {:?}, contents: {:?} }}",
+            self.filename, self.contents
+        )
     }
 }
 
@@ -56,10 +60,7 @@ impl Display for Module {
 /// `current_dir`.
 ///
 /// This is a patch for the str only `deno_core` provided version
-fn resolve_path(
-    path_str: impl AsRef<Path>,
-    current_dir: &Path,
-) -> Result<ModuleSpecifier, Error> {
+fn resolve_path(path_str: impl AsRef<Path>, current_dir: &Path) -> Result<ModuleSpecifier, Error> {
     let path = current_dir.join(path_str);
     let path = deno_core::normalize_path(path);
     deno_core::url::Url::from_file_path(&path)
