@@ -6,6 +6,7 @@
 extern "C" AIArtSetSuite*     sAIArtSet;
 extern "C" AIDictionarySuite* sAIDictionary;
 extern "C" AILiveEffectSuite* sAILiveEffect;
+extern "C" AIArtSuite*        sAIArt;
 
 #ifndef CHKERR
 #define CHKERR(...)                                                         \
@@ -183,6 +184,12 @@ namespace suai {
     AIArtSet artSet;
 
    public:
+    static ArtSet* fromArtSet(AIArtSet artSet) {
+      ArtSet* instance = new ArtSet();
+      instance->artSet = artSet;
+      return instance;
+    }
+
     ArtSet() { sAIArtSet->NewArtSet(&artSet); }
 
     ~ArtSet() { sAIArtSet->DisposeArtSet(&artSet); }
@@ -190,6 +197,26 @@ namespace suai {
     AIArtSet ToAIArtSet() { return artSet; }
 
     void AddArt(AIArtHandle& art) { sAIArtSet->AddArtToArtSet(artSet, art); }
+
+    std::size_t size() {
+      std::size_t count;
+      sAIArtSet->CountArtSet(artSet, &count);
+      return count;
+    }
+
+    std::vector<AIArtHandle> GetAllArts() {
+      std::vector<AIArtHandle> arts;
+      size_t                   count;
+      sAIArtSet->CountArtSet(artSet, &count);
+
+      for (size_t i = 0; i < count; i++) {
+        AIArtHandle art;
+        sAIArtSet->NextInArtSet(artSet, nullptr, &art);
+        arts.push_back(art);
+      }
+
+      return arts;
+    }
   };
 
   class LiveEffect {
@@ -211,6 +238,47 @@ namespace suai {
       return str::toUtf8StdString(effectTitle);
     }
   };
+
+  namespace art {
+    short getArtType(AIArtHandle art) {
+      short type;
+      sAIArt->GetArtType(art, &type);
+      return type;
+    }
+
+    std::string getArtTypeName(AIArtHandle art) {
+      short type = getArtType(art);
+
+      return mapValue(
+          type, string_format("Unknown(%d)", type),
+          {
+              {AIArtType::kAnyArt, "Any"},
+              {AIArtType::kUnknownArt, "Unknown"},
+              {AIArtType::kGroupArt, "Group"},
+              {AIArtType::kPathArt, "Path"},
+              {AIArtType::kCompoundPathArt, "CompoundPath"},
+              {AIArtType::kTextArtUnsupported, "TextUnsupported"},
+              {AIArtType::kTextPathArtUnsupported, "TextPathUnsupported"},
+              {AIArtType::kTextRunArtUnsupported, "TextRunUnsupported"},
+              {AIArtType::kPlacedArt, "Placed"},
+              {AIArtType::kMysteryPathArt, "MysteryPath"},
+              {AIArtType::kRasterArt, "Raster"},
+              {AIArtType::kPluginArt, "Plugin"},
+              {AIArtType::kMeshArt, "Mesh"},
+              {AIArtType::kTextFrameArt, "TextFrame"},
+              {AIArtType::kSymbolArt, "Symbol"},
+              {AIArtType::kForeignArt, "Foreign"},
+              {AIArtType::kLegacyTextArt, "LegacyText"},
+              {AIArtType::kChartArt, "Chart"},
+              {AIArtType::kRadialRepeatArt, "RadialRepeat"},
+              {AIArtType::kGridRepeatArt, "GridRepeat"},
+              {AIArtType::kSymmetryArt, "Symmetry"},
+              {AIArtType::kConcentricRepeatArt, "ConcentricRepeat"},
+
+          }
+      );
+    }
+  }  // namespace art
 
   namespace dict {
     AIDictKey getKey(std::string name) {
@@ -345,10 +413,10 @@ namespace suai {
            {kCantHappenErr, "kCantHappenErr"},
            {kNoDocumentErr, "kNoDocumentErr"},
            {kSelectorClashErr, "kSelectorClashErr"},
-           //    {kDashBufferTooShortError, "kDashBufferTooShortError"},let scope = &mut deno_runtime.handle_scope();
-           //    {kNoStrokeParamsError, "kNoStrokeParamsError"},
-           //    {kDashArrayTooBigError, "kDashArrayTooBigError"},
-           //    {kNoDashError, "kNoDashError"},
+           //    {kDashBufferTooShortError, "kDashBufferTooShortError"},let scope = &mut
+           //    deno_runtime.handle_scope(); {kNoStrokeParamsError,
+           //    "kNoStrokeParamsError"}, {kDashArrayTooBigError,
+           //    "kDashArrayTooBigError"}, {kNoDashError, "kNoDashError"},
            {kUnknownArtTypeErr, "kUnknownArtTypeErr"},
            {kUnknownPaintOrderTypeErr, "kUnknownPaintOrderTypeErr"},
            {kUntouchableArtObjectErr, "kUntouchableArtObjectErr"},

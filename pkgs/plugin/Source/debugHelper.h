@@ -21,7 +21,9 @@ std::string arrayToString(T (&arr)[N]) {
 
 template <typename... Args>
 void csl(const char* format, Args... args) {
-  if (AI_DENO_DEBUG) { std::cout << string_format(format, args...) << std::endl; }
+  if (AI_DENO_DEBUG) {
+    std::cout << "[deno_ai(C)] " << string_format(format, args...) << std::endl;
+  }
 }
 
 class dbg__Measuring {
@@ -56,10 +58,21 @@ void timeEnd() {
   dbg_cstCurrent.pop();
   if (m == nullptr) return;
 
-  std::cout << m->label
-            << " Elapsed: " << string_format("%.2f", m->elapsed()) << "ms"
-            << std::endl;
+  csl("%s Elapsed: %.2fms", m->label, m->elapsed());
 }
+
+// void print_PluginParams(const PluginParams* params) {
+//   if (!AI_DENO_DEBUG) return;
+//
+//   cs l("PluginParams: \n \
+//    effectName: %s \n \
+//    params: %s",
+//       params->effectName.c_str(), params->params.dump().c_str());
+//   // std::cout << "PluginParams:" << std::endl;
+//   // std::cout << "  effectName: " << params->effectName << std::endl;
+//   // std::cout << "  params: " << params->params.dump() << std::endl;
+//   // std::cout << std::endl;
+// }
 
 void print_json(json value, std::string label) {
   if (!AI_DENO_DEBUG) return;

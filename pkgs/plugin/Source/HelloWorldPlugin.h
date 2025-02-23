@@ -39,6 +39,7 @@ class HelloWorldPlugin : public Plugin {
   ASErr ShutdownPlugin(SPInterfaceMessage*);
 
  private:
+  bool               pluginStarted = false;
   AILiveEffectHandle fLiveEffect;
   AILiveEffectHandle fEffects[kMaxEffects];
   ASInt32            fNumEffects;

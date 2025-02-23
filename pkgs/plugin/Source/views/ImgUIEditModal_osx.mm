@@ -162,8 +162,6 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   NSModalSession session =
       [[NSApplication sharedApplication] beginModalSessionForWindow:self.window];
 
-  callbackFunc(json::object());
-
   [self->imGuiView setRenderTree:renderNodes];
 
   while ([self.window isVisible]) {

@@ -1,6 +1,8 @@
 [macos]
-build:
-    # cargo build
+run-ai:
+    echo '' > illustrator.log
+    RUST_BACKTRACE=1 /Applications/Adobe\ Illustrator\ 2025/Adobe\ Illustrator.app/Contents/MacOS/Adobe\ Illustrator 2>&1 | tee -a illustrator.log
 
+[macos]
 watch:
     sudo deno run -A ./watch-sync.ts
