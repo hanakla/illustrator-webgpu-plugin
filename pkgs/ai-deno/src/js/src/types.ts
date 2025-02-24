@@ -5,6 +5,18 @@ export type ParameterSchema = {
   };
 };
 
+export type ParameterSchemaToState<T extends ParameterSchema> = {
+  [K in keyof T]: T[K]["type"] extends "real"
+    ? number
+    : T[K]["type"] extends "int"
+    ? number
+    : T[K]["type"] extends "bool"
+    ? boolean
+    : T[K]["type"] extends "string"
+    ? string
+    : never;
+};
+
 export type UINodeGroup = {
   type: "group";
   direction: "col" | "row";
@@ -93,11 +105,11 @@ export type DoLiveEffectPayload = {
   data: Uint8ClampedArray;
 };
 
-export type Effect<T extends object> = {
+export type Effect<T extends ParameterSchema, IT> = {
   id: string;
   title: string;
   version: { major: number; minor: number };
-  paramSchema: ParameterSchema;
+  paramSchema: T;
   /** map to styleFilterFlags */
   styleFilterFlags: {
     main:
@@ -107,10 +119,19 @@ export type Effect<T extends object> = {
       | StyleFilterFlag.kStrokeFilter;
     features: StyleFilterFlag[];
   };
+  /** Called once at first effect use */
+  initDoLiveEffect?(): Promise<IT> | IT;
   doLiveEffect: (
-    params: T,
+    init: IT,
+    params: ParameterSchemaToState<T>,
     input: DoLiveEffectPayload
   ) => Promise<DoLiveEffectPayload>;
   editLiveEffectParameters: (nextParams: T) => string;
-  renderUI: (params: T) => UINode;
+  renderUI: (params: ParameterSchemaToState<T>) => UINode;
 };
+
+export function definePlugin<T extends ParameterSchema, IT>(
+  plugin: Effect<T, IT>
+) {
+  return plugin;
+}

@@ -162,6 +162,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
        .antiAlias          = 2,
        .colorConvert       = suai::RasterSettingColorConvert::Standard,
        .preserveSpotColors = true,
+       // .resolution         = 72, // Keep document resolution
+       .preserveSpotColors = true,
        .options =
            suai::RasterSettingOption{
                .useMinTiles   = true,

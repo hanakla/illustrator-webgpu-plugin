@@ -30,6 +30,8 @@ use crate::deno::my_node_resolver;
 use crate::deno::transpiler::transpile;
 use deno_core::error::JsError;
 use deno_error::JsErrorBox;
+// use deno_module_loader::module_loader;
+// use deno_module_loader;
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core::futures::FutureExt;
 use deno_runtime::deno_core::{
@@ -369,23 +371,33 @@ impl AsyncBridgeExt for Runtime {
 fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
     // let fs = RealSys::default();
     // let arcFs = Arc::new(fs.clone());
-    //
+
     // let node_require_loader = Rc::new(RustyRequireLoader(arcFs.clone()));
-    // let node_require_loader = Rc::new(RequireLoader));
-    //
-    //
+    // let node_require_loader = Rc::new(RequireLoader {});
+
     // let node_ext_init = NodeExtInitServices {
-    //   node_require_loader: node_require_loader.clone(),
-    //   node_resolver: node_resolver.clone(),
-    //   pkg_json_resolver: pjson_resolver.clone(),
-    //   sys: fs.clone(),
+    //     node_require_loader: node_require_loader.clone(),
+    //     node_resolver: node_resolver.clone(),
+    //     pkg_json_resolver: pjson_resolver.clone(),
+    //     sys: fs.clone(),
     // };
+
+    // let module_loader = AiDenoModuleLoader {};
 
     let extensions = get_all_extensions();
     // let extra_extensions = options.extensions;
     // extensions.extend(extra_extensions);
 
     let runtime_options = RuntimeOptions {
+        // module_loader: deno_module_loader::RustyLoader::new(LoaderOptions {
+        //     cache_provider: (),
+        //     fs_whitelist: (),
+        //     source_map_cache: (),
+        //     node_resolver: (),
+        //     import_provider: (),
+        //     schema_whlist: (),
+        //     cwd: (),
+        // }),
         extensions,
         extension_transpiler: Some(Rc::new(|specifier, source| {
             deno_runtime::transpile::maybe_transpile_source(specifier, source)
@@ -403,6 +415,9 @@ fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
 }
 
 fn get_all_extensions() -> Vec<deno_runtime::deno_core::Extension> {
+    // let fs = RealSys::default();
+    // let arc_fs = Arc::new(fs.clone());
+
     let cachedir = match my_home() {
         Ok(homedir) => homedir.unwrap().join(".ai-deno"),
         Err(e) => {
@@ -515,11 +530,7 @@ fn get_all_extensions() -> Vec<deno_runtime::deno_core::Extension> {
         //     TInNpmPackageChecker,
         //     TNpmPackageFolderResolver,
         //     TExtNodeSys,
-        // >(Some(
-        //   NodeExtInitServices {
-        //     node_resolver: my_node_resolver::MyNodeResolver::create()
-        //   }
-        // ), services.fs),
+        // >(Default::default(), arc_fs),
         // Ops from this crate
         deno_runtime::ops::runtime::deno_runtime::init_ops_and_esm(
             ModuleSpecifier::parse("ai-deno://main_module.ts")

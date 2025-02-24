@@ -1,8 +1,14 @@
 import { blurEffect } from "./live-effects/blurEffect.ts";
+import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { randomNoiseEffect } from "./live-effects/effects.ts";
 import { Effect, UINode } from "./types.ts";
 
-const allEffects: Effect<any>[] = [randomNoiseEffect, blurEffect];
+const allEffects: Effect<any, any>[] = [
+  randomNoiseEffect,
+  blurEffect,
+  chromaticAberration,
+];
+const effectInits = new Map<Effect<any, any>, any>();
 
 export const getLiveEffects = (): Array<{
   id: string;
@@ -19,6 +25,8 @@ export const getLiveEffects = (): Array<{
 export const getEffectViewNode = (id: string, state: any): UINode => {
   const effect = findEffect(id);
   if (!effect) return null;
+
+  console.log("getEffectViewNode", id, state);
   const defaultValues = getDefaultValus(id);
 
   try {
@@ -43,8 +51,17 @@ export const doLiveEffect = async (
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
 
+  console.log("[deno_ai(js)] initDoLicaEffect", id);
+  effectInits.set(
+    effect,
+    effectInits.get(effect) ?? (await effect.initDoLiveEffect?.())
+  );
+  const init = effectInits.get(effect);
+
+  console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
     const result = await effect.doLiveEffect(
+      init,
       {
         ...defaultValues,
         ...state,

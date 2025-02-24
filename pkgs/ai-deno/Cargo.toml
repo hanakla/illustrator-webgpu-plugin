@@ -24,7 +24,7 @@ deno_runtime = { version = "0.198.0", features = ["transpile"] }
 deno_npm = { version = "0.27.2" }
 deno_lib = { version = "0.6.0" }
 node_resolver = { version = "0.28.0" }
-deno_resolver = { version = "0.21.0" }
+deno_resolver = { version = "0.21.0", features = ["sync"] }
 deno_ast = { version = "0.44.0", features = ["transpiling"] }
 deno_path_util = { version = "0.3.1" }
 #deno_cache      = { version = "0.121.0", optional = true }
@@ -56,6 +56,7 @@ tokio-util = "0.7.13"
 thiserror = "2.0.11"
 homedir = { version = "0.3.4" }
 sys_traits = { version = "0.1.7", features = ["real", "default"] }
+# deno_module_loader = { path = "../deno-module-loader" }
 
 [build-dependencies]
 cbindgen = "0.28.0"

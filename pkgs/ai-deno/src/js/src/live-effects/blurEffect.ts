@@ -1,11 +1,11 @@
-import { createCanvas } from "jsr:@gfx/canvas@0.5.6";
-import { Effect, StyleFilterFlag, DoLiveEffectPayload } from "../types.ts";
+import {
+  StyleFilterFlag,
+  DoLiveEffectPayload,
+  definePlugin,
+} from "../types.ts";
 import { ui } from "../ui.ts";
 
-const gpuAdapter = await navigator.gpu.requestAdapter();
-const device = await gpuAdapter!.requestDevice();
-
-export const blurEffect: Effect<{ radius: number }> = {
+export const blurEffect = definePlugin({
   id: "blur-v1",
   title: "Gausian Blur V1",
   version: { major: 1, minor: 0 },
@@ -19,246 +19,249 @@ export const blurEffect: Effect<{ radius: number }> = {
       default: 1.0,
     },
   },
-  doLiveEffect: async (params, input) => {
-    console.log("Deno code running", input.data.byteLength / 4);
+  initDoLiveEffect: async () => {
+    const device = await navigator.gpu
+      .requestAdapter()
+      .then((adapter) => adapter!.requestDevice());
 
-    console.log({
-      width: input.width,
-      height: input.height,
-      byteLength: input.data.byteLength,
-    });
+    const shaderCode = `
+      struct VertexOutput {
+        @builtin(position) position: vec4f,
+        @location(0) texCoord: vec2f,
+      }
 
-    console.time("gaussianBlurWebGPU");
+      @vertex
+      fn vertexMain(@location(0) position: vec4f,
+                    @location(1) texCoord: vec2f) -> VertexOutput {
+        var output: VertexOutput;
+        output.position = position;
+        output.texCoord = texCoord;
+        return output;
+      }
+
+      @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+      @group(0) @binding(1) var inputSampler: sampler;
+      @group(0) @binding(2) var<uniform> kernel: array<f32, 256>;
+      @group(0) @binding(3) var<uniform> kernelSize: u32;
+      @group(0) @binding(4) var<uniform> direction: vec2f;
+
+      @fragment
+      fn fragmentMain(@location(0) texCoord: vec2f) -> @location(0) vec4f {
+        var color = vec4f(0.0);
+        let radius = i32(kernelSize) / 2;
+
+        for (var i = -radius; i <= radius; i++) {
+          let offset = direction * f32(i);
+          let sampleCoord = texCoord + offset;
+          let kernelValue = kernel[u32(i + radius)];
+          color += textureSample(inputTexture, inputSampler, sampleCoord) * kernelValue;
+        }
+
+        return color;
+      }
+    `;
+
+    return {
+      device,
+      shaderCode,
+      bindGroupLayout: device.createBindGroupLayout({
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: { sampleType: "float" },
+          },
+          {
+            binding: 1,
+            visibility: GPUShaderStage.FRAGMENT,
+            sampler: { type: "filtering" },
+          },
+          {
+            binding: 2,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" },
+          },
+          {
+            binding: 3,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" },
+          },
+          {
+            binding: 4,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" },
+          },
+        ],
+      }),
+    };
+  },
+
+  doLiveEffect: async (
+    { device, horizontalPipeline, verticalPipeline, pipelineLayout },
+    params,
+    input
+  ) => {
+    console.time("[deno_ai(js)] gaussianBlurWebGPU");
     const result = await gaussianBlurWebGPU(input, params.radius);
-    console.timeEnd("gaussianBlurWebGPU");
+    console.timeEnd("[deno_ai(js)] gaussianBlurWebGPU");
 
     return result;
 
-    function generateGaussianKernel(radius: number) {
-      const size = radius * 2 + 1;
-      const kernel = new Array(size * size);
-
-      const sigma = radius / 2;
-      const twoSigmaSquare = 2 * sigma * sigma;
-      const piTwoSigmaSquare = Math.PI * twoSigmaSquare;
-
-      let sum = 0;
-
-      for (let y = -radius; y <= radius; y++) {
-        for (let x = -radius; x <= radius; x++) {
-          const exp = Math.exp(-(x * x + y * y) / twoSigmaSquare);
-          const value = exp / piTwoSigmaSquare;
-
-          const index = (y + radius) * size + (x + radius);
-          kernel[index] = value;
-          sum += value;
-        }
-      }
-
-      for (let i = 0; i < kernel.length; i++) {
-        kernel[i] /= sum;
-      }
-
-      return { kernel, size };
-    }
-
     async function gaussianBlurWebGPU(
-      imageData: DoLiveEffectPayload,
+      input: DoLiveEffectPayload,
       radius: number
-    ) {
-      console.log(`ぼかしの強さ: ${radius}ピクセル`, Deno.cwd());
-
-      // Deno.writeFile(
-      //   "input.bmp.json",
-      //   new TextEncoder().encode(
-      //     JSON.stringify({
-      //       width: imageData.width,
-      //       height: imageData.height,
-      //       data: imageData.data,
-      //     })
-      //   )
-      // );
-
-      const device = await initWebGPU();
-      const { width, height, data } = imageData;
-
+    ): Promise<ImageData> {
+      const { width, height, data } = input;
       const { kernel, size } = generateGaussianKernel(radius);
+
       const kernelBuffer = device.createBuffer({
-        size: kernel.length * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        size: 256 * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
       device.queue.writeBuffer(kernelBuffer, 0, new Float32Array(kernel));
 
-      const bufferSize = width * height * 4;
-      const inputBuffer = device.createBuffer({
-        size: bufferSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-
-      const outputBuffer = device.createBuffer({
-        size: bufferSize,
-        usage:
-          GPUBufferUsage.STORAGE |
-          GPUBufferUsage.COPY_DST |
-          GPUBufferUsage.COPY_SRC,
-      });
-
-      const resultBuffer = device.createBuffer({
-        size: bufferSize,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-      });
-
-      device.queue.writeBuffer(inputBuffer, 0, data);
-
-      const uniformBuffer = device.createBuffer({
-        size: 16,
+      const kernelSizeBuffer = device.createBuffer({
+        size: Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
-      device.queue.writeBuffer(
-        uniformBuffer,
-        0,
-        new Float32Array([width, height, radius, size])
+      device.queue.writeBuffer(kernelSizeBuffer, 0, new Uint32Array([size]));
+
+      const directionBuffer = device.createBuffer({
+        size: 2 * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+
+      const textureData = new Uint8Array(data.buffer);
+      const texture = device.createTexture({
+        size: { width, height, depthOrArrayLayers: 1 },
+        format: "rgba8unorm",
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      device.queue.writeTexture(
+        { texture },
+        textureData,
+        { bytesPerRow: width * 4, rowsPerImage: height },
+        { width, height, depthOrArrayLayers: 1 }
       );
 
-      const shaderModule = device.createShaderModule({
-        code: `
-        struct ImageData {
-            data: array<u32>,
-        };
-
-        struct KernelData {
-            values: array<f32>,
-        };
-
-        struct Uniforms {
-            width: u32,
-            height: u32,
-            radius: i32,
-            kernelSize: i32,
-        };
-
-        @group(0) @binding(0) var<storage, read> inputImage: ImageData;
-        @group(0) @binding(1) var<storage, read_write> outputImage: ImageData;
-        @group(0) @binding(2) var<storage, read> kernelData: KernelData;
-        @group(0) @binding(3) var<uniform> uniforms: Uniforms;
-
-        @compute @workgroup_size(8, 8)
-        fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-            let width = uniforms.width;
-            let height = uniforms.height;
-            let radius = uniforms.radius;
-            let kernelSize = uniforms.kernelSize;
-
-            if (id.x >= width || id.y >= height) {
-                return;
-            }
-
-            let index = id.y * width + id.x;
-            var color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-
-            var weightSum = 0.0;
-
-            for (var ky: i32 = -radius; ky <= radius; ky = ky + 1) {
-                for (var kx: i32 = -radius; kx <= radius; kx = kx + 1) {
-                    let xi = i32(id.x) + kx;
-                    let yi = i32(id.y) + ky;
-                    let kernelIndex = (ky + radius) * kernelSize + (kx + radius);
-                    let weight = kernelData.values[kernelIndex];
-
-                    if (xi >= 0 && xi < i32(width) && yi >= 0 && yi < i32(height)) {
-                        let neighborIndex = u32(yi) * width + u32(xi);
-                        let pixel = inputImage.data[neighborIndex];
-
-                        let r = f32((pixel >> 24) & 0xFF);
-                        let g = f32((pixel >> 16) & 0xFF);
-                        let b = f32((pixel >> 8) & 0xFF);
-                        let a = f32(pixel & 0xFF);
-
-                        color += vec4<f32>(r, g, b, a) * weight;
-                        weightSum += weight;
-                    }
-                }
-            }
-
-            if (weightSum > 0.0) {
-                color = color / weightSum;
-            }
-
-            let finalPixel: u32 = (u32(color.r) << 24) | (u32(color.g) << 16) | (u32(color.b) << 8) | u32(color.a);
-            outputImage.data[index] = finalPixel;
-        }`,
+      const sampler = device.createSampler({
+        magFilter: "linear",
+        minFilter: "linear",
       });
 
-      const pipeline = device.createComputePipeline({
-        layout: "auto",
-        compute: { module: shaderModule, entryPoint: "main" },
+      const tempTexture = device.createTexture({
+        size: { width, height, depthOrArrayLayers: 1 },
+        format: "rgba8unorm",
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
       });
 
-      const bindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
+      const outputTexture = device.createTexture({
+        size: { width, height, depthOrArrayLayers: 1 },
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      // Horizontal pass
+      device.queue.writeBuffer(
+        directionBuffer,
+        0,
+        new Float32Array([1.0 / width, 0])
+      );
+      const horizontalBindGroup = device.createBindGroup({
+        layout: pipelineLayout,
         entries: [
-          { binding: 0, resource: { buffer: inputBuffer } },
-          { binding: 1, resource: { buffer: outputBuffer } },
+          { binding: 0, resource: texture.createView() },
+          { binding: 1, resource: sampler },
           { binding: 2, resource: { buffer: kernelBuffer } },
-          {
-            binding: 3,
-            resource: { buffer: uniformBuffer },
-          },
+          { binding: 3, resource: { buffer: kernelSizeBuffer } },
+          { binding: 4, resource: { buffer: directionBuffer } },
         ],
       });
 
       const commandEncoder = device.createCommandEncoder();
-      const passEncoder = commandEncoder.beginComputePass();
-      passEncoder.setPipeline(pipeline);
-      passEncoder.setBindGroup(0, bindGroup);
-      passEncoder.dispatchWorkgroups(
-        Math.ceil(width / 8),
-        Math.ceil(height / 8)
+      const horizontalPass = commandEncoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: tempTexture.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      });
+      horizontalPass.setPipeline(horizontalPipeline);
+      horizontalPass.setBindGroup(0, horizontalBindGroup);
+      horizontalPass.draw(6, 1, 0, 0);
+      horizontalPass.end();
+
+      // Vertical pass
+      device.queue.writeBuffer(
+        directionBuffer,
+        0,
+        new Float32Array([0, 1.0 / height])
       );
-      passEncoder.end();
+      const verticalBindGroup = device.createBindGroup({
+        layout: pipelineLayout,
+        entries: [
+          { binding: 0, resource: tempTexture.createView() },
+          { binding: 1, resource: sampler },
+          { binding: 2, resource: { buffer: kernelBuffer } },
+          { binding: 3, resource: { buffer: kernelSizeBuffer } },
+          { binding: 4, resource: { buffer: directionBuffer } },
+        ],
+      });
+
+      const verticalPass = commandEncoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: outputTexture.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      });
+      verticalPass.setPipeline(verticalPipeline);
+      verticalPass.setBindGroup(0, verticalBindGroup);
+      verticalPass.draw(6, 1, 0, 0);
+      verticalPass.end();
+
+      const outputBuffer = device.createBuffer({
+        size: width * height * 4,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+      });
+
+      commandEncoder.copyTextureToBuffer(
+        { texture: outputTexture },
+        { buffer: outputBuffer, bytesPerRow: width * 4, rowsPerImage: height },
+        { width, height, depthOrArrayLayers: 1 }
+      );
+
       device.queue.submit([commandEncoder.finish()]);
+      await outputBuffer.mapAsync(GPUMapMode.READ);
+      const outputArray = new Uint8ClampedArray(outputBuffer.getMappedRange());
+      outputBuffer.unmap();
 
-      const copyEncoder = device.createCommandEncoder();
-      copyEncoder.copyBufferToBuffer(
-        outputBuffer,
-        0,
-        resultBuffer,
-        0,
-        bufferSize
-      );
-      device.queue.submit([copyEncoder.finish()]);
+      const imageData = new ImageData(outputArray, width, height);
 
-      // 結果バッファからデータを読み取り
-      console.log("reading");
-      await resultBuffer.mapAsync(GPUMapMode.READ);
-      const resultArray = new Uint8Array(resultBuffer.getMappedRange());
-      const outputImageData = new ImageData(
-        new Uint8ClampedArray(resultArray),
-        width,
-        height
-      );
-      resultBuffer.unmap();
-      console.log("read");
+      kernelBuffer.destroy();
+      kernelSizeBuffer.destroy();
+      directionBuffer.destroy();
+      texture.destroy();
+      tempTexture.destroy();
+      outputTexture.destroy();
+      outputBuffer.destroy();
 
-      return outputImageData;
-    }
-
-    async function initWebGPU() {
-      if (!navigator.gpu) {
-        throw new Error("WebGPU not supported!");
-      }
-
-      // const adapter = await navigator.gpu.requestAdapter();
-      // if (!adapter) {
-      //   throw new Error("Failed to get GPU adapter!");
-      // }
-
-      // const device = await adapter.requestDevice();
-      // return device;
-      return device;
+      return imageData;
     }
   },
+
   editLiveEffectParameters: (params) => JSON.stringify(params),
+
   renderUI: (params) => {
     console.log("renderUI");
 
@@ -274,4 +277,32 @@ export const blurEffect: Effect<{ radius: number }> = {
       }),
     ]);
   },
-};
+});
+
+function generateGaussianKernel(radius: number) {
+  const size = radius * 2 + 1;
+  const kernel = new Array(size * size);
+
+  const sigma = radius / 2;
+  const twoSigmaSquare = 2 * sigma * sigma;
+  const piTwoSigmaSquare = Math.PI * twoSigmaSquare;
+
+  let sum = 0;
+
+  for (let y = -radius; y <= radius; y++) {
+    for (let x = -radius; x <= radius; x++) {
+      const exp = Math.exp(-(x * x + y * y) / twoSigmaSquare);
+      const value = exp / piTwoSigmaSquare;
+
+      const index = (y + radius) * size + (x + radius);
+      kernel[index] = value;
+      sum += value;
+    }
+  }
+
+  for (let i = 0; i < kernel.length; i++) {
+    kernel[i] /= sum;
+  }
+
+  return { kernel, size };
+}

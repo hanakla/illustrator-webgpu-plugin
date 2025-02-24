@@ -9,15 +9,11 @@ use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInitOptions};
 
 use deno_core::{anyhow, serde_json::json};
 use deno_runtime::deno_core::v8;
-use deno_runtime::deno_core::{JsRuntime, PollEventLoopOptions};
+use deno_runtime::deno_core::PollEventLoopOptions;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Display;
-use std::future::{self, Future};
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::runtime;
 
 mod deno;
 mod ext;
@@ -112,6 +108,7 @@ struct AiMain {
 pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) -> OpaqueAiMain {
     // let alert_fn = move |req: &str| alert_function(req, _ai_alert);
 
+    println!("[deno_ai(rust)] Initializing");
     let mut runtime = Runtime::new(&mut RuntimeInitOptions {
         //     extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
         //         alert: alert_fn,
@@ -120,6 +117,7 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) ->
     })
     .unwrap();
 
+    println!("[deno_ai(rust)] Load module");
     let module = Module::from_string("main.js", include_str!("./js/dist/main.mjs"));
     let handle = runtime.attach_module(&module).unwrap();
 
@@ -196,7 +194,7 @@ extern "C" fn do_live_effect(
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy() };
     let params = unsafe { CStr::from_ptr(params).to_string_lossy() }.clone();
     let image_data = unsafe { &mut *image_data };
-    let source_buffer_ptr = unsafe { (*image_data).data_ptr };
+    let source_buffer_ptr = (*image_data).data_ptr;
 
     let t = Instant::now();
     println!("[deno_ai(rust)] do_live_effect: effect_id = {}", effect_id);
@@ -237,8 +235,18 @@ extern "C" fn do_live_effect(
             buffer.into(),
         ];
         Ok(args)
-    })
-    .unwrap();
+    });
+
+    let result = match result {
+        Some(result) => result,
+        None => {
+            println!("[deno_ai(rust)] do_live_effect: error: result is None");
+            return Box::into_raw(Box::new(DoLiveEffectResult {
+                success: false,
+                data: std::ptr::null_mut(),
+            }));
+        }
+    };
 
     let deno_runtime = &mut ai_main.main_runtime.deno_runtime();
     let scope = &mut deno_runtime.handle_scope();
@@ -257,18 +265,6 @@ extern "C" fn do_live_effect(
     };
 
     let result = v8::Local::<v8::Value>::new(scope, result);
-
-    // print_js_object(scope, result);
-
-    // if !result.is_promise() {
-    //     return Box::into_raw(Box::new(DoLiveEffectResult::failed_default(
-    //         "doLiveEffect did not return a promise",
-    // //     )));
-    // // }
-
-    // let promise = v8::Local::<v8::Promise>::try_from(result).unwrap();
-
-    // let result = promise.result(scope);
 
     if !result.is_object() {
         return Box::into_raw(Box::new(DoLiveEffectResult {
@@ -303,8 +299,11 @@ extern "C" fn do_live_effect(
         let len = buffer.byte_length();
 
         let is_new_buffer = buffer.data().unwrap().as_ptr() == source_buffer_ptr;
+        println!("[deno_ai(rust)] is_new_buffer: {}", is_new_buffer);
 
-        let data_ptr = Box::into_raw(Box::new(buffer.data())) as *mut c_void;
+        let data_ptr = buffer.data().unwrap().cast::<u8>().as_ptr() as *mut c_void;
+        // let data_ptr = Box::into_raw(Box::new(data_ptr)) as *mut c_void;
+        println!("[deno_ai(rust)] source_ptr: {:p}", source_buffer_ptr);
         println!("[deno_ai(rust)] data_ptr: {:p}", data_ptr);
 
         Ok(DoLiveEffectResult {
@@ -412,56 +411,6 @@ fn execute_export_function_and_raw_return<'a>(
                 Ok(ret) => ret,
                 Err(e) => return Err(e),
             };
-
-            // let ret =
-            //     .await;
-
-            // Wrap result as promise for unificate after processing
-            // let wrapped_result = if ret.is_promise() {
-            //     v8::Global::<v8::Promise>::new(
-            //         handle_scope,
-            //         v8::Local::<v8::Promise>::try_from(ret).unwrap(),
-            //     )
-            // } else {
-            //     let resolver = v8::PromiseResolver::new(handle_scope).unwrap();
-            //     resolver.resolve(handle_scope, ret);
-            //     let promise = resolver.get_promise(handle_scope);
-            //     v8::Global::<v8::Promise>::new(handle_scope, promise)
-            // }
-
-            // let deno_runtime = deno_runtime_ref.get();
-            // let deno_runtime = unsafe { &mut *deno_runtime };
-
-            // if ret.is_promise() {
-            //     // Wait for the promise to resolve
-            //     println!("Waiting for promise to resolve");
-            //     let promise = v8::Local::<v8::Promise>::try_from(ret).unwrap();
-
-            //     print!(
-            //         "Promise state: {}",
-            //         if promise.state() == v8::PromiseState::Pending {
-            //             "Pending"
-            //         } else {
-            //             "Not pending"
-            //         }
-            //     );
-
-            //     while promise.state() == v8::PromiseState::Pending {
-            //         deno_runtime
-            //             .run_event_loop(PollEventLoopOptions::default())
-            //             .await?;
-
-            //         std::thread::sleep(Duration::from_millis(10));
-            //     }
-            //     println!("Promise fullfilled");
-
-            //     let handle_scope = &mut deno_runtime.handle_scope();
-            //     let value = promise.result(handle_scope);
-            //     v8::Global::<v8::Value>::new(handle_scope, value)
-            // } else {
-            //     let handle_scope = &mut deno_runtime.handle_scope();
-            //     v8::Global::<v8::Value>::new(handle_scope, ret)
-            // }
 
             let handle_scope = &mut deno_runtime.handle_scope();
 

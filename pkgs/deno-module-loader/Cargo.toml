@@ -1,0 +1,18 @@
+[package]
+name = "deno_module_loader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+deno_runtime = { version = "0.198.0", features = ["transpile"] }
+deno_node = { version = "0.127.0" }
+deno_core = { version = "0.336.0" }
+deno_ast = { version = "0.44.0", features = ["transpiling"] }
+deno_error = { version = "0.5.5" }
+deno_resolver = { version = "0.21.0", features = ["sync"] }
+node_resolver = { version = "0.28.0" }
+deno_semver = "0.7.1"
+deno_path_util = { version = "0.3.1" }
+reqwest = "0.12.12"
+serde = "1.0.218"
+sys_traits = { version = "0.1.7", features = ["real", "default"] }
