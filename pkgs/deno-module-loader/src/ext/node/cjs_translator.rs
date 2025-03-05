@@ -17,7 +17,7 @@ use sys_traits::impls::RealSys;
 
 use super::RustyResolver;
 
-pub type NodeCodeTranslator = node_resolver::analyze::NodeCodeTranslator<
+pub type RustyNodeCodeTranslator = node_resolver::analyze::NodeCodeTranslator<
     RustyCjsCodeAnalyzer,
     RustyResolver,
     RustyResolver,

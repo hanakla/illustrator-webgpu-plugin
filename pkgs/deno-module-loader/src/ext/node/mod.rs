@@ -10,7 +10,7 @@
 
 mod cjs_translator;
 mod resolvers;
-pub use cjs_translator::NodeCodeTranslator;
+pub use cjs_translator::RustyNodeCodeTranslator;
 pub use resolvers::RustyResolver;
 
 // extension!(

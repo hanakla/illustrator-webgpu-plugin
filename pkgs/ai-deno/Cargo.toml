@@ -14,19 +14,31 @@ ffi-support = "0.4.4"
 once_cell = "1.20.3"
 anyhow = "1.0.95"
 serde = "1.0.217"
-
+async-trait = "0.1.86"
 winapi = "0.3.9"
+reqwest = "0.12.12"
+url = "2.5.4"
+flate2 = "1.1.0"
+tar = "0.4.40"
+serde_json = "1.0.139"
+twox-hash = "2.1.0"
+regex = "1.11.1"
 
 maybe_path = { version = "0.1.3" }
 deno_error = { version = "0.5.5" }
-deno_core = { version = "0.336.0" }
-deno_runtime = { version = "0.198.0", features = ["transpile"] }
+deno_core = { version = "0.338.0" }
+deno_runtime = { version = "0.201.0", features = ["transpile"] }
 deno_npm = { version = "0.27.2" }
-deno_lib = { version = "0.6.0" }
-node_resolver = { version = "0.28.0" }
-deno_resolver = { version = "0.21.0" }
-deno_ast = { version = "0.44.0", features = ["transpiling"] }
+deno_lib = { version = "0.9.0" }
+node_resolver = { version = "0.31.0" }
+deno_resolver = { version = "0.24.0" }
+deno_ast = { version = "0.45.1", features = ["transpiling", "cjs"] }
 deno_path_util = { version = "0.3.1" }
+deno_graph = "0.88.0"
+deno_npm_cache = "0.12.0"
+deno_package_json = "0.5.0"
+deno_semver = "0.7.1"
+deno_cache_dir = "0.18.0"
 #deno_cache      = { version = "0.121.0", optional = true }
 #deno_console    = { version = "0.189.0", optional = true }
 #deno_cron       = { version = "0.69.0", optional = true }
@@ -50,12 +62,15 @@ deno_path_util = { version = "0.3.1" }
 
 #deno_io = { version = "0.99.0", optional = true }
 #deno_os =  { version = "0.6.0", optional = true }
+# deno_module_loader = { path = "../deno-module-loader" }
 
+v8 = { version = "=134.5.0" }
 tokio = { version = "1.43.0", features = ["full"] }
 tokio-util = "0.7.13"
 thiserror = "2.0.11"
 homedir = { version = "0.3.4" }
 sys_traits = { version = "0.1.7", features = ["real", "default"] }
+futures = "0.3.31"
 
 [build-dependencies]
 cbindgen = "0.28.0"

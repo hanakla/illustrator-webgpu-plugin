@@ -21,9 +21,23 @@ std::string arrayToString(T (&arr)[N]) {
 
 template <typename... Args>
 void csl(const char* format, Args... args) {
-  if (AI_DENO_DEBUG) {
-    std::cout << "[deno_ai(C)] " << string_format(format, args...) << std::endl;
+  if (!AI_DENO_DEBUG) return;
+
+  std::cout << "[deno_ai(C)] " << string_format(format, args...) << std::endl;
+}
+
+// print as hex binary json array
+void csb(const char* label, const char* value) {
+  if (!AI_DENO_DEBUG) return;
+
+  size_t len = strlen(value);
+
+  std::stringstream ss;
+  for (size_t i = 0; i < len; ++i) {
+    ss << std::hex << std::uppercase << (int)value[i];
+    if (i < len - 1) ss << ", ";
   }
+  std::cout << "[deno_ai(C)] " << label << " [" << ss.str() << "]" << std::endl;
 }
 
 class dbg__Measuring {

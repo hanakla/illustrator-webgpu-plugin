@@ -10,8 +10,10 @@ use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInitOptions};
 use deno_core::{anyhow, serde_json::json};
 use deno_runtime::deno_core::v8;
 use deno_runtime::deno_core::PollEventLoopOptions;
+use homedir::my_home;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Display;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -104,6 +106,15 @@ struct AiMain {
     pub ai_alert: extern "C" fn(*const FunctionResult),
 }
 
+fn package_root_dir() -> PathBuf {
+    match my_home() {
+        Ok(homedir) => homedir.unwrap().join(".ai-deno"),
+        Err(e) => {
+            panic!("ai-deno: Failed to get home directory: {}", e.to_string());
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) -> OpaqueAiMain {
     // let alert_fn = move |req: &str| alert_function(req, _ai_alert);
@@ -113,6 +124,7 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) ->
         //     extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
         //         alert: alert_fn,
         //     })],
+        package_root_dir: package_root_dir(),
         ..Default::default()
     })
     .unwrap();

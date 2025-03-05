@@ -43,12 +43,12 @@ ASErr HelloWorldPlugin::StartupPlugin(SPInterfaceMessage* message) {
 
     // Guards against multiple startup calls to prevent redundant initialization.
     if (!pluginStarted) {
+      pluginStarted = true;
+
       csl("Loading live effects");
       aiDenoMain = ai_deno::initialize(&HelloWorldPlugin::StaticHandleDenoAiAlert);
       error      = this->InitLiveEffect(message);
       CHKERR();
-
-      pluginStarted = true;
     }
   } catch (ai::Error& ex) {
     error = ex;
@@ -113,10 +113,13 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
     csl(" creating menu data");
     AddLiveEffectMenuData menu;
     menu.category =
-        ai::UnicodeString("Deno Effectors", kAIUTF8CharacterEncoding).as_UTF8().data();
+        suai::str::strdup(ai::UnicodeString("Deno Effectors", kAIUTF8CharacterEncoding));
     menu.title = suai::str::strdup(
         suai::str::toAiUnicodeStringUtf8(effectDef["title"].get<std::string>())
     );
+    menu.options = 0;
+
+    csb("title", effect.title);
     error = sAILiveEffect->AddLiveEffect(&effect, &this->fEffects[filterIndex]);
     CHKERR();
 
@@ -248,10 +251,12 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     );
 
     csl("Result: %s", result->success ? "true" : "false");
-    csl("  Original bytes: %d", byteLength);
-    csl("  Result bytes: %d", result->data->byte_length);
+    if (result->success) {
+      csl("  Original bytes: %d", byteLength);
+      csl("  Result bytes: %d", result->data->byte_length);
+    }
 
-    if (result != nullptr && result->success) {
+    if (result->success && result->data != nullptr) {
       // clang-format off
       std::cout << "Result: \n "
           << "  width: " << result->data->width << "\n"

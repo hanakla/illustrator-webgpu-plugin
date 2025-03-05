@@ -16,7 +16,11 @@ use deno_runtime::{
 };
 use deno_semver::package::PackageReq;
 use node_resolver::{
-    analyze::NodeCodeTranslator, cache::{NodeResolutionSys, NodeResolutionThreadLocalCache}, errors::{ClosestPkgJsonError, PackageFolderResolveErrorKind, PackageNotFoundError}, DenoIsBuiltInNodeModuleChecker, InNpmPackageChecker, NpmPackageFolderResolver, PackageJsonResolver, PackageJsonResolverRc, ResolutionMode, UrlOrPath, UrlOrPathRef
+    analyze::NodeCodeTranslator,
+    cache::{NodeResolutionSys, NodeResolutionThreadLocalCache},
+    errors::{ClosestPkgJsonError, PackageFolderResolveErrorKind, PackageNotFoundError},
+    DenoIsBuiltInNodeModuleChecker, InNpmPackageChecker, NpmPackageFolderResolver,
+    PackageJsonResolver, PackageJsonResolverRc, ResolutionMode, UrlOrPath, UrlOrPathRef,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -27,6 +31,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 use sys_traits::impls::RealSys;
+
+use crate::RustyLoader;
 
 use super::cjs_translator::{NodeCodeTranslator, RustyCjsCodeAnalyzer};
 
@@ -40,7 +46,7 @@ pub struct RustyResolver {
     pjson: PackageJsonResolverRc<RealSys>,
     in_npm_pkg_checker: DenoInNpmPackageChecker,
     require_loader: RequireLoader,
-    node_resolver: NodeResolverRc<RustyResolver, RustyResolver, RealSys>,
+    node_resolver: NodeResolverRc<DenoInNpmPackageChecker, NpmResolver<RealSys>, RealSys>,
     root_node_modules_dir: Option<PathBuf>,
     mode: IsCjsResolutionMode,
     known: RwLock<HashMap<ModuleSpecifier, bool>>,
@@ -83,7 +89,7 @@ impl RustyResolver {
             },
         )));
 
-        let in_npm_pkg_checker = DenoInNpmPackageChecker::new(CreateInNpmPkgCheckerOptions::Byonm),
+        let in_npm_pkg_checker = DenoInNpmPackageChecker::new(CreateInNpmPkgCheckerOptions::Byonm);
 
         let node_resolver = MaybeArc::new(NodeResolver::new(
             in_npm_pkg_checker,
@@ -112,7 +118,8 @@ impl RustyResolver {
     pub fn code_translator(
         self: &Arc<Self>,
         node_resolver: Arc<NodeResolver<RustyResolver, RustyResolver, RealSys>>,
-    ) -> NodeCodeTranslator<RustyCjsCodeAnalyzer, RustyResolver, RustyResolver, RealSys> {
+    ) -> NodeCodeTranslator<RustyCjsCodeAnalyzer, RustyResolver, RustyResolver, RustyLoader, RealSys>
+    {
         let cjs = RustyCjsCodeAnalyzer::new(self.filesystem(), self.clone());
         NodeCodeTranslator::new(
             cjs,
@@ -125,7 +132,9 @@ impl RustyResolver {
 
     /// Returns a node resolver for the resolver
     #[must_use]
-    pub fn node_resolver(self: &Arc<Self>) -> MaybeArc<NodeResolver<RustyResolver, RustyResolver, RealSys>> {
+    pub fn node_resolver(
+        self: &Arc<Self>,
+    ) -> MaybeArc<NodeResolver<RustyResolver, RustyResolver, RealSys>> {
         self.node_resolver.clone()
     }
 

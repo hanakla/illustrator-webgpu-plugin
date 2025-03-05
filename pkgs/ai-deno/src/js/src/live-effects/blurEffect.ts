@@ -1,3 +1,5 @@
+// import { createCanvas } from "npm:@napi-rs/canvas@0.1.67";
+
 import {
   StyleFilterFlag,
   DoLiveEffectPayload,
@@ -101,6 +103,8 @@ export const blurEffect = definePlugin({
     params,
     input
   ) => {
+    const canvas = createCanvas(100, 100);
+
     console.time("[deno_ai(js)] gaussianBlurWebGPU");
     const result = await gaussianBlurWebGPU(input, params.radius);
     console.timeEnd("[deno_ai(js)] gaussianBlurWebGPU");

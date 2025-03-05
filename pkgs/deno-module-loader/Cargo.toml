@@ -16,3 +16,4 @@ deno_path_util = { version = "0.3.1" }
 reqwest = "0.12.12"
 serde = "1.0.218"
 sys_traits = { version = "0.1.7", features = ["real", "default"] }
+tokio = { version = "1.43.0", features = ["full"] }

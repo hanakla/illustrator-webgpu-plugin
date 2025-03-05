@@ -1,10 +1,11 @@
 pub use deno_runtime;
 
 mod async_bridge;
+pub(crate) mod debug;
 pub mod error;
 pub(super) mod ext;
 mod module;
-mod my_node_resolver;
+mod module_loader;
 mod node_loaders;
 mod runtime;
 mod traits;

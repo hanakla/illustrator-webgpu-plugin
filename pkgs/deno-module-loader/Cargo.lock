@@ -1587,6 +1587,7 @@ dependencies = [
  "reqwest",
  "serde",
  "sys_traits",
+ "tokio",
 ]
 
 [[package]]

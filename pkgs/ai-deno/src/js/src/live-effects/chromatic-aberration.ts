@@ -1,6 +1,10 @@
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
 import { ui } from "../ui.ts";
+import {
+  adjustImageToNearestAligned256Resolution,
+  resizeImageData,
+} from "./utils.ts";
 
 export const chromaticAberration = definePlugin({
   id: "chromatic-aberration-v1",
@@ -172,6 +176,9 @@ export const chromaticAberration = definePlugin({
     console.log("Chromatic Aberration V1", params, imgData);
     // const size = Math.max(imgData.width, imgData.height);
 
+    const orignalSize = { width: imgData.width, height: imgData.height };
+    imgData = await adjustImageToNearestAligned256Resolution(imgData);
+
     // Create textures
     const texture = device.createTexture({
       label: "Input Texture",
@@ -287,6 +294,10 @@ export const chromaticAberration = definePlugin({
       imgData.height
     );
 
-    return resultImageData;
+    return await resizeImageData(
+      resultImageData,
+      orignalSize.width,
+      orignalSize.height
+    );
   },
 });

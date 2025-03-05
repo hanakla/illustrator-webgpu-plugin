@@ -26,48 +26,63 @@ use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
 use crate::deno::error::Error;
 use crate::deno::ext::worker::deno_worker_host;
 use crate::deno::module::{Module, ModuleHandle};
-use crate::deno::my_node_resolver;
+use crate::deno::module_loader::npm_package_manager::NpmPackageManager;
 use crate::deno::transpiler::transpile;
 use deno_core::error::JsError;
 use deno_error::JsErrorBox;
-// use deno_module_loader::module_loader;
-// use deno_module_loader;
-use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
-use deno_runtime::deno_core::futures::FutureExt;
-use deno_runtime::deno_core::{
-    error::AnyError, url::Url, v8, FastString, JsRuntime, ModuleSpecifier, PollEventLoopOptions,
-    RuntimeOptions,
-};
-use deno_runtime::deno_cron::local::LocalCronHandler;
-use deno_runtime::deno_fs::sync::MaybeArc;
-use deno_runtime::deno_http::DefaultHttpPropertyExtractor;
-use deno_runtime::deno_io::{Stdio, StdioPipe};
-use deno_runtime::deno_kv::dynamic::MultiBackendDbHandler;
-use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
-use deno_runtime::deno_tls::rustls::RootCertStore;
-use deno_runtime::deno_tls::{RootCertStoreProvider, TlsKeys};
-use deno_runtime::deno_web::BlobStore;
-use deno_runtime::permissions::RuntimePermissionDescriptorParser;
-use deno_runtime::web_worker::WebWorkerOptions;
-use deno_runtime::worker::{WorkerOptions, WorkerServiceOptions};
+use deno_resolver::npm::DenoInNpmPackageChecker;
 use deno_runtime::{
-    deno_broadcast_channel, deno_cache, deno_canvas, deno_console, deno_core, deno_cron,
-    deno_crypto, deno_fetch, deno_ffi, deno_fs, deno_http, deno_io, deno_kv, deno_napi, deno_net,
-    deno_node, deno_os, deno_permissions, deno_process, deno_telemetry, deno_tls, deno_url,
-    deno_web, deno_webgpu, deno_webidl, deno_websocket, deno_webstorage, runtime, BootstrapOptions,
+    deno_broadcast_channel,
+    deno_broadcast_channel::InMemoryBroadcastChannel,
+    deno_cache, deno_canvas, deno_console, deno_core,
+    deno_core::{
+        error::AnyError, futures::FutureExt, url::Url, v8, FastString, JsRuntime, ModuleSpecifier,
+        PollEventLoopOptions, RuntimeOptions,
+    },
+    deno_cron,
+    deno_cron::local::LocalCronHandler,
+    deno_crypto, deno_fetch, deno_ffi, deno_fs,
+    deno_fs::sync::MaybeArc,
+    deno_http,
+    deno_http::DefaultHttpPropertyExtractor,
+    deno_io,
+    deno_io::{Stdio, StdioPipe},
+    deno_kv,
+    deno_kv::dynamic::MultiBackendDbHandler,
+    deno_napi, deno_net, deno_node,
+    deno_node::NodeExtInitServices,
+    deno_os, deno_permissions,
+    deno_permissions::{Permissions, PermissionsContainer},
+    deno_process, deno_telemetry, deno_tls,
+    deno_tls::rustls::RootCertStore,
+    deno_tls::{RootCertStoreProvider, TlsKeys},
+    deno_url, deno_web,
+    deno_web::BlobStore,
+    deno_webgpu, deno_webidl, deno_websocket, deno_webstorage,
+    permissions::RuntimePermissionDescriptorParser,
+    runtime,
+    web_worker::WebWorkerOptions,
+    worker::{WorkerOptions, WorkerServiceOptions},
+    BootstrapOptions,
 };
 use homedir::my_home;
 use node_resolver::errors::{PackageFolderResolveErrorKind, PackageNotFoundError};
-use node_resolver::{InNpmPackageChecker, NodeResolver, NpmPackageFolderResolver, UrlOrPath};
-use std::path::PathBuf;
+use node_resolver::{
+    cache::NodeResolutionSys, ConditionsFromResolutionMode, DenoIsBuiltInNodeModuleChecker,
+    InNpmPackageChecker, NodeResolver, NpmPackageFolderResolver, UrlOrPath,
+};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
 use sys_traits::impls::RealSys;
 
+use super::module_loader::AiDenoModuleLoader;
+
 pub struct RuntimeInitOptions {
     pub extensions: Vec<deno_runtime::deno_core::Extension>,
+    pub package_root_dir: PathBuf,
     pub timeout: Duration,
 }
 
@@ -75,6 +90,7 @@ impl Default for RuntimeInitOptions {
     fn default() -> Self {
         Self {
             extensions: vec![],
+            package_root_dir: my_home().unwrap().unwrap().join(".ai-deno"),
             timeout: Duration::MAX,
         }
     }
@@ -232,7 +248,7 @@ impl Runtime {
         module: &Module,
         main: bool,
     ) -> Result<ModuleHandle, Error> {
-        self.attach_module_internal(module, false).await
+        self.attach_module_internal(module, main).await
     }
 
     async fn attach_module_internal(
@@ -248,6 +264,7 @@ impl Runtime {
 
         let js_runtime = self.deno_runtime();
 
+        println!("is main: {}", main);
         let module_id: deno_runtime::deno_core::ModuleId = if main {
             js_runtime
                 .load_main_es_module_from_code(&module_specifier, code)
@@ -384,11 +401,14 @@ fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
 
     // let module_loader = AiDenoModuleLoader {};
 
-    let extensions = get_all_extensions();
     // let extra_extensions = options.extensions;
     // extensions.extend(extra_extensions);
 
+    let module_loader = AiDenoModuleLoader::new(options.package_root_dir.clone());
+    let extensions = get_all_extensions(&module_loader);
+
     let runtime_options = RuntimeOptions {
+        module_loader: Some(Rc::new(module_loader)),
         // module_loader: deno_module_loader::RustyLoader::new(LoaderOptions {
         //     cache_provider: (),
         //     fs_whitelist: (),
@@ -414,7 +434,7 @@ fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
     runtime_options
 }
 
-fn get_all_extensions() -> Vec<deno_runtime::deno_core::Extension> {
+fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno_core::Extension> {
     // let fs = RealSys::default();
     // let arc_fs = Arc::new(fs.clone());
 
@@ -467,7 +487,7 @@ fn get_all_extensions() -> Vec<deno_runtime::deno_core::Extension> {
             client_cert_chain_and_key: deno_tls::TlsKeys::Null,
             // ..Default::default()
         }),
-        deno_cache::deno_cache::init_ops_and_esm::<deno_cache::SqliteBackedCache>(None),
+        deno_cache::deno_cache::init_ops_and_esm(None),
         deno_websocket::deno_websocket::init_ops_and_esm::<PermissionsContainer>(
             user_agent.clone(),
             Some(Arc::new(EmptyCertStoreProvider::new())),
@@ -521,10 +541,14 @@ fn get_all_extensions() -> Vec<deno_runtime::deno_core::Extension> {
         ),
         deno_node::deno_node::init_ops_and_esm::<
             PermissionsContainer,
-            InNpmPackageCheckerStub,
-            NpmPackageFolderResolverStub,
+            DenoInNpmPackageChecker,
+            NpmPackageManager,
             RealSys,
-        >(None, MaybeArc::new(deno_fs::RealFs::default())),
+        >(
+            Some(mod_loader.init_services()),
+            // None,
+            MaybeArc::new(deno_fs::RealFs::default()),
+        ),
         // deno_node::deno_node::init_ops_and_esm::<
         //     PermissionsContainer,
         //     TInNpmPackageChecker,

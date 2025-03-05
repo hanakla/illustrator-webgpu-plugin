@@ -1,3 +1,4 @@
+use deno_error::JsErrorBox;
 use deno_lib::npm::NpmRegistryReadPermissionCheckerMode::Local;
 use deno_runtime::deno_core::v8::{GetPropertyNamesArgs, HandleScope, KeyCollectionMode};
 use deno_runtime::deno_core::{self, v8, ModuleId, ModuleSpecifier};
@@ -60,19 +61,26 @@ impl Display for Module {
 /// `current_dir`.
 ///
 /// This is a patch for the str only `deno_core` provided version
-fn resolve_path(path_str: impl AsRef<Path>, current_dir: &Path) -> Result<ModuleSpecifier, Error> {
+fn resolve_path(
+    path_str: impl AsRef<Path>,
+    current_dir: &Path,
+) -> Result<ModuleSpecifier, JsErrorBox> {
     let path = current_dir.join(path_str);
     let path = deno_core::normalize_path(path);
-    deno_core::url::Url::from_file_path(&path)
-        .map_err(|(e)| Error::ModuleResolutionError(path.to_string_lossy().to_string()))
+    deno_core::url::Url::from_file_path(&path).map_err(|()| {
+        JsErrorBox::generic(format!(
+            "Failed to resolve path: {}",
+            path.to_string_lossy().to_string()
+        ))
+    })
 }
 
 pub trait ToModuleSpecifier {
-    fn to_module_specifier(&self, base: &Path) -> Result<ModuleSpecifier, Error>;
+    fn to_module_specifier(&self, base: &Path) -> Result<ModuleSpecifier, JsErrorBox>;
 }
 
 impl<T: AsRef<Path>> ToModuleSpecifier for T {
-    fn to_module_specifier(&self, base: &Path) -> Result<ModuleSpecifier, Error> {
+    fn to_module_specifier(&self, base: &Path) -> Result<ModuleSpecifier, JsErrorBox> {
         Ok(resolve_path(self, base)?)
     }
 }

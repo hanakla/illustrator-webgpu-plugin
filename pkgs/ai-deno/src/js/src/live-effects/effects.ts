@@ -1,3 +1,4 @@
+import { createCanvas } from "npm:@napi-rs/canvas@0.1.67";
 import { Effect, StyleFilterFlag } from "../types.ts";
 import { ui } from "../ui.ts";
 

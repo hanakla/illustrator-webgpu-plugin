@@ -1,8 +1,10 @@
 //! Module loader implementation for rustyscript
 //! This module provides tools for caching module data, resolving module specifiers, and loading modules
 #![allow(deprecated)]
-use deno_core::{anyhow::Error, ModuleLoader, ModuleSpecifier};
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use deno_runtime::deno_core::{
+    anyhow::Error, error::ModuleLoaderError, ModuleLoader, ModuleSpecifier,
+};
+use std::{borrow::Cow, cell::RefCell, path::PathBuf, rc::Rc};
 
 pub mod cache_provider;
 pub mod import_provider;
@@ -21,7 +23,7 @@ use crate::transpiler::ExtensionTranspiler;
 /// This structure manages fetching module code, transpilation, and caching
 pub struct RustyLoader {
     inner: Rc<RefCell<InnerRustyLoader>>,
-    transpiler: Option<ExtensionTranspiler>,
+    // transpiler: Option<ExtensionTranspiler>,
 }
 impl RustyLoader {
     /// Creates a new instance of `RustyLoader`
@@ -46,7 +48,7 @@ impl RustyLoader {
     /// Inserts a source map into the source map cache
     /// This is used to provide source maps for loaded modules
     /// for error message generation
-    pub fn insert_source_map(&self, file_name: &str, code: String, source_map: Option<Vec<u8>>) {
+    pub fn insert_source_map(&self, file_name: &str, code: String, source_map: Option<Cow<[u8]>>) {
         self.inner_mut().add_source_map(file_name, code, source_map);
     }
 
@@ -82,7 +84,7 @@ impl ModuleLoader for RustyLoader {
         specifier: &str,
         referrer: &str,
         kind: deno_core::ResolutionKind,
-    ) -> Result<ModuleSpecifier, Error> {
+    ) -> Result<ModuleSpecifier, ModuleLoaderError> {
         self.inner_mut().resolve(specifier, referrer, kind)
     }
 
@@ -104,8 +106,12 @@ impl ModuleLoader for RustyLoader {
         )
     }
 
-    fn get_source_map(&self, file_name: &str) -> Option<Vec<u8>> {
-        self.inner().get_source_map(file_name)?.1.clone()
+    fn get_source_map(&self, file_name: &str) -> Option<Cow<[u8]>> {
+        // TODO: Implement source map support
+        None
+        // self.inner()
+        //     .get_source_map(file_name)
+        //     .and_then(|(_, map)| map.map(Cow::Owned))
     }
 
     fn get_source_mapped_source_line(&self, file_name: &str, line_number: usize) -> Option<String> {

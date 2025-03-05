@@ -51,7 +51,7 @@ export const doLiveEffect = async (
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
 
-  console.log("[deno_ai(js)] initDoLicaEffect", id);
+  console.log("[deno_ai(js)] initDoLiveEffect", id, effect.initDoLiveEffect);
   effectInits.set(
     effect,
     effectInits.get(effect) ?? (await effect.initDoLiveEffect?.())

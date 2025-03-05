@@ -120,6 +120,7 @@ var blurEffect = definePlugin({
     };
   },
   doLiveEffect: async ({ device, horizontalPipeline, verticalPipeline, pipelineLayout }, params, input) => {
+    const canvas = createCanvas(100, 100);
     console.time("[deno_ai(js)] gaussianBlurWebGPU");
     const result = await gaussianBlurWebGPU(input, params.radius);
     console.timeEnd("[deno_ai(js)] gaussianBlurWebGPU");
@@ -288,6 +289,35 @@ function generateGaussianKernel(radius) {
   return { kernel, size };
 }
 
+// src/js/src/live-effects/utils.ts
+function getNearestAligned256Resolution(width, height, bytesPerPixel = 4) {
+  const currentBytesPerRow = width * bytesPerPixel;
+  const targetBytesPerRow = Math.ceil(currentBytesPerRow / 256) * 256;
+  const newWidth = Math.round(targetBytesPerRow / bytesPerPixel);
+  return {
+    width: newWidth,
+    height
+  };
+}
+async function adjustImageToNearestAligned256Resolution(imageDataLike) {
+  const { width: newWidth, height: newHeight } = getNearestAligned256Resolution(
+    imageDataLike.width,
+    imageDataLike.height
+  );
+  const resized = await resizeImageData(imageDataLike, newWidth, newHeight);
+  return resized;
+}
+async function resizeImageData(data, width, height) {
+  const { createCanvas: createCanvas2 } = await import("npm:@napi-rs/canvas@0.1.67");
+  const canvas = createCanvas2(data.width, data.height);
+  const ctx = canvas.getContext("2d");
+  ctx.putImageData(data, 0, 0);
+  const resizedCanvas = createCanvas2(width, height);
+  const resizedCtx = resizedCanvas.getContext("2d");
+  resizedCtx.drawImage(canvas, 0, 0, width, height);
+  return resizedCtx.getImageData(0, 0, width, height);
+}
+
 // src/js/src/live-effects/chromatic-aberration.ts
 var chromaticAberration = definePlugin({
   id: "chromatic-aberration-v1",
@@ -451,6 +481,8 @@ var chromaticAberration = definePlugin({
   },
   doLiveEffect: async ({ device, pipeline }, params, imgData) => {
     console.log("Chromatic Aberration V1", params, imgData);
+    const orignalSize = { width: imgData.width, height: imgData.height };
+    imgData = await adjustImageToNearestAligned256Resolution(imgData);
     const texture = device.createTexture({
       label: "Input Texture",
       size: [imgData.width, imgData.height],
@@ -542,7 +574,11 @@ var chromaticAberration = definePlugin({
       imgData.width,
       imgData.height
     );
-    return resultImageData;
+    return await resizeImageData(
+      resultImageData,
+      orignalSize.width,
+      orignalSize.height
+    );
   }
 });
 
@@ -605,7 +641,7 @@ var doLiveEffect = async (id, state, width, height, data) => {
   const effect = findEffect(id);
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
-  console.log("[deno_ai(js)] initDoLicaEffect", id);
+  console.log("[deno_ai(js)] initDoLiveEffect", id, effect.initDoLiveEffect);
   effectInits.set(
     effect,
     effectInits.get(effect) ?? await ((_a = effect.initDoLiveEffect) == null ? void 0 : _a.call(effect))
