@@ -36,4 +36,4 @@ SDKROOT = macosx
 SHARED_PRECOMPS_DIR = ./output/mac/sharedprecompiledheaders/$(AI_CONFIGURATION)
 SYMROOT = ./output/mac/$(AI_CONFIGURATION)
 WRAPPER_EXTENSION = aip
-OTHER_LDFLAGS = ${OTHER_LDFLAGS} -lz -lc++ -std=c++23 -Wl,-force_load,../ai-deno/target/release/libai_deno.a
+OTHER_LDFLAGS = ${OTHER_LDFLAGS} -fvisibility=hidden -lz -lc++ -std=c++23 -Wl,-force_load,../ai-deno/target/release/libai_deno.a

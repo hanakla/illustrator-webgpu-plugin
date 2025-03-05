@@ -16,10 +16,11 @@ use std::sync::Mutex;
 use sys_traits::impls::RealSys;
 
 use super::cache_db::CacheDBHash;
+use super::npm_package_manager::NpmPackageManager;
 
 #[derive(Clone)]
 pub struct AiDenoCjsCodeAnalyzer {
-    cjs_tracker: Arc<CjsTracker<DenoInNpmPackageChecker, RealSys>>,
+    cjs_tracker: Arc<CjsTracker<NpmPackageManager, RealSys>>,
     fs: deno_fs::FileSystemRc,
     cjs_analysis_cache: NodeAnalysisCache,
     parsed_source_cache: Option<Arc<ParsedSourceCache>>,
@@ -28,7 +29,7 @@ pub struct AiDenoCjsCodeAnalyzer {
 impl AiDenoCjsCodeAnalyzer {
     pub fn new(
         fs: deno_fs::FileSystemRc,
-        cjs_tracker: CjsTracker<DenoInNpmPackageChecker, RealSys>,
+        cjs_tracker: CjsTracker<NpmPackageManager, RealSys>,
     ) -> Self {
         Self {
             fs,

@@ -541,20 +541,13 @@ fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno
         ),
         deno_node::deno_node::init_ops_and_esm::<
             PermissionsContainer,
-            DenoInNpmPackageChecker,
+            NpmPackageManager,
             NpmPackageManager,
             RealSys,
         >(
             Some(mod_loader.init_services()),
-            // None,
             MaybeArc::new(deno_fs::RealFs::default()),
         ),
-        // deno_node::deno_node::init_ops_and_esm::<
-        //     PermissionsContainer,
-        //     TInNpmPackageChecker,
-        //     TNpmPackageFolderResolver,
-        //     TExtNodeSys,
-        // >(Default::default(), arc_fs),
         // Ops from this crate
         deno_runtime::ops::runtime::deno_runtime::init_ops_and_esm(
             ModuleSpecifier::parse("ai-deno://main_module.ts")

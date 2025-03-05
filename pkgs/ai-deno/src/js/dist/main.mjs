@@ -308,7 +308,7 @@ async function adjustImageToNearestAligned256Resolution(imageDataLike) {
   return resized;
 }
 async function resizeImageData(data, width, height) {
-  const { createCanvas: createCanvas2 } = await import("npm:@napi-rs/canvas@0.1.67");
+  const { createCanvas: createCanvas2 } = await import("npm:@napi-rs/canvas@0.1.68");
   const canvas = createCanvas2(data.width, data.height);
   const ctx = canvas.getContext("2d");
   ctx.putImageData(data, 0, 0);
@@ -614,6 +614,12 @@ var allEffects = [
   chromaticAberration
 ];
 var effectInits = /* @__PURE__ */ new Map();
+await Promise.all(
+  allEffects.map(async (effect) => {
+    var _a;
+    effectInits.set(effect, await ((_a = effect.initDoLiveEffect) == null ? void 0 : _a.call(effect)));
+  })
+);
 var getLiveEffects = () => {
   return allEffects.map((effect) => ({
     id: effect.id,
@@ -637,16 +643,14 @@ var getEffectViewNode = (id, state) => {
   }
 };
 var doLiveEffect = async (id, state, width, height, data) => {
-  var _a;
   const effect = findEffect(id);
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
-  console.log("[deno_ai(js)] initDoLiveEffect", id, effect.initDoLiveEffect);
-  effectInits.set(
-    effect,
-    effectInits.get(effect) ?? await ((_a = effect.initDoLiveEffect) == null ? void 0 : _a.call(effect))
-  );
   const init = effectInits.get(effect);
+  if (!init) {
+    console.error("Effect not initialized", id);
+    return null;
+  }
   console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
     const result = await effect.doLiveEffect(

@@ -33,7 +33,7 @@ export async function resizeImageData(
   width: number,
   height: number
 ) {
-  const { createCanvas } = await import("npm:@napi-rs/canvas@0.1.67");
+  const { createCanvas } = await import("npm:@napi-rs/canvas@0.1.68");
   const canvas = createCanvas(data.width, data.height);
   const ctx = canvas.getContext("2d")!;
   ctx.putImageData(data, 0, 0);

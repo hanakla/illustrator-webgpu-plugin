@@ -10,6 +10,12 @@ const allEffects: Effect<any, any>[] = [
 ];
 const effectInits = new Map<Effect<any, any>, any>();
 
+await Promise.all(
+  allEffects.map(async (effect) => {
+    effectInits.set(effect, await effect.initDoLiveEffect?.());
+  })
+);
+
 export const getLiveEffects = (): Array<{
   id: string;
   title: string;
@@ -51,12 +57,11 @@ export const doLiveEffect = async (
   if (!effect) return null;
   const defaultValues = getDefaultValus(id);
 
-  console.log("[deno_ai(js)] initDoLiveEffect", id, effect.initDoLiveEffect);
-  effectInits.set(
-    effect,
-    effectInits.get(effect) ?? (await effect.initDoLiveEffect?.())
-  );
   const init = effectInits.get(effect);
+  if (!init) {
+    console.error("Effect not initialized", id);
+    return null;
+  }
 
   console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {

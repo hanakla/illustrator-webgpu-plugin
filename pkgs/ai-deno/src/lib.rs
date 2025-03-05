@@ -412,7 +412,7 @@ fn execute_export_function_and_raw_return<'a>(
 
             let call = deno_runtime.call_with_args(&fn_ref, &args);
             let ret = tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(5)) => Err(anyhow::anyhow!("Timeout")),
+                _ = tokio::time::sleep(Duration::from_secs(10)) => Err(anyhow::anyhow!("Timeout")),
                 ret = deno_runtime
                 .with_event_loop_promise(call, PollEventLoopOptions::default()) => Ok(ret),
             };

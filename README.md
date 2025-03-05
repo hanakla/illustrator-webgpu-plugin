@@ -2,6 +2,10 @@
 
 [Deno](https://deno.com) runs on Illustrator SDK Plugin.
 
+> [!CAUTION]
+> This plugin can load npm modules (like `npm:package`), but crashes when loading N-API native modules.
+> Probably due to a conflict between symbols in the `.node` plugin and symbols in Illustrator's libdynamic-napi, resulting in an unintended N-API plugin initialization process.
+
 ## Structure
 
 - `pkgs/ai-deno` Rust backend(library) for execute Deno runtime

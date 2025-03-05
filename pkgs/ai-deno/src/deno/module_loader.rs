@@ -31,14 +31,12 @@ const NODE_MODULES_DIR: &str = "node_modules";
 const JSR_REGISTRY_URL: &str = "https://jsr.io";
 
 mod cache_provider;
-use cache_provider::{MemoryModuleCacheProvider, ModuleCacheProvider};
 
 use crate::dai_println;
 
 mod cache_db;
 mod cjs_code_analyzer;
 mod npm_client;
-pub mod npm_package_folder_resolver;
 pub mod npm_package_manager;
 mod require_loader;
 
@@ -62,17 +60,17 @@ mod require_loader;
 pub struct AiDenoModuleLoader {
     // pub package_root_dir: PathBuf,
     // pub cache_provider: Arc<cache_provider::MemoryModuleCacheProvider>,
-    pub node_resolver: NodeResolverRc<DenoInNpmPackageChecker, NpmPackageManager, RealSys>,
+    pub node_resolver: NodeResolverRc<NpmPackageManager, NpmPackageManager, RealSys>,
     // module_graph: ModuleGraph,
     // pub byonm: MaybeArc<AiDenoNpmPackageFolderResolver>,
-    // pub in_npm_pkg_checker: DenoInNpmPackageChecker,
+    // pub in_npm_pkg_checker: NpmPackageManager,
     pub require_loader: AiDenoRequireLoader,
     // pub pkg_json_folder_resolver: AiDenoNpmPackageFolderResolver,
     pub pkg_json_resolver: MaybeArc<PackageJsonResolver<RealSys>>,
     pub cjs_translator: MaybeArc<
         NodeCodeTranslator<
             AiDenoCjsCodeAnalyzer,
-            DenoInNpmPackageChecker,
+            NpmPackageManager,
             DenoIsBuiltInNodeModuleChecker,
             NpmPackageManager,
             RealSys,
@@ -122,10 +120,10 @@ impl AiDenoModuleLoader {
 
         let pkg_manager = NpmPackageManager::new(root_node_modules_dir.clone());
 
-        let in_npm_pkg_checker = DenoInNpmPackageChecker::new(CreateInNpmPkgCheckerOptions::Byonm);
+        // let in_npm_pkg_checker = DenoInNpmPackageChecker::new(CreateInNpmPkgCheckerOptions::Byonm);
 
         let node_resolver = MaybeArc::new(NodeResolver::new(
-            in_npm_pkg_checker.clone(),
+            pkg_manager.clone(),
             DenoIsBuiltInNodeModuleChecker {},
             pkg_manager.clone(),
             pkg_json_resolver.clone(),
@@ -134,14 +132,14 @@ impl AiDenoModuleLoader {
         ));
 
         let cjs_tracker = CjsTracker::new(
-            in_npm_pkg_checker.clone(),
+            pkg_manager.clone(),
             pkg_json_resolver.clone(),
             deno_resolver::cjs::IsCjsResolutionMode::ImplicitTypeCommonJs,
         );
 
         let cjs_translator = NodeCodeTranslator::new(
             AiDenoCjsCodeAnalyzer::new(MaybeArc::new(RealFs::default()), cjs_tracker),
-            in_npm_pkg_checker.clone(),
+            pkg_manager.clone(),
             node_resolver.clone(),
             pkg_manager.clone(),
             pkg_json_resolver.clone(),
@@ -189,7 +187,7 @@ impl AiDenoModuleLoader {
 
     pub fn init_services(
         self: &Self,
-    ) -> NodeExtInitServices<DenoInNpmPackageChecker, NpmPackageManager, RealSys> {
+    ) -> NodeExtInitServices<NpmPackageManager, NpmPackageManager, RealSys> {
         NodeExtInitServices {
             node_require_loader: Rc::new(self.require_loader.clone()),
             pkg_json_resolver: self.pkg_json_resolver.clone(),
@@ -211,7 +209,7 @@ impl AiDenoModuleLoader {
 
         let package_name = specifier.strip_prefix("npm:").unwrap_or(specifier);
 
-        let npm_client = Arc::new(npm_client::NpmClient::new());
+        let npm_client = self.pkg_manager.npm_client.clone();
         let (name, version, _sub_path) = parse_npm_specifier(package_name).map_err(|err| {
             ModuleLoaderError::from(JsErrorBox::generic(format!(
                 "Failed to parse npm specifier: {} - {}",
@@ -242,13 +240,8 @@ impl AiDenoModuleLoader {
 
             let npm_package = package_manager
                 .install_package_with_deps(&name, resolved_version.as_str(), npm_client)
-                .await
-                .map_err(|err| {
-                    ModuleLoaderError::from(JsErrorBox::generic(format!(
-                        "Failed to install npm package: {} - {}",
-                        package_name, err
-                    )))
-                })?;
+                .map_err(|err| ModuleLoaderError::from(err))
+                .await?;
 
             dai_println!(
                 "Complete to fetch npm package: {}@{} -> {}",

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -5,6 +6,7 @@ use std::sync::Arc;
 use deno_core::serde_json;
 use deno_error::JsErrorBox;
 use deno_npm_cache::NpmCacheHttpClient;
+use futures::TryFutureExt;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{self, StatusCode};
 use serde_json::Value;
@@ -34,6 +36,12 @@ pub enum NpmPackageError {
     IoError(#[from] std::io::Error),
 }
 
+impl From<NpmPackageError> for JsErrorBox {
+    fn from(err: NpmPackageError) -> JsErrorBox {
+        JsErrorBox::generic(err.to_string())
+    }
+}
+
 pub struct NpmClient {
     pub registry_url: String,
     pub http_client: reqwest::Client,
@@ -50,15 +58,12 @@ impl NpmClient {
         }
     }
 
-    /// パッケージの情報を取得します
     pub async fn get_package_info(
         &self,
         name: &str,
         version_req: Option<&str>,
     ) -> Result<(String, String, Value), NpmPackageError> {
-        // nameに@が含まれる場合(スコープ付きパッケージ)の特殊処理
         let url = if name.starts_with('@') {
-            // スコープ付きパッケージの場合はURLエンコードが必要
             let encoded_name = name.replace('/', "%2F");
             format!("{}/{}", self.registry_url, encoded_name)
         } else {
@@ -76,12 +81,9 @@ impl NpmClient {
 
         let package_info: Value = serde_json::from_str(&response)?;
 
-        // バージョン情報を取得
         let version = if let Some(version_req) = version_req {
-            // 指定されたバージョンを使用
             version_req.to_string()
         } else if let Some(dist_tags) = package_info.get("dist-tags") {
-            // latestタグを使用
             if let Some(latest) = dist_tags.get("latest").and_then(|v| v.as_str()) {
                 latest.to_string()
             } else {
@@ -97,7 +99,6 @@ impl NpmClient {
             )));
         };
 
-        // タグが指定された場合は実際のバージョン番号に解決
         let version = if let Some(dist_tags) = package_info.get("dist-tags") {
             if let Some(resolved_version) = dist_tags.get(&version).and_then(|v| v.as_str()) {
                 resolved_version.to_string()
@@ -108,7 +109,6 @@ impl NpmClient {
             version
         };
 
-        // tarballのURLを取得
         if let Some(versions) = package_info.get("versions") {
             if let Some(version_info) = versions.get(&version) {
                 if let Some(dist) = version_info.get("dist") {
@@ -125,9 +125,7 @@ impl NpmClient {
         )))
     }
 
-    /// tarballをダウンロードします
     pub async fn download_tarball(&self, url: &str) -> Result<Vec<u8>, NpmPackageError> {
-        // reqwestを使用して直接ダウンロード
         let response = self
             .http_client
             .get(url)
@@ -166,7 +164,7 @@ impl NpmCacheHttpClient for NpmClient {
         }
 
         retry(|| async {
-            let url = url.clone();
+            let mut url = url.clone();
 
             for _ in 0..5 {
                 let response = self
@@ -174,6 +172,10 @@ impl NpmCacheHttpClient for NpmClient {
                     .get(url.clone())
                     .headers(headers.clone())
                     .send()
+                    .map_err(|e| deno_npm_cache::DownloadError {
+                        status_code: None,
+                        error: JsErrorBox::generic(format!("Failed to send request: {}", e)),
+                    })
                     .await?;
 
                 let status = response.status();
@@ -190,7 +192,7 @@ impl NpmCacheHttpClient for NpmClient {
                 if !status.is_success() {
                     return Err(deno_npm_cache::DownloadError {
                         status_code: Some(StatusCode::from_u16(status.as_u16()).unwrap()),
-                        error: JsErrorBox::generic(format!("Failed to load url: {}", url).as_str()),
+                        error: JsErrorBox::generic(format!("Failed to load url: {}", url)),
                     });
                 }
 
@@ -199,9 +201,7 @@ impl NpmCacheHttpClient for NpmClient {
                     .await
                     .map_err(|e| deno_npm_cache::DownloadError {
                         status_code: Some(StatusCode::from_u16(status.as_u16()).unwrap()),
-                        error: JsErrorBox::generic(
-                            format!("Failed to receive bytes: {}", url).as_str(),
-                        ),
+                        error: JsErrorBox::generic(format!("Failed to receive bytes: {}", url)),
                     })
                     .unwrap();
 

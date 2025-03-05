@@ -8,20 +8,30 @@ use std::sync::Arc;
 
 use deno_cache_dir::npm::NpmCacheDir;
 use deno_error::JsErrorBox;
+use deno_lib::version;
 use deno_npm::npm_rc::{RegistryConfig, RegistryConfigWithUrl};
-use deno_npm_cache::{NpmCache, NpmCacheHttpClient, NpmCacheSetting, TarballCache};
+use deno_npm_cache::{
+    NpmCache, NpmCacheHttpClient, NpmCacheSetting, RegistryInfoProvider, TarballCache,
+};
 use deno_package_json::{NodeModuleKind, PackageJson};
+use deno_path_util::{url_from_directory_path, url_from_file_path};
+use deno_resolver::npm::{ByonmInNpmPackageChecker, DenoInNpmPackageChecker};
 use deno_runtime::deno_core::serde_json;
+use deno_semver::package::{self, PackageNv};
+use deno_semver::{StackString, Version};
 use flate2::read::GzDecoder;
 use futures::TryFutureExt;
 use node_resolver::errors::{
     PackageFolderResolveError, PackageFolderResolveErrorKind, PackageNotFoundError,
 };
-use node_resolver::{cache, NpmPackageFolderResolver, UrlOrPathRef};
+use node_resolver::{
+    cache, InNpmPackageChecker, NpmPackageFolderResolver, PathClean, UrlOrPathRef,
+};
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::StatusCode;
 use serde_json::Value;
 use sys_traits::impls::RealSys;
+use sys_traits::{FsRead, FsWrite};
 use tar::Archive;
 use url::Url;
 
@@ -38,8 +48,9 @@ pub struct NpmPackage {
 }
 
 pub struct NpmPackageManager {
-    pub package_root_dir: PathBuf,
+    pub packages_root_dir: PathBuf,
     pub cache_dir: PathBuf,
+    pub registry_info: Arc<RegistryInfoProvider<NpmClient, RealSys>>,
     pub npm_client: Arc<NpmClient>,
     npm_cache: Arc<deno_npm_cache::NpmCache<RealSys>>,
     installed_packages: HashSet<String>,
@@ -49,29 +60,29 @@ pub struct NpmPackageManager {
 impl Clone for NpmPackageManager {
     fn clone(&self) -> Self {
         Self {
-            package_root_dir: self.package_root_dir.clone(),
+            packages_root_dir: self.packages_root_dir.clone(),
             cache_dir: self.cache_dir.clone(),
             installed_packages: self.installed_packages.clone(),
-            npm_cache: Arc::new(init_npm_cache(
-                self.package_root_dir.join(".deno_npm_cache"),
-            )),
+            npm_cache: Arc::new(create_npm_cache(self.packages_root_dir.clone())),
+            npm_client: self.npm_client.clone(),
+            registry_info: self.registry_info.clone(),
             sys: self.sys.clone(),
         }
     }
 }
 
-fn init_npm_cache(cache_dir: PathBuf) -> NpmCache<RealSys> {
+fn create_npm_cache(cache_dir: PathBuf) -> NpmCache<RealSys> {
     let sys = RealSys::default();
 
     NpmCache::new(
         Arc::new(NpmCacheDir::new(&sys, cache_dir.clone(), vec![])),
         sys,
         NpmCacheSetting::Use,
-        Arc::new(default_npm_rc()),
+        Arc::new(create_default_npmrc()),
     )
 }
 
-fn default_npm_rc() -> deno_npm::npm_rc::ResolvedNpmRc {
+fn create_default_npmrc() -> deno_npm::npm_rc::ResolvedNpmRc {
     deno_npm::npm_rc::ResolvedNpmRc {
         default_config: RegistryConfigWithUrl {
             registry_url: Url::from_str("https://registry.npmjs.org").unwrap(),
@@ -90,16 +101,18 @@ fn default_npm_rc() -> deno_npm::npm_rc::ResolvedNpmRc {
 
 impl NpmPackageManager {
     pub fn new(package_root_dir: PathBuf) -> Self {
-        let cache_dir = package_root_dir.join(".deno_npm_cache");
+        let cache_dir = package_root_dir.clone();
         if !cache_dir.exists() {
             std::fs::create_dir_all(&cache_dir).unwrap_or_default();
         }
 
-        let sys = RealSys::default();
-
         let npm_client = Arc::new(NpmClient::new());
-
-        let npm_cache = Arc::new(init_npm_cache(cache_dir.clone()));
+        let npm_cache = Arc::new(create_npm_cache(cache_dir.clone()));
+        let registry_info = Arc::new(RegistryInfoProvider::new(
+            npm_cache.clone(),
+            npm_client.clone(),
+            Arc::new(create_default_npmrc()),
+        ));
 
         // let npm_tarball_cache = TarballCache::new(
         //     Arc::clone(&npm_cache),
@@ -109,9 +122,10 @@ impl NpmPackageManager {
         // );
 
         Self {
-            package_root_dir,
+            packages_root_dir: package_root_dir,
             cache_dir,
             npm_client,
+            registry_info,
             npm_cache,
             installed_packages: HashSet::new(),
             sys: RealSys::default(),
@@ -124,7 +138,7 @@ impl NpmPackageManager {
             return true;
         }
 
-        let package_dir = self.get_package_dir(name, Some(version));
+        let package_dir = self.compute_package_dir(name, Some(version));
         if !package_dir.exists() {
             return false;
         }
@@ -148,25 +162,15 @@ impl NpmPackageManager {
         }
     }
 
-    /// パッケージディレクトリを取得します
-    pub fn get_package_dir(&self, name: &str, version: Option<&str>) -> PathBuf {
-        let dir_name = if let Some(version) = version {
-            if name.starts_with('@') {
-                // @types/node → @types+node@version
-                let normalized_name = name.replace('/', "+");
-                format!("{}@{}", normalized_name, version)
-            } else {
-                format!("{}@{}", name, version)
-            }
+    fn compute_package_dir(&self, name: &str, version: Option<&str>) -> PathBuf {
+        if let Some(version) = version {
+            self.npm_cache.package_folder_for_nv(&PackageNv {
+                name: StackString::from_str(name),
+                version: Version::parse_from_npm(&version).unwrap(),
+            })
         } else {
-            if name.starts_with('@') {
-                name.replace('/', "+")
-            } else {
-                name.to_string()
-            }
-        };
-
-        self.package_root_dir.join(dir_name)
+            self.npm_cache.package_name_folder(name)
+        }
     }
 
     /// Install a package with dependencies
@@ -175,21 +179,11 @@ impl NpmPackageManager {
         name: &str,
         version: &str,
         npm_client: Arc<NpmClient>,
-    ) -> Result<NpmPackage, NpmPackageError> {
-        self.install_package_with_deps_inner(name, version, npm_client)
-            .await
-    }
+    ) -> Result<NpmPackage, JsErrorBox> {
+        dai_println!("Installing npm package: {}@{:?}", name, version);
 
-    async fn install_package_with_deps_inner(
-        &mut self,
-        name: &str,
-        version: &str,
-        npm_client: Arc<NpmClient>,
-    ) -> Result<NpmPackage, NpmPackageError> {
-        println!("Installing npm package: {}@{:?}", name, version);
-
-        if !self.package_root_dir.exists() {
-            std::fs::create_dir_all(&self.package_root_dir)
+        if !self.packages_root_dir.exists() {
+            std::fs::create_dir_all(&self.packages_root_dir)
                 .map_err(|e| NpmPackageError::ExtractionFailed(e.to_string()))?;
         }
 
@@ -197,10 +191,16 @@ impl NpmPackageManager {
             npm_client.get_package_info(name, Some(version)).await?;
 
         let install_key = format!("{}@{}", name, resolved_version);
-        let package_dir = self.get_package_dir(name, Some(&resolved_version));
+
+        let package_dir = self.npm_cache.package_folder_for_nv(&PackageNv {
+            name: StackString::from_str(name),
+            version: Version::parse_from_npm(&resolved_version).unwrap(),
+        });
+
+        dai_println!("Package directory: {}", package_dir.display());
 
         if self.is_package_installed(name, version) {
-            dai_println!("package already installed: {}", install_key);
+            dai_println!("package already installed: {}@{}", name, resolved_version);
         } else {
             if let Some(parent) = package_dir.parent() {
                 if !parent.exists() {
@@ -208,6 +208,14 @@ impl NpmPackageManager {
                         .map_err(|e| NpmPackageError::ExtractionFailed(e.to_string()))?;
                 }
             }
+
+            let pkg_info = self
+                .registry_info
+                .package_info(name)
+                .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))
+                .await?;
+
+            self.npm_cache.save_package_info(name, &pkg_info)?;
 
             let tarball_bytes = npm_client
                 .download_tarball(&tarball_url)
@@ -230,8 +238,7 @@ impl NpmPackageManager {
         dai_println!("Dependencies: {:?}", dependencies);
 
         for (dep_name, dep_version) in dependencies {
-            let fut =
-                self.install_package_with_deps_inner(&dep_name, &dep_version, npm_client.clone());
+            let fut = self.install_package_with_deps(&dep_name, &dep_version, npm_client.clone());
             match Box::pin(fut).await {
                 Ok(_) => {
                     dai_println!("Npm package installed: {}@{}", dep_name, dep_version);
@@ -284,12 +291,15 @@ impl NpmPackageManager {
         Ok(dependencies)
     }
 
-    /// npmパッケージ指定子をファイルシステム上のパスに解決します
+    /// Resolve npm specifier to a package directory on file system
     fn resolve_specifier_to_package_dir(
         &self,
         specifier: &str,
+        referrer: Option<&UrlOrPathRef>,
     ) -> Result<PathBuf, NpmPackageError> {
         let (name, version, subpath) = parse_npm_specifier(specifier)?;
+        let mut version = version;
+
         dai_println!(
             "resolve_specifier_to_package_dir: {} v:{:?} subpath: {}",
             name,
@@ -298,56 +308,92 @@ impl NpmPackageManager {
         );
 
         if version.is_none() {
-            // バージョン未指定の場合は、パッケージディレクトリを探す
-            let package_dir = self.get_package_dir(&name, None);
-            dai_println!("Package directory: {}", package_dir.display());
+            if let Some(referrer) = referrer {
+                let referrer = referrer.path().unwrap();
+                let pjson_path = self.resolve_closest_package_json(referrer);
 
-            if package_dir.exists() {
-                return Ok(package_dir);
-            }
+                if let Some(pjson_path) = pjson_path {
+                    let pjson = serde_json::from_str::<Value>(
+                        self.sys
+                            .fs_read_to_string_lossy(pjson_path)
+                            .unwrap()
+                            .to_string()
+                            .as_str(),
+                    )
+                    .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))?;
 
-            // package_root_dirの直下にあるパッケージを検索
-            let entries = match std::fs::read_dir(&self.package_root_dir) {
-                Ok(entries) => entries,
-                Err(e) => return Err(NpmPackageError::IoError(e)),
-            };
+                    let deps: Vec<(String, String)> = pjson
+                        .get("dependencies")
+                        .and_then(|d| d.as_object())
+                        .map(|d| {
+                            d.iter()
+                                .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
 
-            let package_prefix = if name.starts_with('@') {
-                // スコープ付きパッケージの場合 (@types/node) → @types+node@
-                name.replace('/', "+") + "@"
-            } else {
-                // 通常のパッケージの場合 (lodash) → lodash@
-                name.to_string() + "@"
-            };
+                    let opt_deps: Vec<(String, String)> = pjson
+                        .get("optionalDependencies")
+                        .and_then(|d| d.as_object())
+                        .map(|d| {
+                            d.iter()
+                                .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
 
-            // パッケージディレクトリを検索 (名前が一致するもの)
-            for entry in entries {
-                let entry = match entry {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
+                    let all_deps = deps
+                        .iter()
+                        .chain(opt_deps.iter())
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect::<Vec<(String, String)>>();
 
-                let file_name = entry.file_name();
-                let file_name_str = match file_name.to_str() {
-                    Some(s) => s,
-                    None => continue,
-                };
+                    dai_println!("all_deps: {:?}", all_deps);
 
-                // パッケージ名のプレフィックスでフィルタリング
-                if file_name_str.starts_with(&package_prefix) {
-                    return Ok(entry.path());
+                    for (dep_name, dep_version) in all_deps {
+                        let dep_ver = Version::parse_from_npm(dep_version.as_str()).unwrap();
+                        if dep_name.clone() == name {
+                            version = Some(dep_ver.to_string());
+                            break;
+                        }
+                    }
                 }
             }
-
-            return Err(NpmPackageError::ResolutionFailed(format!(
-                "Could not resolve npm package: {}",
-                name
-            )));
         }
 
-        // バージョンが指定されている場合
-        let version = version.unwrap();
-        let package_dir = self.get_package_dir(&name, Some(&version));
+        if version.is_none() {
+            dai_println!("version is none: name: {}", name);
+            let pkg_info = self
+                .npm_cache
+                .load_package_info(name.as_str())
+                .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))?;
+
+            if let Some(pkg_info) = pkg_info {
+                let dist_tags = pkg_info.dist_tags;
+
+                dai_println!("dist_tags: {:?}", dist_tags);
+                dai_println!("latest: {:?}", dist_tags.get("latest").unwrap().to_string());
+
+                version = Some(dist_tags.get("latest").unwrap().to_string());
+            }
+        }
+
+        let version = match version {
+            Some(v) => v,
+            None => {
+                return Err(NpmPackageError::ResolutionFailed(format!(
+                    "Could not resolve npm package: {}",
+                    name
+                )));
+            }
+        };
+        let package_dir = self.compute_package_dir(&name, Some(&version));
+
+        dai_println!(
+            "Package directory: {}, {}",
+            package_dir.display(),
+            package_dir.exists()
+        );
 
         if !package_dir.exists() {
             return Err(NpmPackageError::ResolutionFailed(format!(
@@ -359,19 +405,21 @@ impl NpmPackageManager {
         Ok(package_dir)
     }
 
-    /// npmパッケージ指定子をファイルシステム上の特定ファイルのパスに解決します
+    /// Resolve npm specifier to a file path on file system
     pub fn resolve_specifier_to_file_path(
         &self,
         specifier: &str,
-        sub_path: Option<&str>,
+        referrer: Option<&UrlOrPathRef>,
     ) -> Result<PathBuf, NpmPackageError> {
-        println!(
+        let (name, version, sub_path) = parse_npm_specifier(specifier)?;
+
+        dai_println!(
             "resolve_specifier_to_file_path: {} sub_path: {:?}",
-            specifier, sub_path
+            specifier,
+            sub_path
         );
 
-        // パッケージのルートディレクトリを解決
-        let package_dir = self.resolve_specifier_to_package_dir(specifier)?;
+        let package_dir = self.resolve_specifier_to_package_dir(specifier, referrer)?;
 
         dai_println!(
             "package directory: {}, sub: {:?}",
@@ -385,7 +433,7 @@ impl NpmPackageManager {
 
         dai_println!("package.json: {:?}", pkg_json);
 
-        if sub_path.is_none() || sub_path.unwrap().is_empty() {
+        if sub_path.is_empty() {
             let main_field = pkg_json
                 .main(NodeModuleKind::Esm)
                 .or_else(|| Some("index.js"))
@@ -406,7 +454,6 @@ impl NpmPackageManager {
             )));
         }
 
-        let sub_path = sub_path.unwrap();
         let file_path = package_dir.join(sub_path);
 
         if file_path.exists() {
@@ -429,6 +476,29 @@ impl NpmPackageManager {
             "module could not be resolved: {}",
             file_path.display()
         )))
+    }
+
+    fn resolve_closest_package_json(&self, dir: &Path) -> Option<PathBuf> {
+        let mut current_dir = dir.to_path_buf();
+
+        loop {
+            let package_json_path = current_dir.join("package.json");
+            dai_println!("Checking package.json: {}", package_json_path.display());
+
+            if package_json_path.exists() {
+                let package_json = PackageJson::load_from_path(&self.sys, None, &package_json_path);
+
+                if package_json.is_ok() {
+                    return Some(package_json_path);
+                }
+            }
+
+            if !current_dir.pop() {
+                break;
+            }
+        }
+
+        None
     }
 
     fn extract_tarball(&self, tarball_bytes: &[u8], dest_dir: &Path) -> Result<(), io::Error> {
@@ -497,14 +567,16 @@ impl NpmPackageFolderResolver for NpmPackageManager {
         referrer: &UrlOrPathRef,
     ) -> Result<PathBuf, PackageFolderResolveError> {
         dai_println!(
-            "resolve_package_folder_from_package: {} referrer: {}",
+            "resolve_package_folder_from_package: specifier: {} referrer: {}",
             specifier,
             referrer.display()
         );
 
         let package_dir = self
-            .resolve_specifier_to_package_dir(specifier)
-            .map_err(|op| {
+            .resolve_specifier_to_package_dir(specifier, Some(referrer))
+            .map_err(|e| {
+                dai_println!("Error: {:?}", e);
+
                 PackageFolderResolveError(Box::new(PackageFolderResolveErrorKind::PackageNotFound(
                     PackageNotFoundError {
                         package_name: specifier.to_string(),
@@ -514,7 +586,40 @@ impl NpmPackageFolderResolver for NpmPackageManager {
                 )))
             })?;
 
+        dai_println!("Resolved package directory: {}", package_dir.display());
+
         Ok(package_dir)
+    }
+}
+
+impl InNpmPackageChecker for NpmPackageManager {
+    fn in_npm_package(&self, specifier: &Url) -> bool {
+        let specifier = specifier.as_ref();
+        let packages_url = Url::from_file_path(self.packages_root_dir.clone()).unwrap();
+
+        dai_println!(
+            "in_npm_package: {}, result: {}",
+            specifier,
+            specifier.starts_with(packages_url.as_str())
+        );
+
+        return specifier.starts_with(packages_url.as_str());
+    }
+
+    fn in_npm_package_at_dir_path(&self, path: &Path) -> bool {
+        let specifier = match url_from_directory_path(&path.to_path_buf().clean()) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        self.in_npm_package(&specifier)
+    }
+
+    fn in_npm_package_at_file_path(&self, path: &Path) -> bool {
+        let specifier = match url_from_file_path(&path.to_path_buf().clean()) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        self.in_npm_package(&specifier)
     }
 }
 
