@@ -1,5 +1,3 @@
-import { createCanvas } from "jsr:@gfx/canvas";
-
 import {
   StyleFilterFlag,
   DoLiveEffectPayload,
@@ -22,6 +20,8 @@ export const blurEffect = definePlugin({
     },
   },
   initDoLiveEffect: async () => {
+    const { createCanvas } = await import("jsr:@gfx/canvas");
+
     const device = await navigator.gpu
       .requestAdapter()
       .then((adapter) => adapter!.requestDevice());
@@ -64,6 +64,7 @@ export const blurEffect = definePlugin({
     `;
 
     return {
+      createCanvas,
       device,
       shaderCode,
       bindGroupLayout: device.createBindGroupLayout({
@@ -99,7 +100,13 @@ export const blurEffect = definePlugin({
   },
 
   doLiveEffect: async (
-    { device, horizontalPipeline, verticalPipeline, pipelineLayout },
+    {
+      device,
+      createCanvas,
+      horizontalPipeline,
+      verticalPipeline,
+      pipelineLayout,
+    },
     params,
     input
   ) => {

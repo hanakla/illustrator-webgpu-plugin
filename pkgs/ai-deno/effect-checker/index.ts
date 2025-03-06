@@ -1,15 +1,15 @@
 import { blurEffect } from "~ext/live-effects/blurEffect.ts";
-import { ChromaticAberration } from "~ext/live-effects/chromatic-aberration.ts";
+import { chromaticAberration } from "~ext/live-effects/chromatic-aberration.ts";
 
 console.log("Hello, world!", blurEffect);
 
 const effects = new Map([
   [blurEffect, [blurEffect, { radius: 10 }]],
   [
-    ChromaticAberration,
+    chromaticAberration,
     [
-      ChromaticAberration,
-      { colorModde: "rgb", strength: 1, angle: 40, opacity: 20 },
+      chromaticAberration,
+      { colorModde: "rgb", strength: 10, angle: 40, opacity: 100 },
     ],
   ],
 ]);
@@ -19,7 +19,7 @@ setTimeout(async () => {
   const ctx = canvas.getContext("2d")!;
   let imgData: ImageData | null = null;
 
-  const [effect, params] = effects.get(ChromaticAberration)!;
+  const [effect, params] = effects.get(chromaticAberration)!;
   const init = await effect.initDoLiveEffect();
 
   window.addEventListener("dragover", (e) => e.preventDefault());

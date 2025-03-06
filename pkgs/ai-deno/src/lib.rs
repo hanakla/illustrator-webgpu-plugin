@@ -119,7 +119,7 @@ fn package_root_dir() -> PathBuf {
 pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) -> OpaqueAiMain {
     // let alert_fn = move |req: &str| alert_function(req, _ai_alert);
 
-    println!("[deno_ai(rust)] Initializing");
+    dai_println!("Initializing");
     let mut runtime = Runtime::new(&mut RuntimeInitOptions {
         //     extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
         //         alert: alert_fn,
@@ -129,15 +129,17 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) ->
     })
     .unwrap();
 
-    println!("[deno_ai(rust)] Load module");
+    dai_println!("Load module");
     let module = Module::from_string("main.js", include_str!("./js/dist/main.mjs"));
     let handle = runtime.attach_module(&module).unwrap();
 
-    let main = AiMain {
+    let main = &mut AiMain {
         main_runtime: runtime,
         main_module: handle,
         ai_alert: _ai_alert,
     };
+
+    execute_export_function_and_raw_return(main, "loadEffects", |scope| Ok(vec![]));
 
     Box::into_raw(Box::new(main)) as OpaqueAiMain
 }
@@ -160,6 +162,8 @@ pub extern "C" fn dispose_function_result(result: *mut FunctionResult) {
 pub extern "C" fn get_live_effects(ai_main_ref: OpaqueAiMain) -> *mut FunctionResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
 
+    dai_println!("✨️ get_live_effects");
+
     let result = execute_exported_function(ai_main, "getLiveEffects", |scope| Ok(vec![]));
 
     let boxed_result = Box::new(result);
@@ -173,13 +177,16 @@ pub extern "C" fn get_live_effect_view_tree(
     params: *const c_char,
 ) -> *mut FunctionResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
-    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy() };
-    let params = unsafe { CStr::from_ptr(params).to_string_lossy() }.clone();
+    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
+    let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
 
-    let result = execute_exported_function(ai_main, "getEffectViewNode", |scope| {
-        let effect_id = v8::String::new(scope, effect_id.to_string().as_str()).unwrap();
+    let effect_id_clone = effect_id.clone();
+    let params_clone = params.clone();
+
+    let result = execute_exported_function(ai_main, "getEffectViewNode", move |scope| {
+        let effect_id = v8::String::new(scope, effect_id_clone.as_str()).unwrap();
         let effect_id = v8::Local::new(scope, effect_id);
-        let params = v8::String::new(scope, params.to_string().as_str()).unwrap();
+        let params = v8::String::new(scope, params_clone.to_string().as_str()).unwrap();
         let params = v8::json::parse(scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
@@ -209,7 +216,7 @@ extern "C" fn do_live_effect(
     let source_buffer_ptr = (*image_data).data_ptr;
 
     let t = Instant::now();
-    println!("[deno_ai(rust)] do_live_effect: effect_id = {}", effect_id);
+    dai_println!("do_live_effect: effect_id = {}", effect_id);
 
     let result = execute_export_function_and_raw_return(ai_main, "doLiveEffect", move |scope| {
         let effect_id = v8::String::new(scope, effect_id.to_string().as_str()).unwrap();
@@ -252,7 +259,7 @@ extern "C" fn do_live_effect(
     let result = match result {
         Some(result) => result,
         None => {
-            println!("[deno_ai(rust)] do_live_effect: error: result is None");
+            dai_println!("do_live_effect: error: result is None");
             return Box::into_raw(Box::new(DoLiveEffectResult {
                 success: false,
                 data: std::ptr::null_mut(),
@@ -311,12 +318,12 @@ extern "C" fn do_live_effect(
         let len = buffer.byte_length();
 
         let is_new_buffer = buffer.data().unwrap().as_ptr() == source_buffer_ptr;
-        println!("[deno_ai(rust)] is_new_buffer: {}", is_new_buffer);
+        dai_println!("is_new_buffer: {}", is_new_buffer);
 
         let data_ptr = buffer.data().unwrap().cast::<u8>().as_ptr() as *mut c_void;
         // let data_ptr = Box::into_raw(Box::new(data_ptr)) as *mut c_void;
-        println!("[deno_ai(rust)] source_ptr: {:p}", source_buffer_ptr);
-        println!("[deno_ai(rust)] data_ptr: {:p}", data_ptr);
+        dai_println!("source_ptr: {:p}", source_buffer_ptr);
+        dai_println!("data_ptr: {:p}", data_ptr);
 
         Ok(DoLiveEffectResult {
             success: true,
@@ -329,15 +336,12 @@ extern "C" fn do_live_effect(
         })
     })();
 
-    println!(
-        "[deno_ai(rust)] do_live_effect: elapsed = {:?}",
-        t.elapsed()
-    );
+    dai_println!("do_live_effect: elapsed = {:?}", t.elapsed());
 
     match returned {
         Ok(result) => Box::into_raw(Box::new(result)),
         Err(e) => {
-            eprintln!("[deno_ai(rust)] do_live_effect: error: {}", e);
+            eprintln!("do_live_effect: error: {}", e);
             Box::into_raw(Box::new(DoLiveEffectResult {
                 success: false,
                 data: std::ptr::null_mut(),
@@ -374,18 +378,17 @@ fn execute_export_function_and_raw_return<'a>(
 
     let fn_name_arc = Arc::new(function_name.to_string());
 
-    println!("[deno_ai(rust)] Starting execute_export_function_and_raw_return");
+    dai_println!("Starting execute_export_function_and_raw_return");
 
     // It's required for WebGPU async methods
     let localset = tokio::task::LocalSet::new();
-    let result =
-        localset.block_on(&tokio_runtime, async move {
-            // let proc: Pin<
-            //     Box<dyn Future<Output = Result<Box<v8::Global<v8::Value>>, anyhow::Error>> + 'static>,
-            // > = Box::pin(
+    let result = localset.block_on(&tokio_runtime, async move {
+        // let proc: Pin<
+        //     Box<dyn Future<Output = Result<Box<v8::Global<v8::Value>>, anyhow::Error>> + 'static>,
+        // > = Box::pin(
 
-            // It's required for WebGPU async methods
-            tokio::task::spawn_local(async move {
+        // It's required for WebGPU async methods
+        tokio::task::spawn_local(async move {
             let runtime = &mut ai_main.main_runtime;
             let function_name = fn_name_arc.as_str();
 
@@ -408,7 +411,7 @@ fn execute_export_function_and_raw_return<'a>(
                     .collect::<Vec<_>>()
             };
 
-            println!("[deno_ai(rust)] Executing function: {}", function_name);
+            dai_println!("Executing function: {}", function_name);
 
             let call = deno_runtime.call_with_args(&fn_ref, &args);
             let ret = tokio::select! {
@@ -417,7 +420,7 @@ fn execute_export_function_and_raw_return<'a>(
                 .with_event_loop_promise(call, PollEventLoopOptions::default()) => Ok(ret),
             };
 
-            println!("[deno_ai(rust)] Finished executing function: {}", function_name);
+            dai_println!("Finished executing function: {}", function_name);
 
             let ret = match ret {
                 Ok(ret) => ret,
@@ -432,9 +435,9 @@ fn execute_export_function_and_raw_return<'a>(
             }
         })
         .await
-        });
+    });
 
-    println!("Finished execute_export_function_and_raw_return");
+    dai_println!("Finished execute_export_function_and_raw_return");
 
     match result {
         Ok(result) => match result {
@@ -451,52 +454,58 @@ fn execute_export_function_and_raw_return<'a>(
     }
 }
 
-fn execute_exported_function<'a>(
+fn execute_exported_function<'a, F>(
     ai_main: &mut AiMain,
     function_name: &str,
-    args_factory: impl for<'b> FnOnce(
-        &mut v8::HandleScope<'b>,
-    ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>,
-) -> FunctionResult {
+    args_factory: F,
+) -> FunctionResult
+where
+    F: for<'b> FnOnce(
+            &mut v8::HandleScope<'b>,
+        ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>
+        + 'static,
+{
     let failed_res = FunctionResult {
         success: false,
         json: CString::new("{}".to_string()).unwrap().into_raw(),
     };
 
-    let runtime = &mut ai_main.main_runtime;
+    // let fn_ref = match ai_main
+    //     .main_module
+    //     .get_export_function_by_name(runtime, function_name)
+    // {
+    //     Ok(fn_ref) => fn_ref,
+    //     Err(e) => {
+    //         return failed_res;
+    //     }
+    // };
 
-    let fn_ref = match ai_main
-        .main_module
-        .get_export_function_by_name(runtime, function_name)
-    {
-        Ok(fn_ref) => fn_ref,
-        Err(e) => {
-            return failed_res;
-        }
-    };
+    // let fn_ref = v8::Local::<v8::Function>::new(scope, fn_ref);
 
-    let scope = &mut runtime.deno_runtime().handle_scope();
-    let fn_ref = v8::Local::<v8::Function>::new(scope, fn_ref);
+    // let scope = &mut v8::TryCatch::new(scope);
+    // let undefined = v8::undefined(scope);
+    // let args = args_factory(scope).unwrap();
+    // let result = fn_ref.call(scope, undefined.into(), &args);
 
-    let scope = &mut v8::TryCatch::new(scope);
-    let undefined = v8::undefined(scope);
-    let args = args_factory(scope).unwrap();
-    let result = fn_ref.call(scope, undefined.into(), &args);
+    // if let Some(err) = scope.exception() {
+    //     let error = JsError::from_v8_exception(scope, err);
+    //     dai_println!("{:?}", error);
+    //     return failed_res;
+    // }
 
-    if let Some(err) = scope.exception() {
-        let error = JsError::from_v8_exception(scope, err);
-        println!("{:?}", error);
-        return failed_res;
-    }
+    let result = execute_export_function_and_raw_return(ai_main, function_name, args_factory);
 
     let result = match result {
         Some(result) => result,
         None => {
-            println!("Error: function call returned None");
+            dai_println!("Error: function call returned None");
             return failed_res;
         }
     };
 
+    let runtime = &mut ai_main.main_runtime;
+    let scope = &mut runtime.deno_runtime().handle_scope();
+    let result = v8::Local::<v8::Value>::new(scope, result);
     let result = v8::json::stringify(scope, result)
         .unwrap()
         .to_rust_string_lossy(scope);

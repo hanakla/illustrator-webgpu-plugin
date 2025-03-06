@@ -2,6 +2,11 @@ import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { randomNoiseEffect } from "./live-effects/effects.ts";
 import { Effect, UINode } from "./types.ts";
+import { expandGlobSync, ensureDir } from "jsr:@std/fs@1.0.14";
+import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
+import { homedir } from "node:os";
+
+const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".deno_ai/effects")));
 
 const allEffects: Effect<any, any>[] = [
   randomNoiseEffect,
@@ -15,6 +20,26 @@ await Promise.all(
     effectInits.set(effect, await effect.initDoLiveEffect?.());
   })
 );
+
+export const loadEffects = async () => {
+  console.log("[deno_ai(js)] loadEffects", EFFECTS_DIR);
+  await ensureDir(EFFECTS_DIR);
+  console.log("[deno_ai(js)] loadEffects ensuredir");
+
+  const metas = [
+    ...expandGlobSync(`${EFFECTS_DIR}/*/meta.json`, {
+      followSymlinks: true,
+      includeDirs: false,
+    }),
+  ];
+
+  await Promise.allSettled(
+    metas.map((dir) => {
+      console.log("dir", dir);
+      // const pkgDir = join(fromFileUrl(EFFECTS_DIR), dir.name);
+    })
+  );
+};
 
 export const getLiveEffects = (): Array<{
   id: string;

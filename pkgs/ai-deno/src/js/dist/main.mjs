@@ -1,6 +1,3 @@
-// src/js/src/live-effects/blurEffect.ts
-import { createCanvas } from "jsr:@gfx/canvas";
-
 // src/js/src/types.ts
 function definePlugin(plugin) {
   return plugin;
@@ -51,6 +48,7 @@ var blurEffect = definePlugin({
     }
   },
   initDoLiveEffect: async () => {
+    const { createCanvas } = await import("jsr:@gfx/canvas");
     const device = await navigator.gpu.requestAdapter().then((adapter) => adapter.requestDevice());
     const shaderCode = `
       struct VertexOutput {
@@ -89,6 +87,7 @@ var blurEffect = definePlugin({
       }
     `;
     return {
+      createCanvas,
       device,
       shaderCode,
       bindGroupLayout: device.createBindGroupLayout({
@@ -122,7 +121,13 @@ var blurEffect = definePlugin({
       })
     };
   },
-  doLiveEffect: async ({ device, horizontalPipeline, verticalPipeline, pipelineLayout }, params, input) => {
+  doLiveEffect: async ({
+    device,
+    createCanvas,
+    horizontalPipeline,
+    verticalPipeline,
+    pipelineLayout
+  }, params, input) => {
     const canvas = createCanvas(100, 100);
     console.time("[deno_ai(js)] gaussianBlurWebGPU");
     const result = await gaussianBlurWebGPU(input, params.radius);
@@ -293,7 +298,26 @@ function generateGaussianKernel(radius) {
 }
 
 // src/js/src/live-effects/utils.ts
-import { createCanvas as createCanvas2, ImageData as ImageData2 } from "jsr:@gfx/canvas";
+var createCanvasImpl = typeof window === "undefined" ? async (width, height) => {
+  const { createCanvas } = await import("jsr:@gfx/canvas");
+  return createCanvas(width, height);
+} : (width, height) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+};
+var createImageDataImpl = typeof window === "undefined" ? async (data, width, height, settings) => {
+  const { ImageData: ImageData2 } = await import("jsr:@gfx/canvas");
+  return new ImageData2(
+    data,
+    width,
+    height,
+    settings
+  );
+} : (data, width, height, settings) => {
+  return new ImageData(data, width, height, settings);
+};
 function getNearestAligned256Resolution(width, height, bytesPerPixel = 4) {
   const currentBytesPerRow = width * bytesPerPixel;
   const targetBytesPerRow = Math.ceil(currentBytesPerRow / 256) * 256;
@@ -312,13 +336,13 @@ async function adjustImageToNearestAligned256Resolution(imageDataLike) {
   return resized;
 }
 async function resizeImageData(data, width, height) {
-  const canvas = createCanvas2(data.width, data.height);
+  const canvas = createCanvasImpl(data.width, data.height);
   const ctx = canvas.getContext("2d");
-  const imgData = new ImageData2(data.data, data.width, data.height, {
+  const imgData = createImageDataImpl(data.data, data.width, data.height, {
     colorSpace: "srgb"
   });
   ctx.putImageData(imgData, 0, 0);
-  const resizedCanvas = createCanvas2(width, height);
+  const resizedCanvas = createCanvasImpl(width, height);
   const resizedCtx = resizedCanvas.getContext("2d");
   resizedCtx.drawImage(canvas, 0, 0, width, height);
   return resizedCtx.getImageData(0, 0, width, height);
@@ -614,6 +638,10 @@ var randomNoiseEffect = {
 };
 
 // src/js/src/main.ts
+import { expandGlobSync, ensureDir } from "jsr:@std/fs@1.0.14";
+import { toFileUrl, join } from "jsr:@std/path@1.0.8";
+import { homedir } from "node:os";
+var EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".deno_ai/effects")));
 var allEffects = [
   randomNoiseEffect,
   blurEffect,
@@ -626,6 +654,22 @@ await Promise.all(
     effectInits.set(effect, await ((_a = effect.initDoLiveEffect) == null ? void 0 : _a.call(effect)));
   })
 );
+var loadEffects = async () => {
+  console.log("[deno_ai(js)] loadEffects", EFFECTS_DIR);
+  await ensureDir(EFFECTS_DIR);
+  console.log("[deno_ai(js)] loadEffects ensuredir");
+  const metas = [
+    ...expandGlobSync(`${EFFECTS_DIR}/*/meta.json`, {
+      followSymlinks: true,
+      includeDirs: false
+    })
+  ];
+  await Promise.allSettled(
+    metas.map((dir) => {
+      console.log("dir", dir);
+    })
+  );
+};
 var getLiveEffects = () => {
   return allEffects.map((effect) => ({
     id: effect.id,
@@ -698,5 +742,6 @@ var findEffect = (id) => {
 export {
   doLiveEffect,
   getEffectViewNode,
-  getLiveEffects
+  getLiveEffects,
+  loadEffects
 };

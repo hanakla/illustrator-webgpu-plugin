@@ -3,7 +3,7 @@
     "baseUrl": ".",
     "lib": ["DOM", "ES2023"],
     "paths": {
-      "~ext": ["../src/js/src"]
+      "~ext/*": ["../src/js/src/*"]
     }
   },
   "include": ["../src/js/src/*.ts", "../src/js/src/live-effects/*.ts"]

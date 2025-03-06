@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use crate::dai_println;
 use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
 use crate::deno::error::Error;
 use crate::deno::ext::worker::deno_worker_host;
@@ -30,7 +31,6 @@ use crate::deno::module_loader::npm_package_manager::NpmPackageManager;
 use crate::deno::transpiler::transpile;
 use deno_core::error::JsError;
 use deno_error::JsErrorBox;
-use deno_resolver::npm::DenoInNpmPackageChecker;
 use deno_runtime::{
     deno_broadcast_channel,
     deno_broadcast_channel::InMemoryBroadcastChannel,
@@ -49,9 +49,7 @@ use deno_runtime::{
     deno_io::{Stdio, StdioPipe},
     deno_kv,
     deno_kv::dynamic::MultiBackendDbHandler,
-    deno_napi, deno_net, deno_node,
-    deno_node::NodeExtInitServices,
-    deno_os, deno_permissions,
+    deno_napi, deno_net, deno_node, deno_os,
     deno_permissions::{Permissions, PermissionsContainer},
     deno_process, deno_telemetry, deno_tls,
     deno_tls::rustls::RootCertStore,
@@ -60,17 +58,11 @@ use deno_runtime::{
     deno_web::BlobStore,
     deno_webgpu, deno_webidl, deno_websocket, deno_webstorage,
     permissions::RuntimePermissionDescriptorParser,
-    runtime,
-    web_worker::WebWorkerOptions,
-    worker::{WorkerOptions, WorkerServiceOptions},
-    BootstrapOptions,
+    runtime, BootstrapOptions,
 };
 use homedir::my_home;
-use node_resolver::errors::{PackageFolderResolveErrorKind, PackageNotFoundError};
-use node_resolver::{
-    cache::NodeResolutionSys, ConditionsFromResolutionMode, DenoIsBuiltInNodeModuleChecker,
-    InNpmPackageChecker, NodeResolver, NpmPackageFolderResolver, UrlOrPath,
-};
+use node_resolver::errors::PackageNotFoundError;
+use node_resolver::{InNpmPackageChecker, NpmPackageFolderResolver, UrlOrPath};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -348,7 +340,7 @@ impl Runtime {
                 .is_ready()
             {
                 // Event loop resolved - continue
-                println!("Event loop resolved");
+                dai_println!("Event loop resolved");
             }
 
             Poll::Pending

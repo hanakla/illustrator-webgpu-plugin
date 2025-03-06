@@ -1,4 +1,40 @@
-import { createCanvas, ImageData } from "jsr:@gfx/canvas";
+const createCanvasImpl =
+  typeof window === "undefined"
+    ? async (width: number, height: number) => {
+        const { createCanvas } = await import("jsr:@gfx/canvas");
+        return createCanvas(width, height);
+      }
+    : (width: number, height: number) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        return canvas;
+      };
+
+const createImageDataImpl =
+  typeof window === "undefined"
+    ? async (
+        data: Uint8ClampedArray,
+        width: number,
+        height: number,
+        settings?: ImageDataSettings
+      ) => {
+        const { ImageData } = await import("jsr:@gfx/canvas");
+        return new ImageData(
+          data,
+          width,
+          height,
+          settings
+        ) as globalThis.ImageData;
+      }
+    : (
+        data: Uint8ClampedArray,
+        width: number,
+        height: number,
+        settings?: ImageDataSettings
+      ) => {
+        return new ImageData(data, width, height, settings);
+      };
 
 export function getNearestAligned256Resolution(
   width: number,
@@ -35,15 +71,14 @@ export async function resizeImageData(
   width: number,
   height: number
 ) {
-  // const { createCanvas } = await import("npm:@napi-rs/canvas@0.1.68");
-  const canvas = createCanvas(data.width, data.height);
+  const canvas = createCanvasImpl(data.width, data.height);
   const ctx = canvas.getContext("2d")!;
-  const imgData = new ImageData(data.data, data.width, data.height, {
+  const imgData = createImageDataImpl(data.data, data.width, data.height, {
     colorSpace: "srgb",
   });
   ctx.putImageData(imgData, 0, 0);
 
-  const resizedCanvas = createCanvas(width, height);
+  const resizedCanvas = createCanvasImpl(width, height);
   const resizedCtx = resizedCanvas.getContext("2d")!;
   resizedCtx.drawImage(canvas, 0, 0, width, height);
 
