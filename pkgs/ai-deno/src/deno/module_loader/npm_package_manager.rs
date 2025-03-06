@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self};
-use std::future::Future;
 use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -8,32 +7,25 @@ use std::sync::Arc;
 
 use deno_cache_dir::npm::NpmCacheDir;
 use deno_error::JsErrorBox;
-use deno_lib::version;
-use deno_npm::npm_rc::{RegistryConfig, RegistryConfigWithUrl};
-use deno_npm_cache::{
-    NpmCache, NpmCacheHttpClient, NpmCacheSetting, RegistryInfoProvider, TarballCache,
-};
+use deno_npm::npm_rc::{RegistryConfig, RegistryConfigWithUrl, ResolvedNpmRc};
+use deno_npm::registry::{NpmPackageInfo, NpmPackageVersionInfo};
+use deno_npm_cache::{NpmCache, NpmCacheSetting, RegistryInfoProvider};
 use deno_package_json::{NodeModuleKind, PackageJson};
-use deno_path_util::{url_from_directory_path, url_from_file_path};
-use deno_resolver::npm::{ByonmInNpmPackageChecker, DenoInNpmPackageChecker};
 use deno_runtime::deno_core::serde_json;
-use deno_semver::package::{self, PackageNv};
+use deno_semver::package::PackageNv;
 use deno_semver::{StackString, Version};
 use flate2::read::GzDecoder;
 use futures::TryFutureExt;
 use node_resolver::errors::{
     PackageFolderResolveError, PackageFolderResolveErrorKind, PackageNotFoundError,
 };
-use node_resolver::{
-    cache, InNpmPackageChecker, NpmPackageFolderResolver, PathClean, UrlOrPathRef,
-};
-use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::StatusCode;
+use node_resolver::{InNpmPackageChecker, NpmPackageFolderResolver, UrlOrPathRef};
 use serde_json::Value;
 use sys_traits::impls::RealSys;
-use sys_traits::{FsRead, FsWrite};
+use sys_traits::FsRead;
 use tar::Archive;
 use url::Url;
+use wildcard::Wildcard;
 
 use crate::dai_println;
 
@@ -52,6 +44,7 @@ pub struct NpmPackageManager {
     pub cache_dir: PathBuf,
     pub registry_info: Arc<RegistryInfoProvider<NpmClient, RealSys>>,
     pub npm_client: Arc<NpmClient>,
+    npmrc: Arc<ResolvedNpmRc>,
     npm_cache: Arc<deno_npm_cache::NpmCache<RealSys>>,
     installed_packages: HashSet<String>,
     sys: RealSys,
@@ -65,6 +58,7 @@ impl Clone for NpmPackageManager {
             installed_packages: self.installed_packages.clone(),
             npm_cache: Arc::new(create_npm_cache(self.packages_root_dir.clone())),
             npm_client: self.npm_client.clone(),
+            npmrc: self.npmrc.clone(),
             registry_info: self.registry_info.clone(),
             sys: self.sys.clone(),
         }
@@ -127,6 +121,7 @@ impl NpmPackageManager {
             npm_client,
             registry_info,
             npm_cache,
+            npmrc: Arc::new(create_default_npmrc()),
             installed_packages: HashSet::new(),
             sys: RealSys::default(),
         }
@@ -173,6 +168,56 @@ impl NpmPackageManager {
         }
     }
 
+    pub async fn get_package_info(&self, name: &str) -> Result<Arc<NpmPackageInfo>, JsErrorBox> {
+        let Ok(info_opt) = self.npm_cache.load_package_info(name) else {
+            return Err(JsErrorBox::from(NpmPackageError::ResolutionFailed(
+                "Failed to load package info".to_string(),
+            )));
+        };
+
+        match info_opt {
+            Some(info) => Ok(Arc::new(info)),
+            None => {
+                let info = self
+                    .registry_info
+                    .package_info(name)
+                    .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))
+                    .await?;
+
+                self.npm_cache.save_package_info(name, &info)?;
+
+                Ok(info)
+            }
+        }
+
+        // let pkg_url = get_package_url(&self.npmrc, name);
+        // let maybe_auth_header =
+        //     match maybe_auth_header_for_npm_registry(self.npmrc.get_registry_config(name)) {
+        //         Ok(auth) => auth,
+        //         Err(e) => {
+        //             return Err(JsErrorBox::from(NpmPackageError::ResolutionFailed(
+        //                 e.to_string(),
+        //             )))
+        //         }
+        //     };
+
+        // dai_println!("Downloading package info: {}", pkg_url);
+
+        // let response = self
+        //     .npm_client
+        //     .download_with_retries_on_any_tokio_runtime(pkg_url, maybe_auth_header)
+        //     .map_err(JsErrorBox::from_err)
+        //     .await?;
+
+        // let Some(bytes) = response else {
+        //     return Err(JsErrorBox::from(NpmPackageError::ResolutionFailed(
+        //         "Failed to download package info".to_string(),
+        //     )));
+        // };
+
+        // serde_json::from_slice::<Value>(&bytes).map_err(JsErrorBox::from_err)
+    }
+
     /// Install a package with dependencies
     pub async fn install_package_with_deps(
         &mut self,
@@ -187,8 +232,35 @@ impl NpmPackageManager {
                 .map_err(|e| NpmPackageError::ExtractionFailed(e.to_string()))?;
         }
 
-        let (resolved_version, tarball_url, package_info) =
-            npm_client.get_package_info(name, Some(version)).await?;
+        // let pkg_info = self.get_package_info(name).await?;
+        let pkg_info = self
+            .registry_info
+            .package_info(name)
+            .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))
+            .await?;
+
+        let resolved_version = if let Some(latest) = pkg_info.dist_tags.get("latest") {
+            latest.to_string()
+        } else {
+            return Err(NpmPackageError::ResolutionFailed(format!(
+                "version info not found: {}",
+                name
+            ))
+            .into());
+        };
+
+        let Ok(version_info) = pkg_info.version_info(&PackageNv {
+            name: StackString::from_str(name),
+            version: Version::parse_from_npm(&resolved_version).unwrap(),
+        }) else {
+            return Err(NpmPackageError::ResolutionFailed(format!(
+                "version info not found: {}@{}",
+                name, resolved_version
+            ))
+            .into());
+        };
+
+        let tarball_url = version_info.dist.tarball.clone();
 
         let install_key = format!("{}@{}", name, resolved_version);
 
@@ -209,12 +281,6 @@ impl NpmPackageManager {
                 }
             }
 
-            let pkg_info = self
-                .registry_info
-                .package_info(name)
-                .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))
-                .await?;
-
             self.npm_cache.save_package_info(name, &pkg_info)?;
 
             let tarball_bytes = npm_client
@@ -234,7 +300,8 @@ impl NpmPackageManager {
             // });
         }
 
-        let dependencies = self.extract_dependencies(&package_info)?;
+        // let (_, package_info) = npm_client.get_package_info(name, Some(version)).await?;
+        let dependencies = self.extract_dependencies(&version_info)?;
         dai_println!("Dependencies: {:?}", dependencies);
 
         for (dep_name, dep_version) in dependencies {
@@ -264,28 +331,17 @@ impl NpmPackageManager {
 
     fn extract_dependencies(
         &self,
-        package_info: &Value,
+        version_info: &NpmPackageVersionInfo,
     ) -> Result<HashMap<String, String>, NpmPackageError> {
         let mut dependencies = HashMap::new();
 
-        if let Some(deps) = package_info.get("dependencies").and_then(|d| d.as_object()) {
-            for (name, version) in deps {
-                if let Some(version_str) = version.as_str() {
-                    dependencies.insert(name.clone(), version_str.to_string());
-                }
-            }
+        for (name, version) in version_info.dependencies.iter() {
+            dependencies.insert(name.to_string(), version.to_string());
         }
 
         // It needs to be pre-fetched because it cannot be loaded synchronously when required
-        if let Some(opt_deps) = package_info
-            .get("optionalDependencies")
-            .and_then(|d| d.as_object())
-        {
-            for (name, version) in opt_deps {
-                if let Some(version_str) = version.as_str() {
-                    dependencies.insert(name.clone(), version_str.to_string());
-                }
-            }
+        for (name, version) in version_info.optional_dependencies.iter() {
+            dependencies.insert(name.to_string(), version.to_string());
         }
 
         Ok(dependencies)
@@ -301,7 +357,7 @@ impl NpmPackageManager {
         let mut version = version;
 
         dai_println!(
-            "resolve_specifier_to_package_dir: {} v:{:?} subpath: {}",
+            "resolve_specifier_to_package_dir: name: {} version:{:?} subpath: {}",
             name,
             version,
             subpath
@@ -431,30 +487,31 @@ impl NpmPackageManager {
             PackageJson::load_from_path(&self.sys, None, &package_dir.join("package.json"))
                 .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))?;
 
-        dai_println!("package.json: {:?}", pkg_json);
+        // if sub_path.is_empty() {
+        //     let main_field = pkg_json
+        //         .main(NodeModuleKind::Esm)
+        //         .or_else(|| Some("index.js"))
+        //         .unwrap()
+        //         .to_string();
 
-        if sub_path.is_empty() {
-            let main_field = pkg_json
-                .main(NodeModuleKind::Esm)
-                .or_else(|| Some("index.js"))
-                .unwrap()
-                .to_string();
+        //     dai_println!("resolved entrypoint: {}", main_field);
 
-            dai_println!("resolved entrypoint: {}", main_field);
+        //     let main_path = package_dir.join(main_field);
 
-            let main_path = package_dir.join(main_field);
+        //     if main_path.exists() {
+        //         return Ok(main_path);
+        //     }
 
-            if main_path.exists() {
-                return Ok(main_path);
-            }
+        //     return Err(NpmPackageError::ResolutionFailed(format!(
+        //         "main module could not be resolved: {}",
+        //         package_dir.display()
+        //     )));
+        // }
 
-            return Err(NpmPackageError::ResolutionFailed(format!(
-                "main module could not be resolved: {}",
-                package_dir.display()
-            )));
-        }
+        let entry = resolve_entrypoint(pkg_json, sub_path, NodeModuleKind::Esm);
+        dai_println!("entry: {:?}", entry);
 
-        let file_path = package_dir.join(sub_path);
+        let file_path = package_dir.join(entry);
 
         if file_path.exists() {
             return Ok(file_path);
@@ -605,22 +662,6 @@ impl InNpmPackageChecker for NpmPackageManager {
 
         return specifier.starts_with(packages_url.as_str());
     }
-
-    fn in_npm_package_at_dir_path(&self, path: &Path) -> bool {
-        let specifier = match url_from_directory_path(&path.to_path_buf().clean()) {
-            Ok(p) => p,
-            Err(_) => return false,
-        };
-        self.in_npm_package(&specifier)
-    }
-
-    fn in_npm_package_at_file_path(&self, path: &Path) -> bool {
-        let specifier = match url_from_file_path(&path.to_path_buf().clean()) {
-            Ok(p) => p,
-            Err(_) => return false,
-        };
-        self.in_npm_package(&specifier)
-    }
 }
 
 pub fn parse_npm_specifier(
@@ -715,4 +756,97 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), io::Error> {
         }
     }
     Ok(())
+}
+
+fn resolve_entrypoint(
+    pkg_json: Arc<PackageJson>,
+    sub_path: String,
+    kind: NodeModuleKind,
+) -> String {
+    let lookup_path = if sub_path.is_empty() {
+        // Empty sub_path should be looked up as "." in exports
+        ".".to_string()
+    } else {
+        sub_path.clone()
+    };
+
+    // First, check exports field
+    if let Some(exports) = &pkg_json.exports {
+        // Direct match in exports
+        if let Some(value) = exports.get(&lookup_path) {
+            if let Some(path_str) = value.as_str() {
+                return path_str.to_string();
+            } else if let Some(obj) = value.as_object() {
+                // Handle conditional exports based on module kind
+                return extract_path_from_object(obj, kind).unwrap_or(sub_path);
+            }
+        }
+
+        // Try wildcard pattern matching
+        for (pattern, target) in exports.iter() {
+            // Convert pattern to a wildcard-compatible pattern if it contains asterisk
+            if pattern.contains('*') {
+                // Create a wildcard from the pattern
+                if let Ok(pattern_wildcard) = Wildcard::new(pattern.as_bytes()) {
+                    // Check if our lookup_path matches the pattern
+                    if pattern_wildcard.is_match(lookup_path.as_bytes()) {
+                        if let Some(path_str) = target.as_str() {
+                            return path_str.to_string();
+                        } else if let Some(obj) = target.as_object() {
+                            return extract_path_from_object(obj, kind).unwrap_or(sub_path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // For the main entry point, if nothing was found via exports
+    if lookup_path == "." {
+        if let Some(main) = pkg_json.main(kind) {
+            return main.to_string();
+        }
+    }
+
+    // No matching export found, return the sub_path as is
+    sub_path
+}
+
+// Helper function to extract path from conditional exports object based on module kind
+fn extract_path_from_object(
+    obj: &serde_json::Map<String, Value>,
+    kind: NodeModuleKind,
+) -> Option<String> {
+    // Module kind specific field first
+    let kind_field = match kind {
+        NodeModuleKind::Esm => "import",
+        NodeModuleKind::Cjs => "require",
+    };
+
+    if let Some(kind_val) = obj.get(kind_field) {
+        if let Some(path) = kind_val.as_str() {
+            return Some(path.to_string());
+        }
+    }
+
+    // Try default next
+    if let Some(default_val) = obj.get("default") {
+        if let Some(path) = default_val.as_str() {
+            return Some(path.to_string());
+        }
+    }
+
+    // Try any other condition (except known conditional fields)
+    for (key, val) in obj.iter() {
+        // Skip special fields we already checked
+        if key == "import" || key == "require" || key == "default" {
+            continue;
+        }
+
+        if let Some(path) = val.as_str() {
+            return Some(path.to_string());
+        }
+    }
+
+    None
 }

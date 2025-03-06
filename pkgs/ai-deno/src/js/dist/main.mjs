@@ -1,3 +1,6 @@
+// src/js/src/live-effects/blurEffect.ts
+import { createCanvas } from "jsr:@gfx/canvas";
+
 // src/js/src/types.ts
 function definePlugin(plugin) {
   return plugin;
@@ -290,6 +293,7 @@ function generateGaussianKernel(radius) {
 }
 
 // src/js/src/live-effects/utils.ts
+import { createCanvas as createCanvas2, ImageData as ImageData2 } from "jsr:@gfx/canvas";
 function getNearestAligned256Resolution(width, height, bytesPerPixel = 4) {
   const currentBytesPerRow = width * bytesPerPixel;
   const targetBytesPerRow = Math.ceil(currentBytesPerRow / 256) * 256;
@@ -308,10 +312,12 @@ async function adjustImageToNearestAligned256Resolution(imageDataLike) {
   return resized;
 }
 async function resizeImageData(data, width, height) {
-  const { createCanvas: createCanvas2 } = await import("npm:@napi-rs/canvas@0.1.68");
   const canvas = createCanvas2(data.width, data.height);
   const ctx = canvas.getContext("2d");
-  ctx.putImageData(data, 0, 0);
+  const imgData = new ImageData2(data.data, data.width, data.height, {
+    colorSpace: "srgb"
+  });
+  ctx.putImageData(imgData, 0, 0);
   const resizedCanvas = createCanvas2(width, height);
   const resizedCtx = resizedCanvas.getContext("2d");
   resizedCtx.drawImage(canvas, 0, 0, width, height);

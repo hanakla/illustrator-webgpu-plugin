@@ -1,16 +1,12 @@
-use std::borrow::Cow;
-use std::future::Future;
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use deno_core::serde_json;
 use deno_error::JsErrorBox;
 use deno_npm_cache::NpmCacheHttpClient;
-use futures::TryFutureExt;
 use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{self, StatusCode};
+use reqwest::{self};
 use serde_json::Value;
 use url::Url;
+
+use super::http_client::AiDenoHttpClient;
 
 #[derive(Debug, thiserror::Error)]
 pub enum NpmPackageError {
@@ -157,85 +153,14 @@ impl NpmCacheHttpClient for NpmClient {
         url: Url,
         maybe_auth_header: Option<(HeaderName, HeaderValue)>,
     ) -> Result<Option<Vec<u8>>, deno_npm_cache::DownloadError> {
-        let mut headers = reqwest::header::HeaderMap::new();
+        let headers = if let Some((name, value)) = maybe_auth_header {
+            Some(vec![(name, value.to_str().unwrap().to_string())])
+        } else {
+            None
+        };
 
-        if let Some((name, value)) = maybe_auth_header {
-            headers.insert(name, value);
-        }
-
-        retry(|| async {
-            let mut url = url.clone();
-
-            for _ in 0..5 {
-                let response = self
-                    .http_client
-                    .get(url.clone())
-                    .headers(headers.clone())
-                    .send()
-                    .map_err(|e| deno_npm_cache::DownloadError {
-                        status_code: None,
-                        error: JsErrorBox::generic(format!("Failed to send request: {}", e)),
-                    })
-                    .await?;
-
-                let status = response.status();
-
-                if status.is_redirection() {
-                    let location = response.headers().get("location").unwrap();
-
-                    // resolve redirection from current url
-                    let new_url = url.join(location.to_str().unwrap()).unwrap();
-                    url = new_url;
-                    continue;
-                }
-
-                if !status.is_success() {
-                    return Err(deno_npm_cache::DownloadError {
-                        status_code: Some(StatusCode::from_u16(status.as_u16()).unwrap()),
-                        error: JsErrorBox::generic(format!("Failed to load url: {}", url)),
-                    });
-                }
-
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|e| deno_npm_cache::DownloadError {
-                        status_code: Some(StatusCode::from_u16(status.as_u16()).unwrap()),
-                        error: JsErrorBox::generic(format!("Failed to receive bytes: {}", url)),
-                    })
-                    .unwrap();
-
-                return Ok(Some(bytes.to_vec()));
-            }
-
-            Err(deno_npm_cache::DownloadError {
-                status_code: None,
-                error: JsErrorBox::generic("Failed to download tarball"),
-            })
-        })
-        .await
-    }
-}
-
-fn retry<F: FnMut() -> Fut, T, E, Fut: Future<Output = Result<T, E>>>(
-    mut f: F,
-) -> impl Future<Output = Result<T, E>> {
-    async move {
-        let mut last_result = None;
-
-        for _ in 0..5 {
-            let result = f().await;
-
-            match result {
-                Ok(val) => return Ok(val),
-                Err(err) => {
-                    last_result = Some(Err(err));
-                }
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-
-        return last_result.unwrap();
+        AiDenoHttpClient::new()
+            .download_with_retries_on_any_tokio_runtime(&url, headers)
+            .await
     }
 }

@@ -1,4 +1,4 @@
-// import { createCanvas } from "npm:@napi-rs/canvas@0.1.68";
+import { createCanvas } from "jsr:@gfx/canvas";
 
 import {
   StyleFilterFlag,

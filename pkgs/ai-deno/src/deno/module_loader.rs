@@ -1,4 +1,5 @@
 use cjs_code_analyzer::AiDenoCjsCodeAnalyzer;
+use deno_core::FastString;
 use deno_error::JsErrorBox;
 use deno_graph::{ModuleGraph, ModuleSpecifier};
 use deno_resolver::{
@@ -17,15 +18,17 @@ use deno_runtime::{
     deno_node::{NodeExtInitServices, NodeResolver, NodeResolverRc},
 };
 use futures::TryFutureExt;
+use jsr_package_manager::{parse_jsr_specifier, JsrPackageManager};
 use node_resolver::{
     analyze::NodeCodeTranslator,
     cache::{NodeResolutionSys, NodeResolutionThreadLocalCache},
-    DenoIsBuiltInNodeModuleChecker, NodeResolutionKind, PackageJsonResolver, ResolutionMode,
+    DenoIsBuiltInNodeModuleChecker, InNpmPackageChecker, NodeResolutionKind, PackageJsonResolver,
+    ResolutionMode, UrlOrPathRef,
 };
 use npm_package_manager::{parse_npm_specifier, NpmPackageManager};
 use require_loader::AiDenoRequireLoader;
-use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
-use sys_traits::impls::RealSys;
+use std::{borrow::Cow, path::PathBuf, rc::Rc, str::FromStr, sync::Arc};
+use sys_traits::{impls::RealSys, FsRead};
 
 const NODE_MODULES_DIR: &str = "node_modules";
 const JSR_REGISTRY_URL: &str = "https://jsr.io";
@@ -34,8 +37,12 @@ mod cache_provider;
 
 use crate::dai_println;
 
+use super::{module, transpiler::transpile};
+
 mod cache_db;
 mod cjs_code_analyzer;
+mod http_client;
+mod jsr_package_manager;
 mod npm_client;
 pub mod npm_package_manager;
 mod require_loader;
@@ -77,6 +84,8 @@ pub struct AiDenoModuleLoader {
         >,
     >,
     pub pkg_manager: NpmPackageManager,
+    pub jsr_manager: JsrPackageManager,
+    sys: Arc<RealSys>,
 }
 
 impl AiDenoModuleLoader {
@@ -154,6 +163,8 @@ impl AiDenoModuleLoader {
         //     byonm: byonm_npm_resolver.clone(),
         // };
 
+        let jsr_manager = JsrPackageManager::new(package_root_dir.clone());
+
         Self {
             // package_root_dir,
             // cache_provider: Arc::new(MemoryModuleCacheProvider::default()),
@@ -166,6 +177,8 @@ impl AiDenoModuleLoader {
             pkg_json_resolver: pkg_json_resolver.clone(),
             cjs_translator: MaybeArc::new(cjs_translator),
             pkg_manager,
+            jsr_manager,
+            sys: Arc::new(real_sys),
         }
     }
 
@@ -218,17 +231,15 @@ impl AiDenoModuleLoader {
         })?;
 
         let resolved_version = if version.is_none() {
-            let (latest_version, _, _) =
-                npm_client
-                    .get_package_info(&name, None)
-                    .await
-                    .map_err(|err| {
-                        ModuleLoaderError::from(JsErrorBox::generic(format!(
-                            "Failed to fetch npm package: {} - {}",
-                            name, err
-                        )))
-                    })?;
-            latest_version
+            let pkg = self.pkg_manager.get_package_info(name.as_str()).await?;
+            let Some(latest_version) = pkg.dist_tags.get("latest") else {
+                return Err(ModuleLoaderError::from(JsErrorBox::generic(format!(
+                    "Failed to get `latest` tag of package: {}",
+                    name
+                ))));
+            };
+
+            latest_version.to_string()
         } else {
             version.unwrap()
         };
@@ -254,6 +265,45 @@ impl AiDenoModuleLoader {
         }
 
         return Ok(ModuleSpecifier::parse(specifier).unwrap());
+    }
+
+    pub fn resolve_npm_module(
+        &self,
+        specifier: &str,
+        referrer: &ModuleSpecifier,
+    ) -> Result<ModuleSpecifier, ModuleLoaderError> {
+        let url = self
+            .pkg_manager
+            .resolve_specifier_to_file_path(
+                specifier.to_string().as_str(),
+                Some(&UrlOrPathRef::from_url(referrer)),
+            )
+            .unwrap();
+
+        Ok(ModuleSpecifier::from_file_path(url.as_path()).unwrap())
+    }
+
+    async fn ensure_jsr_module(
+        &self,
+        specifier: &ModuleSpecifier,
+    ) -> Result<ModuleSpecifier, ModuleLoaderError> {
+        dai_println!("Ensuring JSR module: {}", specifier);
+
+        let (pkg_req, _path) = parse_jsr_specifier(specifier.as_str()).map_err(|err| {
+            ModuleLoaderError::from(JsErrorBox::generic(format!(
+                "Failed to parse JSR specifier: {} - {}",
+                specifier, err
+            )))
+        })?;
+
+        self.jsr_manager.ensure_package(&pkg_req).await?;
+
+        let path = self
+            .jsr_manager
+            .resolve_specifier_to_file_path(specifier)
+            .await?;
+
+        Ok(ModuleSpecifier::from_file_path(path).unwrap())
     }
 
     fn resolve_node_builtin(
@@ -296,15 +346,24 @@ impl AiDenoModuleLoader {
                     ))));
                 }
 
-                let content = std::fs::read_to_string(&path).map_err(|err| {
-                    ModuleLoaderError::from(JsErrorBox::generic(format!(
-                        "Failed to read file: {} - {}",
-                        path.display(),
-                        err
-                    )))
-                })?;
+                let content = self
+                    .sys
+                    .fs_read_to_string(&module_specifier.to_file_path().unwrap())
+                    .map_err(|err| {
+                        ModuleLoaderError::from(JsErrorBox::generic(format!(
+                            "Failed to read file: {} - {}",
+                            path.display(),
+                            err
+                        )))
+                    })?;
 
-                Ok((content, module_specifier.clone()))
+                let (content, _) = transpile(
+                    FastString::from(module_specifier.to_string()),
+                    FastString::from(content.to_string()),
+                )
+                .map_err(|err| ModuleLoaderError::from(JsErrorBox::from_err(err)))?;
+
+                Ok((content.to_string(), module_specifier.clone()))
             }
 
             "npm" => {
@@ -432,16 +491,26 @@ impl ModuleLoader for AiDenoModuleLoader {
                     npm_url, err
                 )))
             });
+        } else if raw_specifier.starts_with("jsr:") {
+            dai_println!("JSR module: {}", raw_specifier);
+            return Ok(ModuleSpecifier::from_str(raw_specifier).unwrap());
         } else if raw_specifier.starts_with("node:") {
             return self.resolve_node_builtin(raw_specifier, &referrer);
         }
-        // else if raw_specifier.starts_with("jsr:") {
-        //     return self.resolve_jsr_module(raw_specifier, &referrer);
-        // }
 
         let result = match deno_core::resolve_import(raw_specifier, raw_referrer) {
             Ok(url) => Ok(url),
-            Err(err) => Err(ModuleLoaderError::from(JsErrorBox::from_err(err))),
+            Err(err) => match self.resolve_npm_module(raw_specifier, &referrer) {
+                Ok(url) => return Ok(url),
+                Err(err2) => {
+                    dai_println!(
+                        "Failed to fallback resoling npm module: {}, {}",
+                        raw_specifier,
+                        err2.to_string()
+                    );
+                    return Err(ModuleLoaderError::from(JsErrorBox::from_err(err)));
+                }
+            },
         };
 
         dai_println!("resolve request: {:?} -> {:?}", raw_specifier, result);
@@ -464,20 +533,21 @@ impl ModuleLoader for AiDenoModuleLoader {
         );
 
         let module_specifier = module_specifier.clone();
-        let maybe_referrer_clone = maybe_referrer.cloned();
+        let maybe_referrer = maybe_referrer.cloned();
         let loader = self.clone();
 
         ModuleLoadResponse::Async(Box::pin(async move {
             let actual_specifier = if module_specifier.scheme() == "npm" {
-                let referrer = maybe_referrer_clone.unwrap_or_else(|| {
+                let referrer = maybe_referrer.unwrap_or_else(|| {
                     let current_dir = std::env::current_dir().unwrap();
                     deno_core::resolve_path(".", &current_dir).unwrap()
                 });
 
-                let raw_specifier = format!("npm:{}", module_specifier.path());
                 loader
-                    .resolve_and_ensure_npm_module(&raw_specifier, &referrer)
+                    .resolve_and_ensure_npm_module(module_specifier.as_str(), &referrer)
                     .await?
+            } else if module_specifier.scheme() == "jsr" {
+                loader.ensure_jsr_module(&module_specifier).await?
             } else {
                 module_specifier.clone()
             };
