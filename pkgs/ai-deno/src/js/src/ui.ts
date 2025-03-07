@@ -1,12 +1,6 @@
-import { UINodeText } from "./types.ts";
-import { UINodeButton } from "./types.ts";
-import { UINodeTextInput } from "./types.ts";
-import { UINodeCheckbox } from "./types.ts";
-import { UINode, UINodeSlider } from "./types.ts";
-
 export const ui = {
   group: (
-    { direction = "horizontal" }: { direction?: "row" | "col" },
+    { direction = "row" }: { direction?: "row" | "col" },
     children: UINode[]
   ): UINode => ({
     type: "group",
@@ -33,4 +27,75 @@ export const ui = {
     ...props,
     type: "button",
   }),
+  select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect => ({
+    ...props,
+    selectedIndex: props.options.indexOf(props.value),
+    type: "select",
+  }),
+  separator: (): UISeparator => ({
+    type: "separator",
+  }),
 };
+
+export type UINodeGroup = {
+  type: "group";
+  direction: "col" | "row";
+  children: UINode[];
+};
+
+export type UINodeSlider = {
+  type: "slider";
+  key: string;
+  label: string;
+  dataType: "int" | "float";
+  min: number;
+  max: number;
+  value: number;
+};
+
+export type UINodeCheckbox = {
+  type: "checkbox";
+  key: string;
+  label: string;
+  checked: boolean;
+};
+
+export type UINodeTextInput = {
+  type: "textInput";
+  key: string;
+  label: string;
+  value: string;
+};
+
+export type UINodeText = {
+  type: "text";
+  text: string;
+};
+
+export type UINodeButton = {
+  type: "button";
+};
+
+export type UISelect = {
+  type: "select";
+  key: string;
+  label: string;
+  options: string[];
+  value: string;
+  selectedIndex: number;
+};
+
+export type UISeparator = {
+  type: "separator";
+};
+
+export type UINode =
+  | UINodeGroup
+  | UINodeSlider
+  | UINodeCheckbox
+  | UINodeTextInput
+  | UINodeText
+  | UINodeButton
+  | UISelect
+  | UISeparator
+  | null;

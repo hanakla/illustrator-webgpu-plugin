@@ -2,10 +2,10 @@
 
 #include "../../deps/imgui/imgui.h"
 
-static const float kMyDialogWidth = 300.0f;
+static const float kMyDialogWidth = 350.0f;
 
 #ifdef __APPLE__
-static const float kMyDialogHeight = 170.0f;
+static const float kMyDialogHeight = 180.0f;
 #else
 static const float kMyDialogHeight = 200.0f;
 #endif

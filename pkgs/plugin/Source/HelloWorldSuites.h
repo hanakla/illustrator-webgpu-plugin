@@ -19,5 +19,6 @@ extern "C" AIArtSetSuite*        sAIArtSet;
 extern "C" AIRasterizeSuite*     sAIRasterize;
 extern "C" AIRasterSuite*        sAIRaster;
 extern "C" AIDocumentSuite*      sAIDocument;
+extern "C" AIMenuSuite*          sAIMenu;
 
 #endif

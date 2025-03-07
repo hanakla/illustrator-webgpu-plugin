@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include "./libs/format.h"
+#include "./super-illustrator.h"
 #include "IllustratorSDK.h"
 #include "json.hpp"
 
@@ -155,30 +156,53 @@ std::string stringify_ASErr(ASErr& err) {
   }
 }
 
+void print_AIArt(AIArtHandle& art, std::string title) {
+  if (!AI_DENO_DEBUG) return;
+
+  auto [name, isDefault] = suai::art::getName(art);
+
+  std::ostringstream oss;
+
+  oss << "AIArt (" << title << "): " << std::endl;
+  oss << "  type: " << suai::art::getArtTypeName(art) << std::endl;
+  oss << "  name: " << name << " (isDefault: " << isDefault << ")" << std::flush;
+
+  csl(oss.str().c_str());
+}
+
 void print_AISlice(AISlice* slice, std::string title) {
   if (!AI_DENO_DEBUG) return;
-  std::cout << "AISlice (" << title << "): " << std::endl;
-  std::cout << "  top: " << slice->top << std::endl;
-  std::cout << "  left: " << slice->left << std::endl;
-  std::cout << "  right: " << slice->right << std::endl;
-  std::cout << "  bottom: " << slice->bottom << std::endl;
-  std::cout << "  back: " << slice->front << std::endl;
-  std::cout << "  back: " << slice->back << std::endl;
-  std::cout << std::endl;
+
+  std::ostringstream oss;
+
+  oss << "AISlice (" << title << "): " << std::endl;
+  oss << "  top: " << slice->top << std::endl;
+  oss << "  left: " << slice->left << std::endl;
+  oss << "  right: " << slice->right << std::endl;
+  oss << "  bottom: " << slice->bottom << std::endl;
+  oss << "  front: " << slice->front << std::endl;
+  oss << "  back: " << slice->back << std::endl;
+  oss << std::endl;
+
+  csl(oss.str().c_str());
 }
 
 void print_AITile(AITile* tile, std::string title) {
   if (!AI_DENO_DEBUG) return;
-  std::cout << "AITile (" << title << "): " << std::endl;
-  std::cout << "  bounds: { " << "top: " << tile->bounds.top
-            << ", left: " << tile->bounds.left << ", right: " << tile->bounds.right
-            << ", bottom: " << tile->bounds.bottom << " }" << std::endl;
-  std::cout << "  chnnelInterleave: " << arrayToString(tile->channelInterleave)
-            << std::endl;
-  std::cout << "  rowBytes: " << tile->rowBytes << std::endl;
-  std::cout << "  colBytes: " << tile->colBytes << std::endl;
-  std::cout << "  planeBytes: " << tile->planeBytes << std::endl;
-  std::cout << std::endl;
+
+  std::ostringstream oss;
+
+  oss << "AITile (" << title << "): " << std::endl;
+  oss << "  bounds: { " << "top: " << tile->bounds.top << ", left: " << tile->bounds.left
+      << ", right: " << tile->bounds.right << ", bottom: " << tile->bounds.bottom << " }"
+      << std::endl;
+  oss << "  chnnelInterleave: " << arrayToString(tile->channelInterleave) << std::endl;
+  oss << "  rowBytes: " << tile->rowBytes << std::endl;
+  oss << "  colBytes: " << tile->colBytes << std::endl;
+  oss << "  planeBytes: " << tile->planeBytes << std::endl;
+  oss << std::endl;
+
+  csl(oss.str().c_str());
 }
 
 void dbg_printPixels(

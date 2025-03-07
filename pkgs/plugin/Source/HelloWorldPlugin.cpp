@@ -75,6 +75,7 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
   short filterIndex = 0;
 
   csl("✨️ Init Live Effect");
+
   ai_deno::FunctionResult* effectResult = ai_deno::get_live_effects(aiDenoMain);
   if (!effectResult->success) {
     csl("Failed to get live effects");
@@ -177,6 +178,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   try {
     AIArtHandle art = message->art;
 
+    print_AIArt(art, "art");
+
     suai::ArtSet* artSet = new suai::ArtSet();
     artSet->AddArt(art);
 
@@ -221,23 +224,25 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     workTile.data     = new unsigned char[dataSize];
     workTile.rowBytes = width * bytes;
 
-    workTile.channelInterleave[0] = 1;
-    workTile.channelInterleave[1] = 2;
-    workTile.channelInterleave[2] = 3;
-    workTile.channelInterleave[3] = 0;
+    print_AITile(&workTile, "workTile(before)");
+
+    // to RGBA
+    workTile.channelInterleave[0] = 3;
+    workTile.channelInterleave[1] = 0;
+    workTile.channelInterleave[2] = 1;
+    workTile.channelInterleave[3] = 2;
 
     workTile.bounds = artSlice;
 
     error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
     CHKERR();
 
+    print_AITile(&workTile, "workTile(after)");
+
     const ai::uint32 totalPixels = width * height;
     const ai::uint32 pixelStride = workTile.colBytes;
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
-
-    print_AITile(&workTile, "workTile");
-    print_AISlice(&artSlice, "artSlice");
 
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
         .width       = width,
@@ -258,17 +263,45 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
     if (result->success && result->data != nullptr) {
       // clang-format off
-      std::cout << "Result: \n "
-          << "  width: " << result->data->width << "\n"
-          << "  height: " << result->data->height << "\n"
-          << "  byte_length: " << result->data->byte_length << "\n"
-          << "  data_ptr: " << std::hex << (void*)result->data->data_ptr << "\n"
-          << "  source_ptr: " << std::hex << (void*)pixelData << std::dec
-          << std::endl;
+      csl("Result: \n "
+          "  width: %d\n"
+          "  height: %d\n"
+          "  byte_length: %d\n"
+          "  data_ptr: %p\n"
+          "  source_ptr: %p",
+          result->data->width,
+          result->data->height,
+          result->data->byte_length,
+          result->data->data_ptr,
+          pixelData
+      );
       // clang-format on
 
       csl("Setting pointer");
-      workTile.data = result->data->data_ptr;
+      workTile.rowBytes = result->data->width * 4;
+      workTile.colBytes = 4;
+      workTile.data     = result->data->data_ptr;
+
+      auto widthDiff  = result->data->width - width;
+      auto heightDiff = result->data->height - height;
+
+      workTile.channelInterleave[0] = 1;
+      workTile.channelInterleave[1] = 2;
+      workTile.channelInterleave[2] = 3;
+      workTile.channelInterleave[3] = 0;
+
+      if (widthDiff != 0 || heightDiff != 0) {
+        csl("Resizing tile");
+        csl("  widthDiff: %d, heightDiff: %d", widthDiff, heightDiff);
+
+        // Centering
+        // workSlice.left   = artSlice.left -= widthDiff / 2;
+        // workSlice.right  = artSlice.right += widthDiff / 2;
+        // workSlice.top    = artSlice.top -= heightDiff / 2;
+        // workSlice.bottom = artSlice.bottom += heightDiff / 2;
+
+        // workTile.bounds = artSlice;
+      }
 
       csl("Disposing result");
       // ai_deno::dispose_do_live_effect_result(result);
@@ -279,16 +312,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         std::cout << "Effect: Different data pointer" << std::endl;
       }
 
-      // for (ai::uint32 i = 0; i < totalPixels * pixelStride; i += pixelStride) {
-      //   if (i + 3 >= totalPixels * pixelStride) break;
-
-      //   ai::uint8* pixel = pixelData + i;
-      //   pixel[0]         = 255;  // Red
-      //   pixel[1]         = 0;    // Green
-      //   pixel[2]         = 0;    // Blue
-      //   pixel[3]         = 255;  // Alpha
-      // }
-
+      // TODO:
+      // 受け取った画像が元の位置の中央を起点に、受け取ったサイズで描画されるようにする
       error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
       CHKERR();
 

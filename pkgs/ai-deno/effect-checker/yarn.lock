@@ -5,6 +5,15 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
+"@deno/vite-plugin@npm:^1.0.4":
+  version: 1.0.4
+  resolution: "@deno/vite-plugin@npm:1.0.4"
+  peerDependencies:
+    vite: 5.x || 6.x
+  checksum: 10c0/88bf158856dcf81104170da2effff7b1bd49a3593c509f98189a92700fb7f587e317f737e5610086abfef3f6c8e07de2dc2df51ae4494767954a99867bdb8b34
+  languageName: node
+  linkType: hard
+
 "@esbuild/aix-ppc64@npm:0.24.2":
   version: 0.24.2
   resolution: "@esbuild/aix-ppc64@npm:0.24.2"
@@ -518,6 +527,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "effect-checker@workspace:."
   dependencies:
+    "@deno/vite-plugin": "npm:^1.0.4"
     "@types/node": "npm:^22.13.4"
     vite: "npm:^6.1.1"
   languageName: unknown

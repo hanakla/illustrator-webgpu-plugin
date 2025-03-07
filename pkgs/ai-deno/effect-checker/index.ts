@@ -9,7 +9,7 @@ const effects = new Map([
     chromaticAberration,
     [
       chromaticAberration,
-      { colorModde: "rgb", strength: 10, angle: 40, opacity: 100 },
+      { colorModde: "rgb", strength: 1, angle: 40, opacity: 100, padding: 0 },
     ],
   ],
 ]);

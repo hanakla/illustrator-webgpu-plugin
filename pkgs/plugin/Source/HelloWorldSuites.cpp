@@ -14,9 +14,10 @@ extern "C" AIArtSetSuite*        sAIArtSet        = nullptr;
 extern "C" AIRasterizeSuite*     sAIRasterize     = nullptr;
 extern "C" AIRasterSuite*        sAIRaster        = nullptr;
 extern "C" AIDocumentSuite*      sAIDocument      = nullptr;
+extern "C" AIMenuSuite*          sAIMenu          = nullptr;
 
 // Import suites
-ImportSuite                      gImportSuites[] = {
+ImportSuite gImportSuites[] = {
     {kSPBlocksSuite, kSPBlocksSuiteVersion, &sSPBlocks},
     {kAIBlockSuite, kAIBlockSuiteVersion, &sAIBlock},
     {kAIUndoSuite, kAIUndoSuiteVersion, &sAIUndo},
@@ -28,5 +29,6 @@ ImportSuite                      gImportSuites[] = {
     {kAIRasterizeSuite, kAIRasterizeSuiteVersion, &sAIRasterize},
     {kAIRasterSuite, kAIRasterSuiteVersion, &sAIRaster},
     {kAIDocumentSuite, kAIDocumentSuiteVersion, &sAIDocument},
+    {kAIMenuSuite, kAIMenuSuiteVersion, &sAIMenu},
     {nil, 0, nil}
 };

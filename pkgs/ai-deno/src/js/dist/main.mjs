@@ -5,7 +5,7 @@ function definePlugin(plugin) {
 
 // src/js/src/ui.ts
 var ui = {
-  group: ({ direction = "horizontal" }, children) => ({
+  group: ({ direction = "row" }, children) => ({
     type: "group",
     direction,
     children
@@ -29,6 +29,14 @@ var ui = {
   button: (props) => ({
     ...props,
     type: "button"
+  }),
+  select: (props) => ({
+    ...props,
+    selectedIndex: props.options.indexOf(props.value),
+    type: "select"
+  }),
+  separator: () => ({
+    type: "separator"
   })
 };
 
@@ -48,7 +56,6 @@ var blurEffect = definePlugin({
     }
   },
   initDoLiveEffect: async () => {
-    const { createCanvas } = await import("jsr:@gfx/canvas");
     const device = await navigator.gpu.requestAdapter().then((adapter) => adapter.requestDevice());
     const shaderCode = `
       struct VertexOutput {
@@ -87,7 +94,6 @@ var blurEffect = definePlugin({
       }
     `;
     return {
-      createCanvas,
       device,
       shaderCode,
       bindGroupLayout: device.createBindGroupLayout({
@@ -128,7 +134,6 @@ var blurEffect = definePlugin({
     verticalPipeline,
     pipelineLayout
   }, params, input) => {
-    const canvas = createCanvas(100, 100);
     console.time("[deno_ai(js)] gaussianBlurWebGPU");
     const result = await gaussianBlurWebGPU(input, params.radius);
     console.timeEnd("[deno_ai(js)] gaussianBlurWebGPU");
@@ -298,10 +303,11 @@ function generateGaussianKernel(radius) {
 }
 
 // src/js/src/live-effects/utils.ts
+import { decodeBase64 } from "jsr:@std/encoding@1.0.7";
 var createCanvasImpl = typeof window === "undefined" ? async (width, height) => {
   const { createCanvas } = await import("jsr:@gfx/canvas");
   return createCanvas(width, height);
-} : (width, height) => {
+} : async (width, height) => {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -309,15 +315,27 @@ var createCanvasImpl = typeof window === "undefined" ? async (width, height) => 
 };
 var createImageDataImpl = typeof window === "undefined" ? async (data, width, height, settings) => {
   const { ImageData: ImageData2 } = await import("jsr:@gfx/canvas");
-  return new ImageData2(
+  return new ImageData2(data, width, height, settings);
+} : async (data, width, height, settings) => {
+  return new ImageData(
     data,
     width,
     height,
     settings
   );
-} : (data, width, height, settings) => {
-  return new ImageData(data, width, height, settings);
 };
+async function toBlob(canvas, mime, quality) {
+  if (typeof window === "undefined") {
+    mime = mime.replace(/^image\//, "");
+    const b64 = canvas.toDataURL(mime, quality).split(",")[1];
+    const buffer = decodeBase64(b64);
+    return new Blob([buffer], { type: mime });
+  } else {
+    return new Promise((r) => {
+      canvas.toBlob((b) => r(b), mime, quality);
+    });
+  }
+}
 function getNearestAligned256Resolution(width, height, bytesPerPixel = 4) {
   const currentBytesPerRow = width * bytesPerPixel;
   const targetBytesPerRow = Math.ceil(currentBytesPerRow / 256) * 256;
@@ -336,16 +354,48 @@ async function adjustImageToNearestAligned256Resolution(imageDataLike) {
   return resized;
 }
 async function resizeImageData(data, width, height) {
-  const canvas = createCanvasImpl(data.width, data.height);
+  const canvas = await createCanvasImpl(data.width, data.height);
   const ctx = canvas.getContext("2d");
-  const imgData = createImageDataImpl(data.data, data.width, data.height, {
-    colorSpace: "srgb"
-  });
+  const imgData = await createImageDataImpl(
+    data.data,
+    data.width,
+    data.height,
+    {
+      colorSpace: "srgb"
+    }
+  );
   ctx.putImageData(imgData, 0, 0);
-  const resizedCanvas = createCanvasImpl(width, height);
+  const resizedCanvas = await createCanvasImpl(width, height);
   const resizedCtx = resizedCanvas.getContext("2d");
   resizedCtx.drawImage(canvas, 0, 0, width, height);
   return resizedCtx.getImageData(0, 0, width, height);
+}
+async function paddingImageData(data, padding) {
+  const width = data.width + padding * 2;
+  const height = data.height + padding * 2;
+  const canvas = await createCanvasImpl(width, height);
+  const ctx = canvas.getContext("2d");
+  const imgData = await createImageDataImpl(
+    data.data,
+    data.width,
+    data.height,
+    {
+      colorSpace: "srgb"
+    }
+  );
+  ctx.putImageData(imgData, padding, padding);
+  return ctx.getImageData(0, 0, width, height);
+}
+async function toPng(imgData) {
+  const canvas = await createCanvasImpl(imgData.width, imgData.height);
+  const ctx = canvas.getContext("2d");
+  const img = await createImageDataImpl(
+    imgData.data,
+    imgData.width,
+    imgData.height
+  );
+  ctx.putImageData(img, 0, 0);
+  return toBlob(canvas, "image/png", 100);
 }
 
 // src/js/src/live-effects/chromatic-aberration.ts
@@ -360,6 +410,7 @@ var chromaticAberration = definePlugin({
   paramSchema: {
     colorMode: {
       type: "string",
+      enum: ["rgb", "cmyk"],
       default: "rgb"
     },
     strength: {
@@ -372,27 +423,47 @@ var chromaticAberration = definePlugin({
     },
     opacity: {
       type: "real",
-      default: 1
+      default: 100
+    },
+    blendMode: {
+      type: "string",
+      enum: ["over", "under"],
+      default: "under"
+    },
+    padding: {
+      type: "int",
+      default: 0
     }
   },
   editLiveEffectParameters: (params) => JSON.stringify(params),
   renderUI: (params) => {
     return ui.group({ direction: "col" }, [
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Color Mode" }),
-        ui.textInput({ key: "colorMode", label: "Color Mode", value: params.colorMode })
+        // ui.text({ text: "Color Mode"}),
+        ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: ["rgb", "cmyk"] })
       ]),
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Strength" }),
-        ui.slider({ key: "strength", label: "Strength", dataType: "float", min: 0, max: 400, value: params.strength })
+        // ui.text({ text: "Strength"}),
+        ui.slider({ key: "strength", label: "Strength", dataType: "float", min: 0, max: 200, value: params.strength })
       ]),
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Angle" }),
+        // ui.text({ text: "Angle"}),
         ui.slider({ key: "angle", label: "Angle", dataType: "float", min: 0, max: 360, value: params.angle })
       ]),
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Opacity" }),
-        ui.slider({ key: "opacity", label: "Opacity", dataType: "float", min: 0, max: 1, value: params.opacity })
+        // ui.text({ text: "Opacity"}),
+        ui.slider({ key: "opacity", label: "Opacity", dataType: "float", min: 0, max: 100, value: params.opacity })
+      ]),
+      ui.group({ direction: "row" }, [
+        // ui.text({ text: "Blend Mode"}),
+        ui.select({ key: "blendMode", label: "Blend Mode", value: params.blendMode, options: ["over", "under"] })
+      ]),
+      ui.separator(),
+      ui.group({ direction: "row" }, [
+        ui.text({ text: "Debugging parameters" }),
+        ui.group({ direction: "col" }, [
+          ui.slider({ key: "padding", label: "Padding", dataType: "int", min: 0, max: 200, value: params.padding })
+        ])
       ])
     ]);
   },
@@ -496,6 +567,9 @@ var chromaticAberration = definePlugin({
           }
       `
     });
+    device.addEventListener("lost", (e) => {
+      console.error(e);
+    });
     device.addEventListener("uncapturederror", (e) => {
       console.error(e.error);
     });
@@ -510,18 +584,19 @@ var chromaticAberration = definePlugin({
     return { device, pipeline };
   },
   doLiveEffect: async ({ device, pipeline }, params, imgData) => {
-    console.log("Chromatic Aberration V1", params, imgData);
-    const orignalSize = { width: imgData.width, height: imgData.height };
-    imgData = await adjustImageToNearestAligned256Resolution(imgData);
+    console.log("Chromatic Aberration V1", params);
+    const padImg = await paddingImageData(imgData, params.padding);
+    imgData = await adjustImageToNearestAligned256Resolution(padImg);
+    const width = imgData.width, height = imgData.height;
     const texture = device.createTexture({
       label: "Input Texture",
-      size: [imgData.width, imgData.height],
+      size: [width, height],
       format: "rgba8unorm",
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
     });
     const resultTexture = device.createTexture({
       label: "Result Texture",
-      size: [imgData.width, imgData.height],
+      size: [width, height],
       format: "rgba8unorm",
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
     });
@@ -560,21 +635,22 @@ var chromaticAberration = definePlugin({
     });
     const stagingBuffer = device.createBuffer({
       label: "Staging Buffer",
-      size: imgData.width * imgData.height * 4,
+      size: width * height * 4,
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
     const uniformData = new ArrayBuffer(20);
     new Float32Array(uniformData, 0, 1)[0] = params.strength;
     new Float32Array(uniformData, 4, 1)[0] = params.angle;
-    new Uint32Array(uniformData, 8, 1)[0] = params.colorMode === "RGB" ? 0 : 1;
+    new Uint32Array(uniformData, 8, 1)[0] = params.colorMode === "rgb" ? 0 : 1;
     new Float32Array(uniformData, 12, 1)[0] = params.opacity / 100;
     new Uint32Array(uniformData, 16, 1)[0] = 0;
+    new Uint32Array(uniformData, 16, 1)[0] = params.blendMode === "over" ? 0 : 1;
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
     device.queue.writeTexture(
       { texture },
       imgData.data,
-      { bytesPerRow: imgData.width * 4, rowsPerImage: imgData.height },
-      [imgData.width, imgData.height]
+      { bytesPerRow: width * 4, rowsPerImage: height },
+      [width, height]
     );
     const commandEncoder = device.createCommandEncoder({
       label: "Main Command Encoder"
@@ -585,14 +661,14 @@ var chromaticAberration = definePlugin({
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(
-      Math.ceil(imgData.width / 16),
-      Math.ceil(imgData.height / 16)
+      Math.ceil(width / 16),
+      Math.ceil(height / 16)
     );
     computePass.end();
     commandEncoder.copyTextureToBuffer(
       { texture: resultTexture },
-      { buffer: stagingBuffer, bytesPerRow: imgData.width * 4 },
-      [imgData.width, imgData.height]
+      { buffer: stagingBuffer, bytesPerRow: width * 4 },
+      [width, height]
     );
     device.queue.submit([commandEncoder.finish()]);
     await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -601,14 +677,10 @@ var chromaticAberration = definePlugin({
     stagingBuffer.unmap();
     const resultImageData = new ImageData(
       new Uint8ClampedArray(resultData),
-      imgData.width,
-      imgData.height
+      width,
+      height
     );
-    return await resizeImageData(
-      resultImageData,
-      orignalSize.width,
-      orignalSize.height
-    );
+    return await resizeImageData(resultImageData, padImg.width, padImg.height);
   }
 });
 
@@ -638,10 +710,10 @@ var randomNoiseEffect = {
 };
 
 // src/js/src/main.ts
-import { expandGlobSync, ensureDir } from "jsr:@std/fs@1.0.14";
-import { toFileUrl, join } from "jsr:@std/path@1.0.8";
+import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
+import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { homedir } from "node:os";
-var EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".deno_ai/effects")));
+var EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 var allEffects = [
   randomNoiseEffect,
   blurEffect,
@@ -656,14 +728,19 @@ await Promise.all(
 );
 var loadEffects = async () => {
   console.log("[deno_ai(js)] loadEffects", EFFECTS_DIR);
-  await ensureDir(EFFECTS_DIR);
+  await ensureDirSync(EFFECTS_DIR);
   console.log("[deno_ai(js)] loadEffects ensuredir");
+  console.log(
+    "[deno_ai(js)] loadEffects",
+    `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
+  );
   const metas = [
-    ...expandGlobSync(`${EFFECTS_DIR}/*/meta.json`, {
+    ...expandGlobSync(`${fromFileUrl(EFFECTS_DIR)}/*/meta.json`, {
       followSymlinks: true,
       includeDirs: false
     })
   ];
+  console.log("[deno_ai(js)] loadEffects metas", metas);
   await Promise.allSettled(
     metas.map((dir) => {
       console.log("dir", dir);
@@ -701,6 +778,15 @@ var doLiveEffect = async (id, state, width, height, data) => {
     console.error("Effect not initialized", id);
     return null;
   }
+  console.log(Deno.cwd());
+  Deno.writeFileSync(
+    "buffer.png",
+    Uint8Array.from([
+      ...new Uint8Array(
+        await (await toPng({ data, width, height })).arrayBuffer()
+      )
+    ])
+  );
   console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
     const result = await effect.doLiveEffect(

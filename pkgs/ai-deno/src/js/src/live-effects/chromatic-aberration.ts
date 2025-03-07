@@ -3,6 +3,7 @@ import { definePlugin } from "../types.ts";
 import { ui } from "../ui.ts";
 import {
   adjustImageToNearestAligned256Resolution,
+  paddingImageData,
   resizeImageData,
 } from "./utils.ts";
 
@@ -17,6 +18,7 @@ export const chromaticAberration = definePlugin({
   paramSchema: {
     colorMode: {
       type: "string",
+      enum: ["rgb", "cmyk"],
       default: "rgb",
     },
     strength: {
@@ -29,7 +31,16 @@ export const chromaticAberration = definePlugin({
     },
     opacity: {
       type: "real",
-      default: 1.0,
+      default: 100,
+    },
+    blendMode: {
+      type: "string",
+      enum: ["over", "under"],
+      default: "under",
+    },
+    padding: {
+      type: "int",
+      default: 0,
     },
   },
   editLiveEffectParameters: (params) => JSON.stringify(params),
@@ -37,20 +48,33 @@ export const chromaticAberration = definePlugin({
     // prettier-ignore
     return ui.group({ direction: "col" }, [
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Color Mode"}),
-        ui.textInput({ key: "colorMode", label: "Color Mode", value: params.colorMode }),
+        // ui.text({ text: "Color Mode"}),
+        ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: ['rgb', 'cmyk'] }),
       ]),
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Strength"}),
-        ui.slider({ key: "strength", label: "Strength", dataType: 'float', min: 0, max: 400, value: params.strength }),
+        // ui.text({ text: "Strength"}),
+        ui.slider({ key: "strength", label: "Strength", dataType: 'float', min: 0, max: 200, value: params.strength }),
       ]),
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Angle"}),
+        // ui.text({ text: "Angle"}),
         ui.slider({ key: "angle", label: "Angle", dataType: 'float', min: 0, max: 360, value: params.angle }),
       ]),
       ui.group({ direction: "row" }, [
-        ui.text({ text: "Opacity"}),
-        ui.slider({ key: "opacity", label: "Opacity", dataType: 'float', min: 0, max: 1, value: params.opacity }),
+        // ui.text({ text: "Opacity"}),
+        ui.slider({ key: "opacity", label: "Opacity", dataType: 'float', min: 0, max: 100, value: params.opacity }),
+      ]),
+      ui.group({ direction: "row" }, [
+        // ui.text({ text: "Blend Mode"}),
+        ui.select({ key: "blendMode", label: "Blend Mode", value: params.blendMode, options: ['over', 'under'] }),
+      ]),
+
+      ui.separator(),
+
+      ui.group({ direction: "row" }, [
+        ui.text({ text: "Debugging parameters" }),
+        ui.group({ direction: "col" }, [
+          ui.slider({ key: "padding", label: "Padding", dataType: 'int', min: 0, max: 200, value: params.padding }),
+        ]),
       ]),
     ])
   },
@@ -157,6 +181,10 @@ export const chromaticAberration = definePlugin({
       `,
     });
 
+    device.addEventListener("lost", (e) => {
+      console.error(e);
+    });
+
     device.addEventListener("uncapturederror", (e) => {
       console.error(e.error);
     });
@@ -173,16 +201,21 @@ export const chromaticAberration = definePlugin({
     return { device, pipeline };
   },
   doLiveEffect: async ({ device, pipeline }, params, imgData) => {
-    console.log("Chromatic Aberration V1", params, imgData);
+    console.log("Chromatic Aberration V1", params);
     // const size = Math.max(imgData.width, imgData.height);
 
-    const orignalSize = { width: imgData.width, height: imgData.height };
-    imgData = await adjustImageToNearestAligned256Resolution(imgData);
+    const padImg = await paddingImageData(imgData, params.padding);
+
+    // const orignalSize = { width: imgData.width, height: imgData.height };
+    imgData = await adjustImageToNearestAligned256Resolution(padImg);
+
+    const width = imgData.width,
+      height = imgData.height;
 
     // Create textures
     const texture = device.createTexture({
       label: "Input Texture",
-      size: [imgData.width, imgData.height],
+      size: [width, height],
       format: "rgba8unorm",
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
@@ -192,7 +225,7 @@ export const chromaticAberration = definePlugin({
 
     const resultTexture = device.createTexture({
       label: "Result Texture",
-      size: [imgData.width, imgData.height],
+      size: [width, height],
       format: "rgba8unorm",
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
     });
@@ -235,7 +268,7 @@ export const chromaticAberration = definePlugin({
 
     const stagingBuffer = device.createBuffer({
       label: "Staging Buffer",
-      size: imgData.width * imgData.height * 4,
+      size: width * height * 4,
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
@@ -243,19 +276,19 @@ export const chromaticAberration = definePlugin({
     const uniformData = new ArrayBuffer(20); // 4 floats + 1 uint
     new Float32Array(uniformData, 0, 1)[0] = params.strength;
     new Float32Array(uniformData, 4, 1)[0] = params.angle;
-    new Uint32Array(uniformData, 8, 1)[0] = params.colorMode === "RGB" ? 0 : 1;
+    new Uint32Array(uniformData, 8, 1)[0] = params.colorMode === "rgb" ? 0 : 1;
     new Float32Array(uniformData, 12, 1)[0] = params.opacity / 100;
     new Uint32Array(uniformData, 16, 1)[0] = 0;
-    // new Uint32Array(uniformData, 16, 1)[0] =
-    //   params.blendMode === "over" ? 0 : 1;
+    new Uint32Array(uniformData, 16, 1)[0] =
+      params.blendMode === "over" ? 0 : 1;
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
     // Update source texture
     device.queue.writeTexture(
       { texture },
       imgData.data,
-      { bytesPerRow: imgData.width * 4, rowsPerImage: imgData.height },
-      [imgData.width, imgData.height]
+      { bytesPerRow: width * 4, rowsPerImage: height },
+      [width, height]
     );
 
     // Execute compute shader
@@ -269,15 +302,15 @@ export const chromaticAberration = definePlugin({
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(
-      Math.ceil(imgData.width / 16),
-      Math.ceil(imgData.height / 16)
+      Math.ceil(width / 16),
+      Math.ceil(height / 16)
     );
     computePass.end();
 
     commandEncoder.copyTextureToBuffer(
       { texture: resultTexture },
-      { buffer: stagingBuffer, bytesPerRow: imgData.width * 4 },
-      [imgData.width, imgData.height]
+      { buffer: stagingBuffer, bytesPerRow: width * 4 },
+      [width, height]
     );
 
     device.queue.submit([commandEncoder.finish()]);
@@ -290,14 +323,10 @@ export const chromaticAberration = definePlugin({
 
     const resultImageData = new ImageData(
       new Uint8ClampedArray(resultData),
-      imgData.width,
-      imgData.height
+      width,
+      height
     );
 
-    return await resizeImageData(
-      resultImageData,
-      orignalSize.width,
-      orignalSize.height
-    );
+    return await resizeImageData(resultImageData, padImg.width, padImg.height);
   },
 });

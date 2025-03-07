@@ -131,17 +131,18 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) ->
 
     dai_println!("Load module");
     let module = Module::from_string("main.js", include_str!("./js/dist/main.mjs"));
+    // Allow to crash
     let handle = runtime.attach_module(&module).unwrap();
 
-    let main = &mut AiMain {
+    let mut boxed_main = Box::new(AiMain {
         main_runtime: runtime,
         main_module: handle,
         ai_alert: _ai_alert,
-    };
+    });
 
-    execute_export_function_and_raw_return(main, "loadEffects", |scope| Ok(vec![]));
+    execute_export_function_and_raw_return(&mut *boxed_main, "loadEffects", |scope| Ok(vec![]));
 
-    Box::into_raw(Box::new(main)) as OpaqueAiMain
+    Box::into_raw(boxed_main) as OpaqueAiMain
 }
 
 #[no_mangle]

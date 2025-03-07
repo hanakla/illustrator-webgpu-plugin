@@ -1,6 +1,7 @@
 export type ParameterSchema = {
   [name: string]: {
     type: "real" | "int" | "bool" | "string";
+    enum?: any[];
     default: any;
   };
 };
@@ -16,54 +17,6 @@ export type ParameterSchemaToState<T extends ParameterSchema> = {
     ? string
     : never;
 };
-
-export type UINodeGroup = {
-  type: "group";
-  direction: "col" | "row";
-  children: UINode[];
-};
-
-export type UINodeSlider = {
-  type: "slider";
-  key: string;
-  label: string;
-  dataType: "int" | "float";
-  min: number;
-  max: number;
-  value: number;
-};
-
-export type UINodeCheckbox = {
-  type: "checkbox";
-  key: string;
-  label: string;
-  checked: boolean;
-};
-
-export type UINodeTextInput = {
-  type: "textInput";
-  key: string;
-  label: string;
-  value: string;
-};
-
-export type UINodeText = {
-  type: "text";
-  text: string;
-};
-
-export type UINodeButton = {
-  type: "button";
-};
-
-export type UINode =
-  | UINodeGroup
-  | UINodeSlider
-  | UINodeCheckbox
-  | UINodeTextInput
-  | UINodeText
-  | UINodeButton
-  | null;
 
 export enum StyleFilterFlag {
   /** Applied by default before the object is painted with fill or stroke. */

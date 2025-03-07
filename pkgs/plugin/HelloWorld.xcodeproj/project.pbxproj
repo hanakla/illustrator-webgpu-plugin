@@ -33,6 +33,7 @@
 		A5A068AA2D637068006BE835 /* imgui_impl_osx.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5A067932D63700D006BE835 /* imgui_impl_osx.mm */; };
 		A5ACCD822D6F017A00069E63 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5ACCD812D6F017A00069E63 /* Security.framework */; };
 		A5ACCD842D6F01A000069E63 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */; };
+		A5AFE2E62D7B2A7E0047FC02 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */; };
 		A5F9AB0D2D6376C7007EE38C /* imgui.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A068892D63700D006BE835 /* imgui.cpp */; };
 		A5F9AB0E2D6376C7007EE38C /* imgui_draw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A0688B2D63700D006BE835 /* imgui_draw.cpp */; };
 		A5F9AB0F2D6376C7007EE38C /* imgui_tables.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A0688D2D63700D006BE835 /* imgui_tables.cpp */; };
@@ -344,6 +345,7 @@
 		A5A068962D63700D006BE835 /* Metal.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Metal.hpp; sourceTree = "<group>"; };
 		A5ACCD812D6F017A00069E63 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		A5F9AB112D637800007EE38C /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		A5F9AB372D63A3DE007EE38C /* super-illustrator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "super-illustrator.h"; path = "Source/super-illustrator.h"; sourceTree = "<group>"; };
 		A5F9AB392D63AC6A007EE38C /* consts.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = consts.h; path = Source/consts.h; sourceTree = "<group>"; };
@@ -377,6 +379,7 @@
 				A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */,
 				A5ACCD822D6F017A00069E63 /* Security.framework in Frameworks */,
 				A5A0661E2D633B13006BE835 /* MetalKit.framework in Frameworks */,
+				A5AFE2E62D7B2A7E0047FC02 /* AppKit.framework in Frameworks */,
 				A5ACCD842D6F01A000069E63 /* SystemConfiguration.framework in Frameworks */,
 				C4A3F955134C5AA500128D2D /* Cocoa.framework in Frameworks */,
 			);
@@ -1229,6 +1232,7 @@
 		C4A3F94D134C5A7F00128D2D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */,
 				A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */,
 				A5ACCD812D6F017A00069E63 /* Security.framework */,
 				A5F9AB112D637800007EE38C /* GameController.framework */,

@@ -3,8 +3,7 @@
   "specifiers": {
     "jsr:@denosaurs/plug@1": "1.0.5",
     "jsr:@denosaurs/plug@1.0.5": "1.0.5",
-    "jsr:@gfx/canvas@*": "0.5.6",
-    "jsr:@gfx/canvas@0.5.6": "0.5.6",
+    "jsr:@gfx/canvas@*": "0.5.8",
     "jsr:@std/assert@0.214": "0.214.0",
     "jsr:@std/assert@0.217": "0.217.0",
     "jsr:@std/encoding@0.214": "0.214.0",
@@ -13,11 +12,9 @@
     "jsr:@std/fmt@0.214": "0.214.0",
     "jsr:@std/fs@0.214": "0.214.0",
     "jsr:@std/fs@0.217.0": "0.217.0",
-    "jsr:@std/fs@1.0.14": "1.0.14",
     "jsr:@std/path@0.214": "0.214.0",
     "jsr:@std/path@0.217": "0.217.0",
-    "jsr:@std/path@0.217.0": "0.217.0",
-    "jsr:@std/path@^1.0.8": "1.0.8"
+    "jsr:@std/path@0.217.0": "0.217.0"
   },
   "jsr": {
     "@denosaurs/plug@1.0.5": {
@@ -29,8 +26,8 @@
         "jsr:@std/path@0.214"
       ]
     },
-    "@gfx/canvas@0.5.6": {
-      "integrity": "4f34b91daca182fb422e308692a5fa54c2f638d2e46c587a3974c1f9233407d1",
+    "@gfx/canvas@0.5.8": {
+      "integrity": "a61c80292528e7433d428556b494a0ea496dd8e6abd4a338b8b25fc04e46ea3e",
       "dependencies": [
         "jsr:@denosaurs/plug@1",
         "jsr:@denosaurs/plug@1.0.5",
@@ -71,12 +68,6 @@
         "jsr:@std/path@0.217"
       ]
     },
-    "@std/fs@1.0.14": {
-      "integrity": "1e84bf0b95fe08f41f1f4aea9717bbf29f45408a56ce073b0114474ce1c9fccf",
-      "dependencies": [
-        "jsr:@std/path@^1.0.8"
-      ]
-    },
     "@std/path@0.214.0": {
       "integrity": "d5577c0b8d66f7e8e3586d864ebdf178bb326145a3611da5a51c961740300285",
       "dependencies": [
@@ -88,17 +79,14 @@
       "dependencies": [
         "jsr:@std/assert@0.217"
       ]
-    },
-    "@std/path@1.0.8": {
-      "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
     }
   },
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@napi-rs/canvas@~0.1.67",
-        "npm:tsup@^8.3.6",
-        "npm:typescript@^5.7.3"
+        "npm:@deno/vite-plugin@^1.0.4",
+        "npm:@types/node@^22.13.4",
+        "npm:vite@^6.1.1"
       ]
     }
   }

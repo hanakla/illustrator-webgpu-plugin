@@ -9,6 +9,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: "hanakla/illustrator-sdk"
+
+      - run: pwd
+
       - run: cd pkgs/plugin
 
       - name: Select Xcode version

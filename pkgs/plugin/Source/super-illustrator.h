@@ -120,6 +120,15 @@ namespace suai {
     RasterSettingOption       options      = RasterSettingOption();
   };
 
+  struct RasterRecord {
+    ai::uint16 flags;
+    AIRect     bounds;
+    ai::int32  byteWidth;
+    ai::int16  colorSpace;
+    ai::int16  bitsPerPixel;
+    ai::int16  originalColorSpace;
+  };
+
   AIRasterizeSettings createAIRasterSetting(RasterSettingsInit init) {
     RasterSettingOption options = init.options;
 
@@ -177,6 +186,17 @@ namespace suai {
     settings.options = (AIRasterizeOptions)optionVal;
 
     return settings;
+  }
+
+  AIRasterRecord* createAIRasterInfo(RasterRecord info) {
+    AIRasterRecord* rasterInfo;
+    rasterInfo->flags              = info.flags;
+    rasterInfo->bounds             = info.bounds;
+    rasterInfo->byteWidth          = info.byteWidth;
+    rasterInfo->colorSpace         = info.colorSpace;
+    rasterInfo->bitsPerPixel       = info.bitsPerPixel;
+    rasterInfo->originalColorSpace = info.originalColorSpace;
+    return rasterInfo;
   }
 
   class ArtSet {
@@ -244,6 +264,13 @@ namespace suai {
       short type;
       sAIArt->GetArtType(art, &type);
       return type;
+    }
+
+    std::tuple<std::string, bool> getName(AIArtHandle art) {
+      ai::UnicodeString name;
+      ASBoolean         isDefaultName;
+      sAIArt->GetArtName(art, name, &isDefaultName);
+      return {str::toUtf8StdString(name), isDefaultName == 1};
     }
 
     std::string getArtTypeName(AIArtHandle art) {

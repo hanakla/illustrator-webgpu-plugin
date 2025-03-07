@@ -18,6 +18,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     json&                        renderTree,
     ImGuiWindowFlags             windowFlags,
     ImGuiModal::OnChangeCallback onChangeCallback
+//    ImVec2*                      currentSize
 ) {
   ModalStatusCode resultStatus = ModalStatusCode::None;
 
@@ -47,15 +48,16 @@ ModalStatusCode AiDenoImGuiRenderComponents(
         std::string textString = node["text"].get<std::string>();
         const char* text       = textString.c_str();
         ImGui::Text("%s", text);
+
       } else if (type == "textInput") {
         std::string keyStr = node["key"].get<std::string>();
         const char* key    = keyStr.c_str();
         std::string value  = node["value"].get<std::string>();
 
         if (ImGui::InputText(key, &value, ImGuiInputTextFlags_None)) {
-          onChangeCallback(json::object({{node["key"].get<std::string>(), value}
-          }));
+          onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
         }
+
       } else if (type == "slider") {
         std::string dataType = node["dataType"].get<std::string>();
         std::string label    = node["label"].get<std::string>();
@@ -65,19 +67,28 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
         if (dataType == "int") {
           if (ImGui::SliderInt(label.c_str(), &value, min, max)) {
-            onChangeCallback(
-                json::object({{node["key"].get<std::string>(), value}})
-            );
+            onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
           }
         } else if (dataType == "float") {
           float fvalue = value;
           if (ImGui::SliderFloat(label.c_str(), &fvalue, min, max)) {
             value = fvalue;
-            onChangeCallback(
-                json::object({{node["key"].get<std::string>(), value}})
-            );
+            onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
           }
         }
+      } else if (type == "select") {
+        std::string label         = node["label"].get<std::string>();
+        std::string key           = node["key"].get<std::string>();
+        int         selectedIndex = node["selectedIndex"].get<int>();
+        auto [items, count]       = parseSelectOptions(node["options"]);
+
+        if (ImGui::Combo(label.c_str(), &selectedIndex, items, count, -1)) {
+          onChangeCallback(json::object({{key, items[selectedIndex]}}));
+        }
+
+        freeSelectOptions(items, count);
+      } else if (type == "separator") {
+        ImGui::Separator();
       }
     };
 
@@ -92,8 +103,10 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       resultStatus = ModalStatusCode::OK;
     }
 
+//    if (currentSize != nullptr) { *currentSize = ImGui::GetWindowSize(); }
+
     ImGui::End();
-  }
+  };
 
   // Rendering
   ImGui::Render();

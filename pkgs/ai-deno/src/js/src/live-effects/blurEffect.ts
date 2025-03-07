@@ -20,8 +20,6 @@ export const blurEffect = definePlugin({
     },
   },
   initDoLiveEffect: async () => {
-    const { createCanvas } = await import("jsr:@gfx/canvas");
-
     const device = await navigator.gpu
       .requestAdapter()
       .then((adapter) => adapter!.requestDevice());
@@ -64,7 +62,6 @@ export const blurEffect = definePlugin({
     `;
 
     return {
-      createCanvas,
       device,
       shaderCode,
       bindGroupLayout: device.createBindGroupLayout({
@@ -110,8 +107,6 @@ export const blurEffect = definePlugin({
     params,
     input
   ) => {
-    const canvas = createCanvas(100, 100);
-
     console.time("[deno_ai(js)] gaussianBlurWebGPU");
     const result = await gaussianBlurWebGPU(input, params.radius);
     console.timeEnd("[deno_ai(js)] gaussianBlurWebGPU");

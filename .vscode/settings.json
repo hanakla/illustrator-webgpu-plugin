@@ -103,7 +103,8 @@
     "forward_list": "cpp",
     "span": "cpp",
     "valarray": "cpp",
-    "regex": "cpp"
+    "regex": "cpp",
+    "ranges": "cpp"
   },
   "clang-format.language.objective-c.style": "",
   "clang-format.language.objective-cpp.fallbackStyle": "",

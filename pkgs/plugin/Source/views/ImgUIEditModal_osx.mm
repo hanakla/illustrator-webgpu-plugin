@@ -60,10 +60,14 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 
     // append "| NSWindowStyleMaskResizable" if it needs
     NSWindow* window = this->window = [[NSWindow alloc] initWithContentRect:frame
-                                                                  styleMask:NSWindowStyleMaskTitled
+                                                                  styleMask:NSWindowStyleMaskTitled |
+                                                                            NSWindowStyleMaskClosable |
+                                                                            NSWindowStyleMaskMiniaturizable |
+                                                                            NSWindowStyleMaskResizable
                                                                     backing:NSBackingStoreBuffered
                                                                       defer:YES];
-    window.titlebarAppearsTransparent = true;
+    // window.titlebarAppearsTransparent = true;
+    window.titleVisibility = NSWindowTitleHidden;
 
     WindowController* windowController = [[WindowController alloc] initWithWindow:window];
     this->controller = windowController;
@@ -249,11 +253,15 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   ImGui_ImplMetal_NewFrame(renderPassDescriptor);
   ImGui_ImplOSX_NewFrame(self);
 
+//  ImVec2 windowSize;
   resultStatus = AiDenoImGuiRenderComponents(
     self->currentRenderTree,
     windowFlags,
     onChangeCallback
+//    &windowSize
   );
+
+//  std::cout << "windowSize: " << windowSize.x << ", " << windowSize.y << std::endl;
 
   ImDrawData* draw_data = ImGui::GetDrawData();
 

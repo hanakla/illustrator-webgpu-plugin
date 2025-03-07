@@ -1,12 +1,13 @@
 import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { randomNoiseEffect } from "./live-effects/effects.ts";
+import { toPng } from "./live-effects/utils.ts";
 import { Effect, UINode } from "./types.ts";
-import { expandGlobSync, ensureDir } from "jsr:@std/fs@1.0.14";
+import { expandGlobSync, ensureDir, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { homedir } from "node:os";
 
-const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".deno_ai/effects")));
+const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allEffects: Effect<any, any>[] = [
   randomNoiseEffect,
@@ -23,15 +24,21 @@ await Promise.all(
 
 export const loadEffects = async () => {
   console.log("[deno_ai(js)] loadEffects", EFFECTS_DIR);
-  await ensureDir(EFFECTS_DIR);
+  await ensureDirSync(EFFECTS_DIR);
   console.log("[deno_ai(js)] loadEffects ensuredir");
 
+  console.log(
+    "[deno_ai(js)] loadEffects",
+    `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
+  );
   const metas = [
-    ...expandGlobSync(`${EFFECTS_DIR}/*/meta.json`, {
+    ...expandGlobSync(`${fromFileUrl(EFFECTS_DIR)}/*/meta.json`, {
       followSymlinks: true,
       includeDirs: false,
     }),
   ];
+
+  console.log("[deno_ai(js)] loadEffects metas", metas);
 
   await Promise.allSettled(
     metas.map((dir) => {
@@ -87,6 +94,16 @@ export const doLiveEffect = async (
     console.error("Effect not initialized", id);
     return null;
   }
+
+  console.log(Deno.cwd());
+  Deno.writeFileSync(
+    "buffer.png",
+    Uint8Array.from([
+      ...new Uint8Array(
+        await (await toPng({ data, width, height })).arrayBuffer()
+      ),
+    ])
+  );
 
   console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
