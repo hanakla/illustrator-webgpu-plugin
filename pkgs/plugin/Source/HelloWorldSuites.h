@@ -20,5 +20,8 @@ extern "C" AIRasterizeSuite*     sAIRasterize;
 extern "C" AIRasterSuite*        sAIRaster;
 extern "C" AIDocumentSuite*      sAIDocument;
 extern "C" AIMenuSuite*          sAIMenu;
+extern "C" AIPathSuite*          sAIPath;
+extern "C" AIPathStyleSuite*     sAIPathStyle;
+extern "C" AILayerSuite*         sAILayer;
 
 #endif

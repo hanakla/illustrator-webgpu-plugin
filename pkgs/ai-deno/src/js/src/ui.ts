@@ -57,7 +57,7 @@ export type UINodeCheckbox = {
   type: "checkbox";
   key: string;
   label: string;
-  checked: boolean;
+  value: boolean;
 };
 
 export type UINodeTextInput = {

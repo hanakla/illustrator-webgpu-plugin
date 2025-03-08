@@ -4,9 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
-    <script src="./index.ts" type="module"></script>
+    <script src="./index.tsx" type="module"></script>
   </head>
   <body>
-    <canvas id="canvas" width="800" height="600"></canvas>
+    <div style="display: flex">
+      <div id="controls" style="flex: none"></div>
+      <canvas
+        id="canvas"
+        width="800"
+        height="600"
+        style="background-color: #eee"
+      ></canvas>
+    </div>
   </body>
 </html>

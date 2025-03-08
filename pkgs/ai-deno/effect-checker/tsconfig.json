@@ -2,6 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "lib": ["DOM", "ES2023"],
+    "jsx": "react-jsx",
     "paths": {
       "~ext/*": ["../src/js/src/*"]
     }

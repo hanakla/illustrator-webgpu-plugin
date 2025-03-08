@@ -1,31 +1,31 @@
+import { Effect } from "./types.ts";
+import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
+import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
+import { homedir } from "node:os";
+
 import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { randomNoiseEffect } from "./live-effects/effects.ts";
-import { toPng } from "./live-effects/utils.ts";
-import { Effect, UINode } from "./types.ts";
-import { expandGlobSync, ensureDir, ensureDirSync } from "jsr:@std/fs@1.0.14";
-import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
-import { homedir } from "node:os";
+import { testBlueFill } from "./live-effects/test-blue-fill.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allEffects: Effect<any, any>[] = [
   randomNoiseEffect,
-  blurEffect,
+  // blurEffect,
   chromaticAberration,
+  testBlueFill,
 ];
 const effectInits = new Map<Effect<any, any>, any>();
 
 await Promise.all(
   allEffects.map(async (effect) => {
-    effectInits.set(effect, await effect.initDoLiveEffect?.());
+    effectInits.set(effect, (await effect.initDoLiveEffect?.()) ?? {});
   })
 );
 
 export const loadEffects = async () => {
-  console.log("[deno_ai(js)] loadEffects", EFFECTS_DIR);
-  await ensureDirSync(EFFECTS_DIR);
-  console.log("[deno_ai(js)] loadEffects ensuredir");
+  ensureDirSync(EFFECTS_DIR);
 
   console.log(
     "[deno_ai(js)] loadEffects",
@@ -94,16 +94,6 @@ export const doLiveEffect = async (
     console.error("Effect not initialized", id);
     return null;
   }
-
-  console.log(Deno.cwd());
-  Deno.writeFileSync(
-    "buffer.png",
-    Uint8Array.from([
-      ...new Uint8Array(
-        await (await toPng({ data, width, height })).arrayBuffer()
-      ),
-    ])
-  );
 
   console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {

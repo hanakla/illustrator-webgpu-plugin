@@ -18,7 +18,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     json&                        renderTree,
     ImGuiWindowFlags             windowFlags,
     ImGuiModal::OnChangeCallback onChangeCallback
-//    ImVec2*                      currentSize
+    //    ImVec2*                      currentSize
 ) {
   ModalStatusCode resultStatus = ModalStatusCode::None;
 
@@ -58,6 +58,14 @@ ModalStatusCode AiDenoImGuiRenderComponents(
           onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
         }
 
+      } else if (type == "checkbox") {
+        std::string key   = node["key"].get<std::string>();
+        std::string label = node["label"].get<std::string>();
+        bool        value = node["value"].get<bool>();
+
+        if (ImGui::Checkbox(label.c_str(), &value)) {
+          onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
+        }
       } else if (type == "slider") {
         std::string dataType = node["dataType"].get<std::string>();
         std::string label    = node["label"].get<std::string>();
@@ -103,7 +111,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       resultStatus = ModalStatusCode::OK;
     }
 
-//    if (currentSize != nullptr) { *currentSize = ImGui::GetWindowSize(); }
+    //    if (currentSize != nullptr) { *currentSize = ImGui::GetWindowSize(); }
 
     ImGui::End();
   };

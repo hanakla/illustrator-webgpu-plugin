@@ -5,6 +5,7 @@ import {
   adjustImageToNearestAligned256Resolution,
   paddingImageData,
   resizeImageData,
+  // toPng,
 } from "./utils.ts";
 
 export const chromaticAberration = definePlugin({
@@ -70,11 +71,9 @@ export const chromaticAberration = definePlugin({
 
       ui.separator(),
 
-      ui.group({ direction: "row" }, [
+      ui.group({ direction: "col" }, [
         ui.text({ text: "Debugging parameters" }),
-        ui.group({ direction: "col" }, [
-          ui.slider({ key: "padding", label: "Padding", dataType: 'int', min: 0, max: 200, value: params.padding }),
-        ]),
+        ui.slider({ key: "padding", label: "Padding", dataType: 'int', min: 0, max: 200, value: params.padding }),
       ]),
     ])
   },
@@ -110,63 +109,113 @@ export const chromaticAberration = definePlugin({
               return vec2f(cos(radians), sin(radians));
           }
 
+          fn screenBlend(a: f32, b: f32) -> f32 {
+              return 1.0 - (1.0 - a) * (1.0 - b);
+          }
+
+          // RGB から CMYK への変換関数
+          fn rgbToCmyk(rgb: vec3f) -> vec4f {
+              let r = rgb.r;
+              let g = rgb.g;
+              let b = rgb.b;
+
+              let k = 1.0 - max(max(r, g), b);
+
+              // 黒が1.0（完全な黒）の場合、他のチャンネルは0に
+              if (k == 1.0) {
+                  return vec4f(0.0, 0.0, 0.0, 1.0);
+              }
+
+              let c = (1.0 - r - k) / (1.0 - k);
+              let m = (1.0 - g - k) / (1.0 - k);
+              let y = (1.0 - b - k) / (1.0 - k);
+
+              return vec4f(c, m, y, k);
+          }
+
+          // CMYK から RGB への変換関数
+          fn cmykToRgb(cmyk: vec4f) -> vec3f {
+              let c = cmyk.x;
+              let m = cmyk.y;
+              let y = cmyk.z;
+              let k = cmyk.w;
+
+              let r = (1.0 - c) * (1.0 - k);
+              let g = (1.0 - m) * (1.0 - k);
+              let b = (1.0 - y) * (1.0 - k);
+
+              return vec3f(r, g, b);
+          }
+
           @compute @workgroup_size(16, 16)
           fn computeMain(@builtin(global_invocation_id) id: vec3u) {
               let dims = vec2f(textureDimensions(inputTexture));
               let texCoord = vec2f(id.xy) / dims;
 
-              let offset = getOffset(params.angle) * params.strength /100;
+              // strengthをピクセル単位として処理し、テクスチャ座標に変換
+              let pixelOffset = getOffset(params.angle) * params.strength;
+              let texOffset = pixelOffset / dims;
+
               var effectColor: vec4f;
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-              let a = originalColor.a;
 
               if (params.colorMode == 0u) { // RGB mode
-                  let redOffset = texCoord + offset;
-                  let blueOffset = texCoord - offset;
+                  let redOffset = texCoord + texOffset;
+                  let blueOffset = texCoord - texOffset;
 
-                  let r = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0).r;
-                  let g = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0).g;
-                  let b = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0).b;
+                  let redSample = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0);
+                  let greenSample = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+                  let blueSample = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0);
 
-                  effectColor = vec4f(r * a, g * a, b * a, a);
+                  let r = redSample.r;
+                  let g = greenSample.g;
+                  let b = blueSample.b;
+
+                  let a_red = redSample.a;
+                  let a_green = greenSample.a;
+                  let a_blue = blueSample.a;
+
+                  let a = screenBlend(screenBlend(a_red, a_green), a_blue);
+
+                  effectColor = vec4f(r, g, b, a);
               } else { // CMYK mode
-                  let cyanOffset = texCoord + offset;
-                  let magentaOffset = texCoord + vec2f(-offset.y, offset.x) * 0.866;
-                  let yellowOffset = texCoord + vec2f(-offset.x, -offset.y);
-                  let blackOffset = texCoord - vec2f(-offset.y, offset.x) * 0.866; // Kは-120度回転
+                  let cyanOffset = texCoord + texOffset;
+                  let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
+                  let yellowOffset = texCoord + vec2f(-texOffset.x, -texOffset.y);
+                  let blackOffset = texCoord - vec2f(-texOffset.y, texOffset.x) * 0.866;
 
-                  let cyan = textureSampleLevel(inputTexture, textureSampler, cyanOffset, 0.0);
-                  let magenta = textureSampleLevel(inputTexture, textureSampler, magentaOffset, 0.0);
-                  let yellow = textureSampleLevel(inputTexture, textureSampler, yellowOffset, 0.0);
-                  let black = textureSampleLevel(inputTexture, textureSampler, blackOffset, 0.0);
+                  let cyanSample = textureSampleLevel(inputTexture, textureSampler, cyanOffset, 0.0);
+                  let magentaSample = textureSampleLevel(inputTexture, textureSampler, magentaOffset, 0.0);
+                  let yellowSample = textureSampleLevel(inputTexture, textureSampler, yellowOffset, 0.0);
+                  let blackSample = textureSampleLevel(inputTexture, textureSampler, blackOffset, 0.0);
 
-                  // CMYKの色の混合
-                  var result = vec3f(1.0);
+                  // 各サンプルをCMYKに変換
+                  let cyanCmyk = rgbToCmyk(cyanSample.rgb);
+                  let magentaCmyk = rgbToCmyk(magentaSample.rgb);
+                  let yellowCmyk = rgbToCmyk(yellowSample.rgb);
+                  let blackCmyk = rgbToCmyk(blackSample.rgb);
 
-                  if (cyan.r < 1.0) {
-                      result.r *= cyan.r;
-                      result.g = min(result.g + (1.0 - cyan.r) * 0.3, 1.0);
-                      result.b = min(result.b + (1.0 - cyan.r) * 0.3, 1.0);
-                  }
+                  // CMYK各チャンネルの分離
+                  let c = cyanCmyk.x;        // シアンのみを使用
+                  let m = magentaCmyk.y;     // マゼンタのみを使用
+                  let y = yellowCmyk.z;      // イエローのみを使用
+                  let k = blackCmyk.w;       // ブラックのみを使用
 
-                  if (magenta.g < 1.0) {
-                      result.g *= magenta.g;
-                      result.r = min(result.r + (1.0 - magenta.g) * 0.3, 1.0);
-                      result.b = min(result.b + (1.0 - magenta.b) * 0.3, 1.0);
-                  }
+                  // 合成CMYK値を作成
+                  let finalCmyk = vec4f(c, m, y, k);
 
-                  if (yellow.b < 1.0) {
-                      result.b *= yellow.b;
-                      result.r = min(result.r + (1.0 - yellow.b) * 0.3, 1.0);
-                      result.g = min(result.g + (1.0 - yellow.b) * 0.3, 1.0);
-                  }
+                  // CMYKからRGBに変換
+                  let result = cmykToRgb(finalCmyk);
 
-                  if (black.r < 0.1) {
-                      let k = 1.0 - (black.r + black.g + black.b) / 3.0;
-                      result *= (1.0 - k);
-                  }
+                  // アルファ値の計算
+                  let a_cyan = cyanSample.a;
+                  let a_magenta = magentaSample.a;
+                  let a_yellow = yellowSample.a;
+                  let a_black = blackSample.a;
 
-                  effectColor = vec4f(result * a, a);
+                  let a = screenBlend(screenBlend(screenBlend(a_cyan, a_magenta), a_yellow), a_black);
+
+                  effectColor = vec4f(result, a);
               }
 
               var finalColor: vec4f;
@@ -326,6 +375,12 @@ export const chromaticAberration = definePlugin({
       width,
       height
     );
+
+    // const png = await toPng(resultImageData);
+    // Deno.writeFile(
+    //   "chromatic-aberration-out.png",
+    //   new Uint8Array(await png.arrayBuffer())
+    // );
 
     return await resizeImageData(resultImageData, padImg.width, padImg.height);
   },

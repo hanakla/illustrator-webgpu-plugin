@@ -1,3 +1,8 @@
+// src/js/src/main.ts
+import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
+import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
+import { homedir } from "node:os";
+
 // src/js/src/types.ts
 function definePlugin(plugin) {
   return plugin;
@@ -40,268 +45,6 @@ var ui = {
   })
 };
 
-// src/js/src/live-effects/blurEffect.ts
-var blurEffect = definePlugin({
-  id: "blur-v1",
-  title: "Gausian Blur V1",
-  version: { major: 1, minor: 0 },
-  styleFilterFlags: {
-    main: 2 /* kPostEffectFilter */,
-    features: []
-  },
-  paramSchema: {
-    radius: {
-      type: "real",
-      default: 1
-    }
-  },
-  initDoLiveEffect: async () => {
-    const device = await navigator.gpu.requestAdapter().then((adapter) => adapter.requestDevice());
-    const shaderCode = `
-      struct VertexOutput {
-        @builtin(position) position: vec4f,
-        @location(0) texCoord: vec2f,
-      }
-
-      @vertex
-      fn vertexMain(@location(0) position: vec4f,
-                    @location(1) texCoord: vec2f) -> VertexOutput {
-        var output: VertexOutput;
-        output.position = position;
-        output.texCoord = texCoord;
-        return output;
-      }
-
-      @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-      @group(0) @binding(1) var inputSampler: sampler;
-      @group(0) @binding(2) var<uniform> kernel: array<f32, 256>;
-      @group(0) @binding(3) var<uniform> kernelSize: u32;
-      @group(0) @binding(4) var<uniform> direction: vec2f;
-
-      @fragment
-      fn fragmentMain(@location(0) texCoord: vec2f) -> @location(0) vec4f {
-        var color = vec4f(0.0);
-        let radius = i32(kernelSize) / 2;
-
-        for (var i = -radius; i <= radius; i++) {
-          let offset = direction * f32(i);
-          let sampleCoord = texCoord + offset;
-          let kernelValue = kernel[u32(i + radius)];
-          color += textureSample(inputTexture, inputSampler, sampleCoord) * kernelValue;
-        }
-
-        return color;
-      }
-    `;
-    return {
-      device,
-      shaderCode,
-      bindGroupLayout: device.createBindGroupLayout({
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.FRAGMENT,
-            texture: { sampleType: "float" }
-          },
-          {
-            binding: 1,
-            visibility: GPUShaderStage.FRAGMENT,
-            sampler: { type: "filtering" }
-          },
-          {
-            binding: 2,
-            visibility: GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" }
-          },
-          {
-            binding: 3,
-            visibility: GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" }
-          },
-          {
-            binding: 4,
-            visibility: GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" }
-          }
-        ]
-      })
-    };
-  },
-  doLiveEffect: async ({
-    device,
-    createCanvas,
-    horizontalPipeline,
-    verticalPipeline,
-    pipelineLayout
-  }, params, input) => {
-    console.time("[deno_ai(js)] gaussianBlurWebGPU");
-    const result = await gaussianBlurWebGPU(input, params.radius);
-    console.timeEnd("[deno_ai(js)] gaussianBlurWebGPU");
-    return result;
-    async function gaussianBlurWebGPU(input2, radius) {
-      const { width, height, data } = input2;
-      const { kernel, size } = generateGaussianKernel(radius);
-      const kernelBuffer = device.createBuffer({
-        size: 256 * Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-      });
-      device.queue.writeBuffer(kernelBuffer, 0, new Float32Array(kernel));
-      const kernelSizeBuffer = device.createBuffer({
-        size: Uint32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-      });
-      device.queue.writeBuffer(kernelSizeBuffer, 0, new Uint32Array([size]));
-      const directionBuffer = device.createBuffer({
-        size: 2 * Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-      });
-      const textureData = new Uint8Array(data.buffer);
-      const texture = device.createTexture({
-        size: { width, height, depthOrArrayLayers: 1 },
-        format: "rgba8unorm",
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-      });
-      device.queue.writeTexture(
-        { texture },
-        textureData,
-        { bytesPerRow: width * 4, rowsPerImage: height },
-        { width, height, depthOrArrayLayers: 1 }
-      );
-      const sampler = device.createSampler({
-        magFilter: "linear",
-        minFilter: "linear"
-      });
-      const tempTexture = device.createTexture({
-        size: { width, height, depthOrArrayLayers: 1 },
-        format: "rgba8unorm",
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
-      });
-      const outputTexture = device.createTexture({
-        size: { width, height, depthOrArrayLayers: 1 },
-        format: "rgba8unorm",
-        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT
-      });
-      device.queue.writeBuffer(
-        directionBuffer,
-        0,
-        new Float32Array([1 / width, 0])
-      );
-      const horizontalBindGroup = device.createBindGroup({
-        layout: pipelineLayout,
-        entries: [
-          { binding: 0, resource: texture.createView() },
-          { binding: 1, resource: sampler },
-          { binding: 2, resource: { buffer: kernelBuffer } },
-          { binding: 3, resource: { buffer: kernelSizeBuffer } },
-          { binding: 4, resource: { buffer: directionBuffer } }
-        ]
-      });
-      const commandEncoder = device.createCommandEncoder();
-      const horizontalPass = commandEncoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: tempTexture.createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: "clear",
-            storeOp: "store"
-          }
-        ]
-      });
-      horizontalPass.setPipeline(horizontalPipeline);
-      horizontalPass.setBindGroup(0, horizontalBindGroup);
-      horizontalPass.draw(6, 1, 0, 0);
-      horizontalPass.end();
-      device.queue.writeBuffer(
-        directionBuffer,
-        0,
-        new Float32Array([0, 1 / height])
-      );
-      const verticalBindGroup = device.createBindGroup({
-        layout: pipelineLayout,
-        entries: [
-          { binding: 0, resource: tempTexture.createView() },
-          { binding: 1, resource: sampler },
-          { binding: 2, resource: { buffer: kernelBuffer } },
-          { binding: 3, resource: { buffer: kernelSizeBuffer } },
-          { binding: 4, resource: { buffer: directionBuffer } }
-        ]
-      });
-      const verticalPass = commandEncoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: outputTexture.createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: "clear",
-            storeOp: "store"
-          }
-        ]
-      });
-      verticalPass.setPipeline(verticalPipeline);
-      verticalPass.setBindGroup(0, verticalBindGroup);
-      verticalPass.draw(6, 1, 0, 0);
-      verticalPass.end();
-      const outputBuffer = device.createBuffer({
-        size: width * height * 4,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-      });
-      commandEncoder.copyTextureToBuffer(
-        { texture: outputTexture },
-        { buffer: outputBuffer, bytesPerRow: width * 4, rowsPerImage: height },
-        { width, height, depthOrArrayLayers: 1 }
-      );
-      device.queue.submit([commandEncoder.finish()]);
-      await outputBuffer.mapAsync(GPUMapMode.READ);
-      const outputArray = new Uint8ClampedArray(outputBuffer.getMappedRange());
-      outputBuffer.unmap();
-      const imageData = new ImageData(outputArray, width, height);
-      kernelBuffer.destroy();
-      kernelSizeBuffer.destroy();
-      directionBuffer.destroy();
-      texture.destroy();
-      tempTexture.destroy();
-      outputTexture.destroy();
-      outputBuffer.destroy();
-      return imageData;
-    }
-  },
-  editLiveEffectParameters: (params) => JSON.stringify(params),
-  renderUI: (params) => {
-    console.log("renderUI");
-    return ui.group({ direction: "col" }, [
-      ui.text({ text: "Radius" }),
-      ui.slider({
-        key: "radius",
-        label: "Radius",
-        dataType: "float",
-        min: 0,
-        max: 400,
-        value: params.radius ?? 1
-      })
-    ]);
-  }
-});
-function generateGaussianKernel(radius) {
-  const size = radius * 2 + 1;
-  const kernel = new Array(size * size);
-  const sigma = radius / 2;
-  const twoSigmaSquare = 2 * sigma * sigma;
-  const piTwoSigmaSquare = Math.PI * twoSigmaSquare;
-  let sum = 0;
-  for (let y = -radius; y <= radius; y++) {
-    for (let x = -radius; x <= radius; x++) {
-      const exp = Math.exp(-(x * x + y * y) / twoSigmaSquare);
-      const value = exp / piTwoSigmaSquare;
-      const index = (y + radius) * size + (x + radius);
-      kernel[index] = value;
-      sum += value;
-    }
-  }
-  for (let i = 0; i < kernel.length; i++) {
-    kernel[i] /= sum;
-  }
-  return { kernel, size };
-}
-
 // src/js/src/live-effects/utils.ts
 import { decodeBase64 } from "jsr:@std/encoding@1.0.7";
 var createCanvasImpl = typeof window === "undefined" ? async (width, height) => {
@@ -324,18 +67,6 @@ var createImageDataImpl = typeof window === "undefined" ? async (data, width, he
     settings
   );
 };
-async function toBlob(canvas, mime, quality) {
-  if (typeof window === "undefined") {
-    mime = mime.replace(/^image\//, "");
-    const b64 = canvas.toDataURL(mime, quality).split(",")[1];
-    const buffer = decodeBase64(b64);
-    return new Blob([buffer], { type: mime });
-  } else {
-    return new Promise((r) => {
-      canvas.toBlob((b) => r(b), mime, quality);
-    });
-  }
-}
 function getNearestAligned256Resolution(width, height, bytesPerPixel = 4) {
   const currentBytesPerRow = width * bytesPerPixel;
   const targetBytesPerRow = Math.ceil(currentBytesPerRow / 256) * 256;
@@ -385,17 +116,6 @@ async function paddingImageData(data, padding) {
   );
   ctx.putImageData(imgData, padding, padding);
   return ctx.getImageData(0, 0, width, height);
-}
-async function toPng(imgData) {
-  const canvas = await createCanvasImpl(imgData.width, imgData.height);
-  const ctx = canvas.getContext("2d");
-  const img = await createImageDataImpl(
-    imgData.data,
-    imgData.width,
-    imgData.height
-  );
-  ctx.putImageData(img, 0, 0);
-  return toBlob(canvas, "image/png", 100);
 }
 
 // src/js/src/live-effects/chromatic-aberration.ts
@@ -459,11 +179,9 @@ var chromaticAberration = definePlugin({
         ui.select({ key: "blendMode", label: "Blend Mode", value: params.blendMode, options: ["over", "under"] })
       ]),
       ui.separator(),
-      ui.group({ direction: "row" }, [
+      ui.group({ direction: "col" }, [
         ui.text({ text: "Debugging parameters" }),
-        ui.group({ direction: "col" }, [
-          ui.slider({ key: "padding", label: "Padding", dataType: "int", min: 0, max: 200, value: params.padding })
-        ])
+        ui.slider({ key: "padding", label: "Padding", dataType: "int", min: 0, max: 200, value: params.padding })
       ])
     ]);
   },
@@ -497,63 +215,113 @@ var chromaticAberration = definePlugin({
               return vec2f(cos(radians), sin(radians));
           }
 
+          fn screenBlend(a: f32, b: f32) -> f32 {
+              return 1.0 - (1.0 - a) * (1.0 - b);
+          }
+
+          // RGB \u304B\u3089 CMYK \u3078\u306E\u5909\u63DB\u95A2\u6570
+          fn rgbToCmyk(rgb: vec3f) -> vec4f {
+              let r = rgb.r;
+              let g = rgb.g;
+              let b = rgb.b;
+
+              let k = 1.0 - max(max(r, g), b);
+
+              // \u9ED2\u304C1.0\uFF08\u5B8C\u5168\u306A\u9ED2\uFF09\u306E\u5834\u5408\u3001\u4ED6\u306E\u30C1\u30E3\u30F3\u30CD\u30EB\u306F0\u306B
+              if (k == 1.0) {
+                  return vec4f(0.0, 0.0, 0.0, 1.0);
+              }
+
+              let c = (1.0 - r - k) / (1.0 - k);
+              let m = (1.0 - g - k) / (1.0 - k);
+              let y = (1.0 - b - k) / (1.0 - k);
+
+              return vec4f(c, m, y, k);
+          }
+
+          // CMYK \u304B\u3089 RGB \u3078\u306E\u5909\u63DB\u95A2\u6570
+          fn cmykToRgb(cmyk: vec4f) -> vec3f {
+              let c = cmyk.x;
+              let m = cmyk.y;
+              let y = cmyk.z;
+              let k = cmyk.w;
+
+              let r = (1.0 - c) * (1.0 - k);
+              let g = (1.0 - m) * (1.0 - k);
+              let b = (1.0 - y) * (1.0 - k);
+
+              return vec3f(r, g, b);
+          }
+
           @compute @workgroup_size(16, 16)
           fn computeMain(@builtin(global_invocation_id) id: vec3u) {
               let dims = vec2f(textureDimensions(inputTexture));
               let texCoord = vec2f(id.xy) / dims;
 
-              let offset = getOffset(params.angle) * params.strength /100;
+              // strength\u3092\u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u3068\u3057\u3066\u51E6\u7406\u3057\u3001\u30C6\u30AF\u30B9\u30C1\u30E3\u5EA7\u6A19\u306B\u5909\u63DB
+              let pixelOffset = getOffset(params.angle) * params.strength;
+              let texOffset = pixelOffset / dims;
+
               var effectColor: vec4f;
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-              let a = originalColor.a;
 
               if (params.colorMode == 0u) { // RGB mode
-                  let redOffset = texCoord + offset;
-                  let blueOffset = texCoord - offset;
+                  let redOffset = texCoord + texOffset;
+                  let blueOffset = texCoord - texOffset;
 
-                  let r = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0).r;
-                  let g = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0).g;
-                  let b = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0).b;
+                  let redSample = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0);
+                  let greenSample = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+                  let blueSample = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0);
 
-                  effectColor = vec4f(r * a, g * a, b * a, a);
+                  let r = redSample.r;
+                  let g = greenSample.g;
+                  let b = blueSample.b;
+
+                  let a_red = redSample.a;
+                  let a_green = greenSample.a;
+                  let a_blue = blueSample.a;
+
+                  let a = screenBlend(screenBlend(a_red, a_green), a_blue);
+
+                  effectColor = vec4f(r, g, b, a);
               } else { // CMYK mode
-                  let cyanOffset = texCoord + offset;
-                  let magentaOffset = texCoord + vec2f(-offset.y, offset.x) * 0.866;
-                  let yellowOffset = texCoord + vec2f(-offset.x, -offset.y);
-                  let blackOffset = texCoord - vec2f(-offset.y, offset.x) * 0.866; // K\u306F-120\u5EA6\u56DE\u8EE2
+                  let cyanOffset = texCoord + texOffset;
+                  let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
+                  let yellowOffset = texCoord + vec2f(-texOffset.x, -texOffset.y);
+                  let blackOffset = texCoord - vec2f(-texOffset.y, texOffset.x) * 0.866;
 
-                  let cyan = textureSampleLevel(inputTexture, textureSampler, cyanOffset, 0.0);
-                  let magenta = textureSampleLevel(inputTexture, textureSampler, magentaOffset, 0.0);
-                  let yellow = textureSampleLevel(inputTexture, textureSampler, yellowOffset, 0.0);
-                  let black = textureSampleLevel(inputTexture, textureSampler, blackOffset, 0.0);
+                  let cyanSample = textureSampleLevel(inputTexture, textureSampler, cyanOffset, 0.0);
+                  let magentaSample = textureSampleLevel(inputTexture, textureSampler, magentaOffset, 0.0);
+                  let yellowSample = textureSampleLevel(inputTexture, textureSampler, yellowOffset, 0.0);
+                  let blackSample = textureSampleLevel(inputTexture, textureSampler, blackOffset, 0.0);
 
-                  // CMYK\u306E\u8272\u306E\u6DF7\u5408
-                  var result = vec3f(1.0);
+                  // \u5404\u30B5\u30F3\u30D7\u30EB\u3092CMYK\u306B\u5909\u63DB
+                  let cyanCmyk = rgbToCmyk(cyanSample.rgb);
+                  let magentaCmyk = rgbToCmyk(magentaSample.rgb);
+                  let yellowCmyk = rgbToCmyk(yellowSample.rgb);
+                  let blackCmyk = rgbToCmyk(blackSample.rgb);
 
-                  if (cyan.r < 1.0) {
-                      result.r *= cyan.r;
-                      result.g = min(result.g + (1.0 - cyan.r) * 0.3, 1.0);
-                      result.b = min(result.b + (1.0 - cyan.r) * 0.3, 1.0);
-                  }
+                  // CMYK\u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5206\u96E2
+                  let c = cyanCmyk.x;        // \u30B7\u30A2\u30F3\u306E\u307F\u3092\u4F7F\u7528
+                  let m = magentaCmyk.y;     // \u30DE\u30BC\u30F3\u30BF\u306E\u307F\u3092\u4F7F\u7528
+                  let y = yellowCmyk.z;      // \u30A4\u30A8\u30ED\u30FC\u306E\u307F\u3092\u4F7F\u7528
+                  let k = blackCmyk.w;       // \u30D6\u30E9\u30C3\u30AF\u306E\u307F\u3092\u4F7F\u7528
 
-                  if (magenta.g < 1.0) {
-                      result.g *= magenta.g;
-                      result.r = min(result.r + (1.0 - magenta.g) * 0.3, 1.0);
-                      result.b = min(result.b + (1.0 - magenta.b) * 0.3, 1.0);
-                  }
+                  // \u5408\u6210CMYK\u5024\u3092\u4F5C\u6210
+                  let finalCmyk = vec4f(c, m, y, k);
 
-                  if (yellow.b < 1.0) {
-                      result.b *= yellow.b;
-                      result.r = min(result.r + (1.0 - yellow.b) * 0.3, 1.0);
-                      result.g = min(result.g + (1.0 - yellow.b) * 0.3, 1.0);
-                  }
+                  // CMYK\u304B\u3089RGB\u306B\u5909\u63DB
+                  let result = cmykToRgb(finalCmyk);
 
-                  if (black.r < 0.1) {
-                      let k = 1.0 - (black.r + black.g + black.b) / 3.0;
-                      result *= (1.0 - k);
-                  }
+                  // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
+                  let a_cyan = cyanSample.a;
+                  let a_magenta = magentaSample.a;
+                  let a_yellow = yellowSample.a;
+                  let a_black = blackSample.a;
 
-                  effectColor = vec4f(result * a, a);
+                  let a = screenBlend(screenBlend(screenBlend(a_cyan, a_magenta), a_yellow), a_black);
+
+                  effectColor = vec4f(result, a);
               }
 
               var finalColor: vec4f;
@@ -709,27 +477,120 @@ var randomNoiseEffect = {
   renderUI: (params) => ui.group({}, [])
 };
 
+// src/js/src/live-effects/test-blue-fill.ts
+var testBlueFill = definePlugin({
+  id: "test-blue-fill",
+  title: "Test Blue Fill",
+  version: { major: 1, minor: 0 },
+  paramSchema: {
+    useNewBuffer: {
+      type: "bool",
+      default: false
+    },
+    fillOtherChannels: {
+      type: "bool",
+      default: false
+    },
+    padding: {
+      type: "int",
+      default: 0
+    },
+    opacity: {
+      type: "real",
+      default: 100
+    }
+  },
+  styleFilterFlags: {
+    main: 2 /* kPostEffectFilter */,
+    features: []
+  },
+  editLiveEffectParameters: () => "{}",
+  doLiveEffect: async (init, params, input) => {
+    let width = input.width;
+    let height = input.height;
+    let len = input.data.length;
+    const alpha = Math.round(255 * (params.opacity / 100));
+    let buffer = params.useNewBuffer ? Uint8ClampedArray.from(input.data) : input.data;
+    if (params.padding > 0) {
+      const data = await paddingImageData(
+        {
+          data: buffer,
+          width: input.width,
+          height: input.height
+        },
+        params.padding
+      );
+      buffer = data.data;
+      len = buffer.length;
+      width = data.width;
+      height = data.height;
+    }
+    if (params.fillOtherChannels) {
+      for (let i = 0; i < len; i += 4) {
+        buffer[i] = 0;
+        buffer[i + 1] = 0;
+        buffer[i + 2] = 255;
+        buffer[i + 3] = alpha;
+      }
+    } else {
+      for (let i = 0; i < len; i += 4) {
+        buffer[i + 2] = 255;
+        buffer[i + 3] = alpha;
+      }
+    }
+    return {
+      data: buffer,
+      width,
+      height
+    };
+  },
+  renderUI: (params) => ui.group({ direction: "col" }, [
+    ui.checkbox({
+      label: "Use new buffer",
+      key: "useNewBuffer",
+      value: params.useNewBuffer
+    }),
+    ui.checkbox({
+      label: "Fill other channels",
+      key: "fillOtherChannels",
+      value: params.fillOtherChannels
+    }),
+    ui.slider({
+      label: "Padding",
+      key: "padding",
+      dataType: "int",
+      min: 0,
+      max: 100,
+      value: params.padding
+    }),
+    ui.slider({
+      label: "Opacity",
+      key: "opacity",
+      dataType: "float",
+      min: 0,
+      max: 100,
+      value: params.opacity
+    })
+  ])
+});
+
 // src/js/src/main.ts
-import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
-import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
-import { homedir } from "node:os";
 var EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 var allEffects = [
   randomNoiseEffect,
-  blurEffect,
-  chromaticAberration
+  // blurEffect,
+  chromaticAberration,
+  testBlueFill
 ];
 var effectInits = /* @__PURE__ */ new Map();
 await Promise.all(
   allEffects.map(async (effect) => {
     var _a;
-    effectInits.set(effect, await ((_a = effect.initDoLiveEffect) == null ? void 0 : _a.call(effect)));
+    effectInits.set(effect, await ((_a = effect.initDoLiveEffect) == null ? void 0 : _a.call(effect)) ?? {});
   })
 );
 var loadEffects = async () => {
-  console.log("[deno_ai(js)] loadEffects", EFFECTS_DIR);
-  await ensureDirSync(EFFECTS_DIR);
-  console.log("[deno_ai(js)] loadEffects ensuredir");
+  ensureDirSync(EFFECTS_DIR);
   console.log(
     "[deno_ai(js)] loadEffects",
     `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
@@ -778,15 +639,6 @@ var doLiveEffect = async (id, state, width, height, data) => {
     console.error("Effect not initialized", id);
     return null;
   }
-  console.log(Deno.cwd());
-  Deno.writeFileSync(
-    "buffer.png",
-    Uint8Array.from([
-      ...new Uint8Array(
-        await (await toPng({ data, width, height })).arrayBuffer()
-      )
-    ])
-  );
   console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
     const result = await effect.doLiveEffect(

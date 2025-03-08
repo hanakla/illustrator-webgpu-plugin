@@ -7,6 +7,9 @@ extern "C" AIArtSetSuite*     sAIArtSet;
 extern "C" AIDictionarySuite* sAIDictionary;
 extern "C" AILiveEffectSuite* sAILiveEffect;
 extern "C" AIArtSuite*        sAIArt;
+extern "C" AIPathSuite*       sAIPath;
+extern "C" AIPathStyleSuite*  sAIPathStyle;
+extern "C" AILayerSuite*      sAILayer;
 
 #ifndef CHKERR
 #define CHKERR(...)                                                         \
@@ -109,6 +112,75 @@ namespace suai {
     bool raterizeSharedSpace = false;
   };
 
+  struct RasterRecord {
+      
+  public:
+    ai::int16 flags;
+    AIRect        bounds;
+    ai::int32     byteWidth;
+    ai::int16     colorSpace;
+    ai::int16     bitsPerPixel;
+    ai::int16     originalColorSpace;
+      
+    
+
+    static RasterRecord from(const AIRasterRecord& record) {
+      RasterRecord newRecord;
+      newRecord.flags              = record.flags;
+      newRecord.bounds             = record.bounds;
+      newRecord.byteWidth          = record.byteWidth;
+      newRecord.colorSpace         = record.colorSpace;
+      newRecord.bitsPerPixel       = record.bitsPerPixel;
+      newRecord.originalColorSpace = record.originalColorSpace;
+      return newRecord;
+    };
+
+//    json toJson() {
+//      json flagsJson = {
+//          {"maskImageType", (bool)(flags & AIRasterFlags::kRasterMaskImageType)},
+//          {"invertBits", (bool)(flags & AIRasterFlags::kRasterInvertBits)},
+//          {"graySubtractive", (bool)(flags & AIRasterFlags::kRasterGraySubtractive)},
+//          {"createdInSharedSpace",
+//           (bool)(flags & AIRasterFlags::kRasterCreatedInSharedSpace)},
+//          {"createInSingleBuffer",
+//           (bool)(flags & AIRasterFlags::kRasterCreateInSingleBuffer)}
+//      };
+//
+//      json colorSpaceName = getRasterColorSpaceName(colorSpace);
+//
+//      json record = {
+//          {"flags", flagsJson},           {"bounds", bounds.toJson()},
+//          {"byteWidth", byteWidth},       {"colorSpace", colorSpaceName},
+//          {"bitsPerPixel", bitsPerPixel}, {"originalColorSpace", originalColorSpace}
+//      };
+//
+//      return record;
+//    }
+  };
+
+//  std::string
+//  getRasterColorSpaceName(AIRasterColorSpace colorSpace) {
+//    return mapValue(
+//        colorSpace, "Invalid",
+//        {{kColorSpaceHasAlpha, "ColorSpaceHasAlpha"},
+//         {kGrayColorSpace, "Gray"},
+//         {kRGBColorSpace, "RGB"},
+//         {kCMYKColorSpace, "CMYK"},
+//         {kLabColorSpace, "Lab"},
+//         {kSeparationColorSpace, "Separation"},
+//         {kNChannelColorSpace, "NChannel"},
+//         {kIndexedColorSpace, "Indexed"},
+//         {kAlphaGrayColorSpace, "AlphaGray"},
+//         {kAlphaRGBColorSpace, "AlphaRGB"},
+//         {kAlphaCMYKColorSpace, "AlphaCMYK"},
+//         {kAlphaLabColorSpace, "AlphaLab"},
+//         {kAlphaSeparationColorSpace, "AlphaSeparation"},
+//         {kAlphaNChannelColorSpace, "AlphaNChannel"},
+//         {kAlphaIndexedColorSpace, "AlphaIndexed"},
+//         {kInvalidColorSpace, "Invalid"}}
+//    );
+//  }
+
   struct RasterSettingsInit {
     RasterType type;
     /** The supersampling factor, less than 2 for none, 2 or more for
@@ -120,13 +192,69 @@ namespace suai {
     RasterSettingOption       options      = RasterSettingOption();
   };
 
-  struct RasterRecord {
-    ai::uint16 flags;
-    AIRect     bounds;
-    ai::int32  byteWidth;
-    ai::int16  colorSpace;
-    ai::int16  bitsPerPixel;
-    ai::int16  originalColorSpace;
+  struct ArtUserAttrs {
+    bool selected                    = false;
+    bool locked                      = false;
+    bool hidden                      = false;
+    bool fullySelected               = false;
+    bool expanded                    = false;
+    bool targeted                    = false;
+    bool isClipMask                  = false;
+    bool isTextWrap                  = false;
+    bool selectedTopLevelGroups      = false;
+    bool selectedLeaves              = false;
+    bool selectedTopLevelWithPaint   = false;
+    bool hasSimpleStyle              = false;
+    bool hasActiveStyle              = false;
+    bool partOfCompound              = false;
+    bool matchDictionaryArt          = false;
+    bool matchArtInGraphs            = false;
+    bool matchArtInResultGroups      = false;
+    bool matchTextPaths              = false;
+    bool styleIsDirty                = false;
+    bool matchArtNotIntoPluginGroups = false;
+    bool matchArtInCharts            = false;
+    bool matchArtIntoRepeats         = false;
+
+    json toJson() {
+      json userAttrs = {
+          {"selected", selected},
+          {"locked", locked},
+          {"hidden", hidden},
+          {"fullySelected", fullySelected},
+          {"expanded", expanded},
+          {"targeted", targeted},
+          {"isClipMask", isClipMask},
+          {"isTextWrap", isTextWrap},
+          {"selectedTopLevelGroups", selectedTopLevelGroups},
+          {"selectedLeaves", selectedLeaves},
+          {"selectedTopLevelWithPaint", selectedTopLevelWithPaint},
+          {"hasSimpleStyle", hasSimpleStyle},
+          {"hasActiveStyle", hasActiveStyle},
+          {"partOfCompound", partOfCompound},
+          {"matchDictionaryArt", matchDictionaryArt},
+          {"matchArtInGraphs", matchArtInGraphs},
+          {"matchArtInResultGroups", matchArtInResultGroups},
+          {"matchTextPaths", matchTextPaths},
+          {"styleIsDirty", styleIsDirty},
+          {"matchArtNotIntoPluginGroups", matchArtNotIntoPluginGroups},
+          {"matchArtInCharts", matchArtInCharts},
+          {"matchArtIntoRepeats", matchArtIntoRepeats}
+      };
+
+      return userAttrs;
+    }
+
+    json toJSONOnlyFlagged() {
+      json attrs    = toJson();
+      json filtered = json::object();
+
+      for (auto& [key, value] : attrs.items()) {
+        if (value == true) { filtered[key] = true; }
+      }
+
+      return filtered;
+    }
   };
 
   AIRasterizeSettings createAIRasterSetting(RasterSettingsInit init) {
@@ -260,21 +388,27 @@ namespace suai {
   };
 
   namespace art {
-    short getArtType(AIArtHandle art) {
+    short getArtType(AIArtHandle art, AIErr* error = nullptr) {
       short type;
-      sAIArt->GetArtType(art, &type);
+
+      AIErr err = sAIArt->GetArtType(art, &type);
+      if (error != nullptr) *error = err;
+
       return type;
     }
 
-    std::tuple<std::string, bool> getName(AIArtHandle art) {
+    std::tuple<std::string, bool> getName(AIArtHandle art, AIErr* error = nullptr) {
       ai::UnicodeString name;
       ASBoolean         isDefaultName;
-      sAIArt->GetArtName(art, name, &isDefaultName);
+
+      AIErr err = sAIArt->GetArtName(art, name, &isDefaultName);
+      if (error != nullptr) *error = err;
+
       return {str::toUtf8StdString(name), isDefaultName == 1};
     }
 
-    std::string getArtTypeName(AIArtHandle art) {
-      short type = getArtType(art);
+    std::string getTypeName(AIArtHandle art, AIErr* error = nullptr) {
+      short type = getArtType(art, error);
 
       return mapValue(
           type, string_format("Unknown(%d)", type),
@@ -304,6 +438,287 @@ namespace suai {
 
           }
       );
+    }
+
+    ArtUserAttrs getUserAttrs(AIArtHandle art, AIErr* error = nullptr) {
+      ai::int32 attrs;
+
+      AIErr err = sAIArt->GetArtUserAttr(
+          art,
+          AIArtUserAttr::kArtSelected | AIArtUserAttr::kArtLocked |
+              AIArtUserAttr::kArtHidden | AIArtUserAttr::kArtFullySelected |
+              AIArtUserAttr::kArtExpanded | AIArtUserAttr::kArtTargeted |
+              AIArtUserAttr::kArtIsClipMask | AIArtUserAttr::kArtIsTextWrap |
+              AIArtUserAttr::kArtSelectedTopLevelGroups |
+              AIArtUserAttr::kArtSelectedLeaves |
+              AIArtUserAttr::kArtSelectedTopLevelWithPaint |
+              AIArtUserAttr::kArtHasSimpleStyle | AIArtUserAttr::kArtHasActiveStyle |
+              AIArtUserAttr::kArtPartOfCompound | AIArtUserAttr::kMatchDictionaryArt |
+              AIArtUserAttr::kMatchArtInGraphs | AIArtUserAttr::kMatchArtInResultGroups |
+              AIArtUserAttr::kMatchTextPaths | AIArtUserAttr::kArtStyleIsDirty |
+              AIArtUserAttr::kMatchArtNotIntoPluginGroups |
+              AIArtUserAttr::kMatchArtInCharts | AIArtUserAttr::kMatchArtIntoRepeats,
+          &attrs
+      );
+
+      if (error != nullptr) *error = err;
+
+      ArtUserAttrs userAttrs{
+          .selected               = !!(attrs & AIArtUserAttr::kArtSelected),
+          .locked                 = !!(attrs & AIArtUserAttr::kArtLocked),
+          .hidden                 = !!(attrs & AIArtUserAttr::kArtHidden),
+          .fullySelected          = !!(attrs & AIArtUserAttr::kArtFullySelected),
+          .expanded               = !!(attrs & AIArtUserAttr::kArtExpanded),
+          .targeted               = !!(attrs & AIArtUserAttr::kArtTargeted),
+          .isClipMask             = !!(attrs & AIArtUserAttr::kArtIsClipMask),
+          .isTextWrap             = !!(attrs & AIArtUserAttr::kArtIsTextWrap),
+          .selectedTopLevelGroups = !!(attrs & AIArtUserAttr::kArtSelectedTopLevelGroups),
+          .selectedLeaves         = !!(attrs & AIArtUserAttr::kArtSelectedLeaves),
+          .selectedTopLevelWithPaint =
+              !!(attrs & AIArtUserAttr::kArtSelectedTopLevelWithPaint),
+          .hasSimpleStyle         = !!(attrs & AIArtUserAttr::kArtHasSimpleStyle),
+          .hasActiveStyle         = !!(attrs & AIArtUserAttr::kArtHasActiveStyle),
+          .partOfCompound         = !!(attrs & AIArtUserAttr::kArtPartOfCompound),
+          .matchDictionaryArt     = !!(attrs & AIArtUserAttr::kMatchDictionaryArt),
+          .matchArtInGraphs       = !!(attrs & AIArtUserAttr::kMatchArtInGraphs),
+          .matchArtInResultGroups = !!(attrs & AIArtUserAttr::kMatchArtInResultGroups),
+          .matchTextPaths         = !!(attrs & AIArtUserAttr::kMatchTextPaths),
+          .styleIsDirty           = !!(attrs & AIArtUserAttr::kArtStyleIsDirty),
+          .matchArtNotIntoPluginGroups =
+              !!(attrs & AIArtUserAttr::kMatchArtNotIntoPluginGroups),
+          .matchArtInCharts    = !!(attrs & AIArtUserAttr::kMatchArtInCharts),
+          .matchArtIntoRepeats = !!(attrs & AIArtUserAttr::kMatchArtIntoRepeats),
+      };  // namespace art
+
+      return userAttrs;
+    }  // namespace suai
+
+    bool getUserAttr(AIArtHandle art, AIArtUserAttr whichAttr) {
+      ai::int32 attr;
+      sAIArt->GetArtUserAttr(art, whichAttr, &attr);
+      return attr;
+    }
+
+    json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth);
+
+    json __boundingBoxToJson(const AIRealRect& bounds) {
+      return {
+          {"left", bounds.left},
+          {"top", bounds.top},
+          {"right", bounds.right},
+          {"bottom", bounds.bottom}
+      };
+    }
+
+    json __boundingBoxToJson(const AIRect& bounds) {
+      return {
+          {"left", bounds.left},
+          {"top", bounds.top},
+          {"right", bounds.right},
+          {"bottom", bounds.bottom}
+      };
+    }
+
+    json __colorToJson(const AIColor& color) {
+      json colorJson;
+
+      switch (color.kind) {
+        case AIColorTag::kGrayColor:
+          colorJson = {{"type", "gray"}, {"value", color.c.g.gray}};
+          break;
+        case AIColorTag::kThreeColor:
+          colorJson = {
+              {"type", "rgb"},
+              {"color", json(
+                            {{"red", color.c.rgb.red},
+                             {"green", color.c.rgb.green},
+                             {"blue", color.c.rgb.blue}}
+                        )},
+
+          };
+          break;
+        case AIColorTag::kFourColor:
+          colorJson = {
+              {"type", "cmyk"},
+              {"color", json(
+                            {{"cyan", color.c.f.cyan},
+                             {"magenta", color.c.f.magenta},
+                             {"yellow", color.c.f.yellow},
+                             {"black", color.c.f.black}}
+                        )}
+          };
+          break;
+        case AIColorTag::kPattern:
+          colorJson = {{"type", "pattern"}};
+          break;
+        case AIColorTag::kGradient:
+          colorJson = {{"type", "gradient"}};
+          break;
+        case AIColorTag::kNoneColor:
+        default:
+          colorJson = {{"type", "none"}};
+          break;
+      }
+
+      return colorJson;
+    }
+
+    json __pathInfoToJson(AIPathSegment* segments, ai::int16 segmentCount) {
+      json segmentsJson = json::array();
+
+      for (ai::int16 i = 0; i < segmentCount; i++) {
+        json segmentJson = {
+            {"anchor", {{"x", segments[i].p.h}, {"y", segments[i].p.v}}},
+            {"in", nullptr},
+            {"out", nullptr},
+        };
+
+        // 制御点がアンカーポイントと異なる場合のみ追加
+        if (segments[i].in.h != segments[i].p.h || segments[i].in.v != segments[i].p.v) {
+          segmentJson["in"] = {{"x", segments[i].in.h}, {"y", segments[i].in.v}};
+        }
+
+        if (segments[i].out.h != segments[i].p.h ||
+            segments[i].out.v != segments[i].p.v) {
+          segmentJson["out"] = {{"x", segments[i].out.h}, {"y", segments[i].out.v}};
+        }
+
+        segmentsJson.push_back(segmentJson);
+      }
+
+      return {{"segments", segmentsJson}, {"closed", segments[0].corner != 0}};
+    }
+
+    json __rasterInfoToJson(const AIRasterRecord& info) {
+      return {
+          {"width", info.bounds.right - info.bounds.left},
+          {"height", info.bounds.bottom - info.bounds.top},
+          {"bitsPerPixel", info.bitsPerPixel},
+          {"colorSpace", info.colorSpace},
+          {"flags", info.flags}
+      };
+    }
+
+    json __artObjectToJson(AIArtHandle art, int depth, int maxDepth) {
+      if (!art || depth > maxDepth) return nullptr;
+
+      AIErr error = kNoErr;
+      json  artJson;
+
+      short artType = getArtType(art, &error);
+      aisdk::check_ai_error(error);
+
+      auto attrs = getUserAttrs(art, &error);
+      aisdk::check_ai_error(error);
+
+      auto [artName, isDefaultName] = getName(art, &error);
+      aisdk::check_ai_error(error);
+
+      // バウンディングボックスを取得
+      AIRealRect bounds;
+      error = sAIArt->GetArtBounds(art, &bounds);
+
+      // 基本情報を設定
+      artJson["artTypeCode"] = artType;
+      artJson["artType"]     = getTypeName(art);
+
+      artJson["name"]          = artName;
+      artJson["isDefaultName"] = isDefaultName != 0;
+
+      artJson["bounds"]     = __boundingBoxToJson(bounds);
+      artJson["attributes"] = attrs.toJson();
+
+      if (artType == AIArtType::kPathArt) {
+        ai::int16 segmentCount = 0;
+        error                  = sAIPath->GetPathSegmentCount(art, &segmentCount);
+
+        if (!error && segmentCount > 0) {
+          AIPathSegment* segments = new AIPathSegment[segmentCount];
+          error = sAIPath->GetPathSegments(art, 0, segmentCount, segments);
+
+          if (!error) { artJson["pathInfo"] = __pathInfoToJson(segments, segmentCount); }
+
+          delete[] segments;
+        }
+
+        AIPathStyle style;
+        AIBoolean   outHasAdvFill;
+        error = sAIPathStyle->GetPathStyle(art, &style, &outHasAdvFill);  // TODO: false??
+        if (!error) {
+          // artJson["fillColor"]   = __colorToJson(style.fill.color);
+          // artJson["strokeColor"] = __colorToJson(style.stroke.color);
+          // artJson["strokeWidth"] = style.strokeWidth;
+        }
+
+      } else if (artType == kRasterArt) {
+        //        AIRasterRecord info;
+        //        error = sAIRaster->GetRasterInfo(art, &info);
+        //        aisdk::check_ai_error(error);
+        //        artJson["rasterInfo"] = __rasterInfoToJson(info);
+      } else if (artType == kTextFrameArt) {
+        //        artJson["isTextFrame"] = true;
+      }
+
+      AIBoolean hasDictionary  = sAIArt->HasDictionary(art);
+      artJson["hasDictionary"] = hasDictionary && !sAIArt->IsDictionaryEmpty(art);
+
+      // タグ（メモ）を取得
+      AIBoolean hasNote = sAIArt->HasNote(art);
+      artJson["note"]   = json::value_t::null;
+
+      if (hasNote) {
+        ai::UnicodeString note;
+        error = sAIArt->GetNote(art, note);
+        aisdk::check_ai_error(error);
+        artJson["note"] = note.as_Platform();
+      }
+
+      if ((artType == kGroupArt || artType == kCompoundPathArt ||
+           artType == kTextFrameArt || artType == kSymbolArt) &&
+          depth < maxDepth) {
+        AIArtHandle firstChild;
+        error = sAIArt->GetArtFirstChild(art, &firstChild);
+        aisdk::check_ai_error(error);
+
+        if (firstChild) {
+          artJson["children"] = __getChildrenAsJson(art, depth, maxDepth);
+        }
+      }
+
+      // レイヤーへの参照を取得
+      AILayerHandle layer;
+      error = sAIArt->GetLayerOfArt(art, &layer);
+      if (!error && layer) {
+        ai::UnicodeString layerName;
+        error = sAILayer->GetLayerTitle(layer, layerName);
+        if (!error && !layerName.empty()) {
+          artJson["layerName"] = layerName.as_Platform();
+        }
+      }
+
+      return artJson;
+    }
+
+    json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth) {
+      json childrenJson = json::array();
+
+      AIArtHandle childArt;
+      AIErr       error = sAIArt->GetArtFirstChild(parentArt, &childArt);
+
+      while (!error && childArt) {
+        childrenJson.push_back(__artObjectToJson(childArt, depth + 1, maxDepth));
+
+        AIArtHandle nextArt;
+        error    = sAIArt->GetArtSibling(childArt, &nextArt);
+        childArt = nextArt;
+      }
+
+      return childrenJson;
+    }
+
+    json artToJSON(AIArtHandle art, int maxDepth = 100) {
+      json jsonObj = __artObjectToJson(art, 0, maxDepth);
+      return jsonObj;
     }
   }  // namespace art
 

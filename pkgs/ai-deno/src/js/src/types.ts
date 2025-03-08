@@ -1,3 +1,5 @@
+import { UINode } from "./ui.ts";
+
 export type ParameterSchema = {
   [name: string]: {
     type: "real" | "int" | "bool" | "string";

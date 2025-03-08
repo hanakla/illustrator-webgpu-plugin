@@ -145,7 +145,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   csl("* GO LIVE!! EFFECT!!!");
 
   auto artType = suai::art::getArtType(message->art);
-  csl("Art type: %s", suai::art::getArtTypeName(message->art).c_str());
+  csl("Art type: %s", suai::art::getTypeName(message->art).c_str());
 
   ASErr error = kNoErr;
 
@@ -166,7 +166,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
        .antiAlias          = 2,
        .colorConvert       = suai::RasterSettingColorConvert::Standard,
        .preserveSpotColors = true,
-       // .resolution         = 72, // Keep document resolution
+       .resolution         = 72,  // Keep document resolution
        .preserveSpotColors = true,
        .options =
            suai::RasterSettingOption{
@@ -187,22 +187,38 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     error = sAIRasterize->ComputeArtBounds(artSet->ToAIArtSet(), &bounds, false);
 
     AIArtHandle rasterArt;
-    error = sAIArt->NewArt(
-        AIArtType::kRasterArt, AIPaintOrder::kPlaceDefault, art, &rasterArt
-    );
-    CHKERR();
+    if (suai::art::getArtType(art) == AIArtType::kRasterArt) {
+      rasterArt = art;
+    } else {
+      error = sAIArt->NewArt(
+          AIArtType::kRasterArt, AIPaintOrder::kPlaceDefault, art, &rasterArt
+      );
+      CHKERR();
 
-    timeStart("Rasterize");
-    error = sAIRasterize->Rasterize(
-        artSet->ToAIArtSet(), &settings, &bounds, AIPaintOrder::kPlaceAbove, art,
-        &rasterArt, NULL
-    );
-    timeEnd();
-    CHKERR();
+      timeStart("Rasterize");
+      error = sAIRasterize->Rasterize(
+          artSet->ToAIArtSet(), &settings, &bounds, AIPaintOrder::kPlaceAbove, art,
+          &rasterArt, NULL
+      );
+      timeEnd();
+      CHKERR();
+    }
 
     AIRasterRecord info;
     sAIRaster->GetRasterInfo(rasterArt, &info);
     unsigned char bytes = info.bitsPerPixel / 8;
+
+    print_AIRasterRecord(info);
+
+    AIDocumentSetup docSetup;
+    error = sAIDocument->GetDocumentSetup(&docSetup);
+    CHKERR();
+
+    print_AIDocumentSetup(docSetup);
+    // if (error == kNoErr) {
+    //     AIReal resolution = docSetup.outputResolution;
+    //     // ここで解像度（resolution）を使用できます
+    // }
 
     AIRealRect bbox;
     sAIRaster->GetRasterBoundingBox(rasterArt, &bbox);
@@ -217,12 +233,12 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     AITile workTile   = {0};
     workTile.colBytes = bytes;
 
-    uint32 width  = artSlice.right - artSlice.left;
-    uint32 height = artSlice.bottom - artSlice.top;
+    uint32 sourceWidth  = artSlice.right - artSlice.left;
+    uint32 sourceHeight = artSlice.bottom - artSlice.top;
 
-    size_t dataSize   = width * height * bytes;
+    size_t dataSize   = sourceWidth * sourceHeight * bytes;
     workTile.data     = new unsigned char[dataSize];
-    workTile.rowBytes = width * bytes;
+    workTile.rowBytes = sourceWidth * bytes;
 
     print_AITile(&workTile, "workTile(before)");
 
@@ -239,14 +255,14 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
     print_AITile(&workTile, "workTile(after)");
 
-    const ai::uint32 totalPixels = width * height;
+    const ai::uint32 totalPixels = sourceWidth * sourceHeight;
     const ai::uint32 pixelStride = workTile.colBytes;
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
 
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
-        .width       = width,
-        .height      = height,
+        .width       = sourceWidth,
+        .height      = sourceHeight,
         .data_ptr    = (void*)pixelData,
         .byte_length = byteLength,
     };
@@ -282,8 +298,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
       workTile.colBytes = 4;
       workTile.data     = result->data->data_ptr;
 
-      auto widthDiff  = result->data->width - width;
-      auto heightDiff = result->data->height - height;
+      auto widthDiff  = result->data->width - sourceWidth;
+      auto heightDiff = result->data->height - sourceHeight;
 
       workTile.channelInterleave[0] = 1;
       workTile.channelInterleave[1] = 2;
@@ -294,39 +310,99 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         csl("Resizing tile");
         csl("  widthDiff: %d, heightDiff: %d", widthDiff, heightDiff);
 
-        // Centering
-        // workSlice.left   = artSlice.left -= widthDiff / 2;
-        // workSlice.right  = artSlice.right += widthDiff / 2;
-        // workSlice.top    = artSlice.top -= heightDiff / 2;
-        // workSlice.bottom = artSlice.bottom += heightDiff / 2;
+        // 新しいラスターアートを作成
+        AIArtHandle newRasterArt;
+        error = sAIArt->NewArt(
+            AIArtType::kRasterArt, AIPaintOrder::kPlaceAbove, art, &newRasterArt
+        );
+        CHKERR();
 
-        // workTile.bounds = artSlice;
-      }
+        // 新しいラスターレコードを設定
+        AIRasterRecord newInfo;
+        newInfo.colorSpace         = info.colorSpace;
+        newInfo.bitsPerPixel       = info.bitsPerPixel;
+        newInfo.flags              = info.flags;
+        newInfo.originalColorSpace = info.originalColorSpace;
 
-      csl("Disposing result");
-      // ai_deno::dispose_do_live_effect_result(result);
+        // 新しいbounds - 左上は常に0,0から始まる
+        newInfo.bounds.left   = 0;
+        newInfo.bounds.top    = 0;
+        newInfo.bounds.right  = result->data->width;
+        newInfo.bounds.bottom = result->data->height;
 
-      if ((void*)pixelData == result->data->data_ptr) {
-        std::cout << "Effect: Same data pointer" << std::endl;
+        error = sAIRaster->SetRasterInfo(newRasterArt, &newInfo);
+        CHKERR();
+
+        // 元のラスターの変換マトリックスを取得
+        AIRealMatrix matrix;
+        error = sAIRaster->GetRasterMatrix(rasterArt, &matrix);
+        CHKERR();
+
+        // ピクセル単位とポイント単位の関係を調査
+        AIRealRect artBoundsPts;
+        error = sAIArt->GetArtBounds(rasterArt, &artBoundsPts);
+
+        // ラスターのピクセルサイズ
+        ai::int32 widthPx  = info.bounds.right - info.bounds.left;
+        ai::int32 heightPx = info.bounds.bottom - info.bounds.top;
+
+        // 実際の変換比率を計算して出力
+        float ratioX = (artBoundsPts.right - artBoundsPts.left) / widthPx;
+        float ratioY = (artBoundsPts.bottom - artBoundsPts.top) / heightPx;
+
+        csl("実際の変換比率: X=%.6f, Y=%.6f", ratioX, ratioY);
+
+        // Centering image
+        matrix.tx -= (widthDiff / 2.0) * ratioX;
+        matrix.ty -= (heightDiff / 2.0) * ratioY;
+
+        error = sAIRaster->SetRasterMatrix(newRasterArt, &matrix);
+        CHKERR();
+
+        // 新しいラスターへの画像データ設定用のスライスを準備
+        AISlice newArtSlice = {0}, newWorkSlice = {0};
+        newWorkSlice.top = newArtSlice.top = 0;
+        newWorkSlice.bottom = newArtSlice.bottom = result->data->height;
+        newWorkSlice.left = newArtSlice.left = 0;
+        newWorkSlice.right = newArtSlice.right = result->data->width;
+        newWorkSlice.back = newArtSlice.back = workTile.colBytes;
+
+        // 処理済みのタイルデータを適切に設定
+        AITile newWorkTile   = {0};
+        newWorkTile.data     = result->data->data_ptr;
+        newWorkTile.bounds   = newArtSlice;
+        newWorkTile.rowBytes = result->data->width * workTile.colBytes;
+        newWorkTile.colBytes = workTile.colBytes;
+
+        // チャンネルインターリーブの設定を複製
+        for (int i = 0; i < kMaxChannels; i++) {
+          newWorkTile.channelInterleave[i] = workTile.channelInterleave[i];
+        }
+
+        // 新しいラスターにデータを設定
+        error = sAIRaster->SetRasterTile(
+            newRasterArt, &newArtSlice, &newWorkTile, &newWorkSlice
+        );
+        CHKERR();
+
+        // 元のラスターを削除
+        error = sAIArt->DisposeArt(rasterArt);
+        CHKERR();
+
+        // 新しいラスターを返す
+        message->art = newRasterArt;
+
+        return error;
       } else {
-        std::cout << "Effect: Different data pointer" << std::endl;
+        // サイズ変更がない場合は元のタイルにデータを設定
+        error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
+        CHKERR();
+
+        message->art = rasterArt;
+
+        return error;
       }
-
-      // TODO:
-      // 受け取った画像が元の位置の中央を起点に、受け取ったサイズで描画されるようにする
-      error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
-      CHKERR();
-
-      message->art = rasterArt;
-
-      return error;
-    } else {
-      std::cerr << "Failed to execute deno" << std::endl;
-      error = kCantHappenErr;
     }
-
-    // csl("set rasterArt");
-    // message->art = rasterArt;
   } catch (const ai::Error& ex) {
     std::cout << (AIErr)ex << ":" << ex.what() << std::endl;
     throw ex;

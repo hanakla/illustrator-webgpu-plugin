@@ -1,0 +1,8 @@
+{
+  "name": "@hanakla/dinostrator",
+  "version": "0.0.1-pre.1",
+  "description": "Plugin creater for @hanakla/illustrator-deno",
+  "exports": {
+    ".": "./mod.ts"
+  }
+}

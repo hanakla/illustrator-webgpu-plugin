@@ -7,6 +7,9 @@ version = "0.1.0"
 name = "ai_deno"
 crate-type = ["cdylib", "staticlib"]
 
+[features]
+debug_deno = []
+
 [dependencies]
 ffi-support = "0.4.4"
 #rustyscript = {git = "https://github.com/rscarson/rustyscript.git", features = ["all_extensions", "node_experimental"] }

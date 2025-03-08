@@ -86,6 +86,10 @@
       "dependencies": [
         "npm:@deno/vite-plugin@^1.0.4",
         "npm:@types/node@^22.13.4",
+        "npm:@types/react-dom@19",
+        "npm:@types/react@19",
+        "npm:react-dom@19",
+        "npm:react@19",
         "npm:vite@^6.1.1"
       ]
     }

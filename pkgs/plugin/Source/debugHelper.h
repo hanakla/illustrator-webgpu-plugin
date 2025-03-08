@@ -98,7 +98,7 @@ void print_stringBin(const char* str, std::string label) {
   if (!AI_DENO_DEBUG) return;
   std::cout << "print_stringBin(char*):" << label << std::endl;
 
-  std::stringstream ss;
+  std::ostringstream ss;
 
   size_t l = strlen(str);
   for (size_t i = 0; i < l; i++) {
@@ -113,7 +113,7 @@ void print_stringBin(const std::string& str, std::string label) {
   if (!AI_DENO_DEBUG) return;
   std::cout << "print_stringBin:" << label << std::endl;
 
-  std::stringstream ss;
+  std::ostringstream ss;
 
   for (size_t i = 0; i < str.size(); i++) {
     ss << std::hex << std::uppercase << (int)str[i];
@@ -143,6 +143,36 @@ void print_AILiveEffectData(const AILiveEffectData* data) {
   std::cout << std::endl;
 }
 
+void print_AIRealMatrix(const AIRealMatrix* matrix, std::string label) {
+  if (!AI_DENO_DEBUG) return;
+
+  std::stringstream ss;
+
+  ss << "AIMatrix (" << label << "): " << std::endl;
+  ss << "  a: " << matrix->a << std::endl;
+  ss << "  b: " << matrix->b << std::endl;
+  ss << "  c: " << matrix->c << std::endl;
+  ss << "  d: " << matrix->d << std::endl;
+  ss << "  tx: " << matrix->tx << std::endl;
+  ss << "  ty: " << matrix->ty << std::flush;
+
+  csl(ss.str().c_str());
+}
+
+void print_AIRealRect(const AIRealRect* rect, std::string label) {
+  if (!AI_DENO_DEBUG) return;
+
+  std::stringstream ss;
+
+  ss << "AIRealRect (" << label << "): " << std::endl;
+  ss << "  top: " << rect->top << std::endl;
+  ss << "  left: " << rect->left << std::endl;
+  ss << "  right: " << rect->right << std::endl;
+  ss << "  bottom: " << rect->bottom << std::flush;
+
+  csl(ss.str().c_str());
+}
+
 std::string stringify_ASErr(ASErr& err) {
   if (err == kNoErr) {
     return "kNoErr";
@@ -156,16 +186,57 @@ std::string stringify_ASErr(ASErr& err) {
   }
 }
 
+void print_AIDocumentSetup(AIDocumentSetup& setup) {
+  if (!AI_DENO_DEBUG) return;
+
+  std::ostringstream oss;
+
+  oss << "AIDocumentSetup: " << std::endl;
+  oss << "  width: " << setup.width << std::endl;
+  oss << "  height: " << setup.height << std::endl;
+  oss << "  showPlacedImages: " << std::boolalpha << !!setup.showPlacedImages
+      << std::endl;
+  oss << "  outputResolution: " << setup.outputResolution << std::endl;
+  oss << "  splitLongPaths: " << std::boolalpha << !!setup.splitLongPaths << std::endl;
+  oss << "  useDefaultScreen: " << std::boolalpha << !!setup.useDefaultScreen
+      << std::endl;
+  oss << "  compatibleGradients: " << std::boolalpha << !!setup.compatibleGradients
+      << std::endl;
+  oss << "  printTiles: " << std::boolalpha << !!setup.printTiles << std::endl;
+  oss << "  tileFullPages: " << std::boolalpha << !!setup.tileFullPages << std::endl;
+
+  csl(oss.str().c_str());
+}
+
+void print_AIRasterRecord(AIRasterRecord& record) {
+  if (!AI_DENO_DEBUG) return;
+
+  std::ostringstream oss;
+
+  oss << "AIRasterRecord: " << std::endl;
+  oss << "  colorSpace: " << record.colorSpace << std::endl;
+  oss << "  bitsPerPixel: " << record.bitsPerPixel << std::endl;
+  oss << "  flags: " << record.flags << std::endl;
+  oss << "  originalColorSpace: " << record.originalColorSpace << std::endl;
+  oss << "  bounds: { " << "top: " << record.bounds.top
+      << ", left: " << record.bounds.left << ", right: " << record.bounds.right
+      << ", bottom: " << record.bounds.bottom << " }" << std::flush;
+
+  csl(oss.str().c_str());
+}
+
 void print_AIArt(AIArtHandle& art, std::string title) {
   if (!AI_DENO_DEBUG) return;
 
   auto [name, isDefault] = suai::art::getName(art);
+  auto userAttr          = suai::art::getUserAttrs(art);
 
   std::ostringstream oss;
 
   oss << "AIArt (" << title << "): " << std::endl;
-  oss << "  type: " << suai::art::getArtTypeName(art) << std::endl;
-  oss << "  name: " << name << " (isDefault: " << isDefault << ")" << std::flush;
+  oss << "  type: " << suai::art::getTypeName(art) << std::endl;
+  oss << "  name: " << name << " (isDefault: " << isDefault << ")" << std::endl;
+  oss << "  userAttr: " << userAttr.toJSONOnlyFlagged() << std::flush;
 
   csl(oss.str().c_str());
 }
@@ -181,8 +252,7 @@ void print_AISlice(AISlice* slice, std::string title) {
   oss << "  right: " << slice->right << std::endl;
   oss << "  bottom: " << slice->bottom << std::endl;
   oss << "  front: " << slice->front << std::endl;
-  oss << "  back: " << slice->back << std::endl;
-  oss << std::endl;
+  oss << "  back: " << slice->back << std::flush;
 
   csl(oss.str().c_str());
 }
@@ -199,8 +269,7 @@ void print_AITile(AITile* tile, std::string title) {
   oss << "  chnnelInterleave: " << arrayToString(tile->channelInterleave) << std::endl;
   oss << "  rowBytes: " << tile->rowBytes << std::endl;
   oss << "  colBytes: " << tile->colBytes << std::endl;
-  oss << "  planeBytes: " << tile->planeBytes << std::endl;
-  oss << std::endl;
+  oss << "  planeBytes: " << tile->planeBytes << std::flush;
 
   csl(oss.str().c_str());
 }

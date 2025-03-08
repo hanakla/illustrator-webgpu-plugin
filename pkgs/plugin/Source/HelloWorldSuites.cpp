@@ -15,6 +15,9 @@ extern "C" AIRasterizeSuite*     sAIRasterize     = nullptr;
 extern "C" AIRasterSuite*        sAIRaster        = nullptr;
 extern "C" AIDocumentSuite*      sAIDocument      = nullptr;
 extern "C" AIMenuSuite*          sAIMenu          = nullptr;
+extern "C" AIPathSuite*          sAIPath          = nullptr;
+extern "C" AIPathStyleSuite*     sAIPathStyle     = nullptr;
+extern "C" AILayerSuite*         sAILayer         = nullptr;
 
 // Import suites
 ImportSuite gImportSuites[] = {
@@ -30,5 +33,8 @@ ImportSuite gImportSuites[] = {
     {kAIRasterSuite, kAIRasterSuiteVersion, &sAIRaster},
     {kAIDocumentSuite, kAIDocumentSuiteVersion, &sAIDocument},
     {kAIMenuSuite, kAIMenuSuiteVersion, &sAIMenu},
+    {kAIPathSuite, kAIPathSuiteVersion, &sAIPath},
+    {kAIPathStyleSuite, kAIPathStyleSuiteVersion, &sAIPathStyle},
+    {kAILayerSuite, kAILayerSuiteVersion, &sAILayer},
     {nil, 0, nil}
 };
