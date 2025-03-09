@@ -60,33 +60,89 @@ export type DoLiveEffectPayload = {
   data: Uint8ClampedArray;
 };
 
-export type Effect<T extends ParameterSchema, IT> = {
+export type AIPlugin<
+  T extends ParameterSchema,
+  TInit,
+  Params = ParameterSchemaToState<T>
+> = {
   id: string;
   title: string;
   version: { major: number; minor: number };
-  paramSchema: T;
-  /** map to styleFilterFlags */
-  styleFilterFlags: {
-    main:
-      | StyleFilterFlag.kPreEffectFilter
-      | StyleFilterFlag.kPostEffectFilter
-      | StyleFilterFlag.kFillFilter
-      | StyleFilterFlag.kStrokeFilter;
-    features: StyleFilterFlag[];
+
+  liveEffect?: {
+    paramSchema: T;
+
+    /** map to styleFilterFlags */
+    styleFilterFlags: {
+      main:
+        | StyleFilterFlag.kPreEffectFilter
+        | StyleFilterFlag.kPostEffectFilter
+        | StyleFilterFlag.kFillFilter
+        | StyleFilterFlag.kStrokeFilter;
+      features: StyleFilterFlag[];
+    };
+
+    /** Called once at first effect use */
+    initLiveEffect?(): Promise<TInit> | TInit;
+    doLiveEffect: (
+      init: NoInfer<TInit>,
+      params: Params,
+      input: DoLiveEffectPayload
+    ) => Promise<DoLiveEffectPayload>;
+
+    /**
+     * Called when the EditLiveEffect callback is triggered.
+     * This function must return a normalized parameter object.
+     */
+    editLiveEffectParameters?: (nextParams: Params) => Params;
+
+    /**
+     * Called when the LiveEffectScale callback is triggered.
+     * This function scales the given params by the given scale factor.
+     *
+     * If the effect unnecessarily scales the parameters, it should return null.
+     * Else, it should return the after scaled parameters.
+     *
+     * @param params The parameters to scale.
+     * @param scaleFactor The scale factor (0.0 to 1.0).
+     * @returns The scaled parameters or null if the parameters are not scaled.
+     */
+    liveEffectScaleParameters: (
+      params: Params,
+      scaleFactor: number
+    ) => Params | null;
+
+    // liveEffectAdjustColors(params: T, colorAdjustment: any): T
+
+    /**
+     * Called when the LiveEffectInterpolate callback is triggered.
+     * This function interpolates between paramsA and paramsB
+     * based on the given percent (0 to 1).
+     * It is invoked when this effect is targeted by Illustrator's Blend feature.
+     *
+     * @param paramsA The first set of parameters.
+     * @param paramsB The second set of parameters.
+     * @param percent The interpolation percent (0.0 to 1.0).
+     */
+    liveEffectInterpolate: (
+      paramsA: Params,
+      paramsB: Params,
+      percent: number
+    ) => Params;
+
+    renderUI: (params: Params) => UINode;
   };
-  /** Called once at first effect use */
-  initDoLiveEffect?(): Promise<IT> | IT;
-  doLiveEffect: (
-    init: IT,
-    params: ParameterSchemaToState<T>,
-    input: DoLiveEffectPayload
-  ) => Promise<DoLiveEffectPayload>;
-  editLiveEffectParameters: (nextParams: T) => string;
-  renderUI: (params: ParameterSchemaToState<T>) => UINode;
 };
 
+export type AIEffectPlugin<T extends ParameterSchema, TInit> = Ensure<
+  AIPlugin<T, TInit>,
+  "liveEffect"
+>;
+
+type Ensure<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
+
 export function definePlugin<T extends ParameterSchema, IT>(
-  plugin: Effect<T, IT>
+  plugin: AIPlugin<T, IT>
 ) {
   return plugin;
 }

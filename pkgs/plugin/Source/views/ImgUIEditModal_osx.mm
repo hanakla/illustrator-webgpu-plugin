@@ -53,6 +53,9 @@ using json = nlohmann::json;
 - (void)releaseDialog;
 @end
 
+//
+// Implementations
+//
 class ImGuiModalOSX : public ImGuiModal::IModalImpl {
  public:
   ImGuiModalOSX() {
@@ -117,7 +120,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   io.IniFilename = nullptr; // Disable .ini file
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable
-  io.Fonts->AddFontDefault();
+//  io.Fonts->AddFontDefault();
   ImGuiSetSpectrumTheme();
 
   // Setup Platform/Renderer bindings
@@ -149,11 +152,36 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f,
   // NULL, io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != NULL);
 
+  // Setup fonts
+  ImFontConfig config;
+//    config.FontNo = 1;
+  config.MergeMode = false;
+
+  // Specify CJK ranges
+  static const ImWchar ranges[] = {
+      0x0020, 0x00FF, // 基本ラテン + ラテン補助
+      0x3000, 0x30FF, // CJK記号・句読点 + 平仮名・片仮名
+      0x31F0, 0x31FF, // 片仮名拡張
+      0xFF00, 0xFFEF, // 半角・全角形
+      0x4e00, 0x9FAF, // CJK統合漢字
+      0,
+  };
+
+  std::string fontPath = ImGuiModal::getSystemFontPath();
+  ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 12.0f, &config, io.Fonts->GetGlyphRangesJapanese());
+  IM_ASSERT(font != NULL);
+
+  if (io.Fonts->Fonts.Size == 0) {
+      io.Fonts->AddFontDefault();
+      printf("Failed to load CJK font, using default font instead.\n");
+  }
+
   return [super initWithWindow:window];
 }
 
 - (void)updateRenderTree:(json)renderTree {
-  if (imGuiView == nullptr) return;
+  // if (imGuiView == nullptr) return;
+  std::cout << "updateRenderTree: " << renderTree.dump() << std::endl;
   [self->imGuiView setRenderTree:renderTree];
 }
 

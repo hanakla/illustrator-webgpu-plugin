@@ -35,7 +35,7 @@ const JSR_REGISTRY_URL: &str = "https://jsr.io";
 
 mod cache_provider;
 
-use crate::dai_println;
+use crate::deno_println;
 
 use super::{module, transpiler::transpile};
 
@@ -214,7 +214,7 @@ impl AiDenoModuleLoader {
         specifier: &str,
         referrer: &ModuleSpecifier,
     ) -> Result<ModuleSpecifier, ModuleLoaderError> {
-        dai_println!(
+        deno_println!(
             "resolve_and_ensure_npm_module: {}, referrer: {}",
             specifier,
             referrer
@@ -247,21 +247,21 @@ impl AiDenoModuleLoader {
         let mut package_manager = self.pkg_manager.clone();
 
         if !package_manager.is_package_installed(&name, resolved_version.as_str()) {
-            dai_println!("Dowloading npm package: {}@{:?}", name, resolved_version);
+            deno_println!("Dowloading npm package: {}@{:?}", name, resolved_version);
 
             let npm_package = package_manager
                 .install_package_with_deps(&name, resolved_version.as_str(), npm_client)
                 .map_err(|err| ModuleLoaderError::from(err))
                 .await?;
 
-            dai_println!(
+            deno_println!(
                 "Complete to fetch npm package: {}@{} -> {}",
                 npm_package.name,
                 npm_package.version,
                 npm_package.content_path.display()
             );
         } else {
-            dai_println!("Package already installed: {}@{:?}", name, resolved_version);
+            deno_println!("Package already installed: {}@{:?}", name, resolved_version);
         }
 
         return Ok(ModuleSpecifier::parse(specifier).unwrap());
@@ -287,7 +287,7 @@ impl AiDenoModuleLoader {
         &self,
         specifier: &ModuleSpecifier,
     ) -> Result<ModuleSpecifier, ModuleLoaderError> {
-        dai_println!("Ensuring JSR module: {}", specifier);
+        deno_println!("Ensuring JSR module: {}", specifier);
 
         let (pkg_req, _path) = parse_jsr_specifier(specifier.as_str()).map_err(|err| {
             ModuleLoaderError::from(JsErrorBox::generic(format!(
@@ -368,7 +368,7 @@ impl AiDenoModuleLoader {
 
             "npm" => {
                 let path = module_specifier.path();
-                dai_println!("npm path: {}", path);
+                deno_println!("npm path: {}", path);
 
                 let path = self
                     .pkg_manager
@@ -394,7 +394,7 @@ impl AiDenoModuleLoader {
                 // let content =
                 //     ["console.log(import.meta);", content.to_string().as_str()].join("\n");
 
-                dai_println!("Translated content: {}", content);
+                deno_println!("Translated content: {}", content);
 
                 Ok((content.to_string(), file_url.clone()))
             }
@@ -473,7 +473,7 @@ impl ModuleLoader for AiDenoModuleLoader {
         raw_referrer: &str,
         kind: ResolutionKind,
     ) -> Result<ModuleSpecifier, ModuleLoaderError> {
-        dai_println!(
+        deno_println!(
             "resolving: {}, referrer: {}, kind: {:?}",
             raw_specifier,
             raw_referrer,
@@ -492,7 +492,7 @@ impl ModuleLoader for AiDenoModuleLoader {
                 )))
             });
         } else if raw_specifier.starts_with("jsr:") {
-            dai_println!("JSR module: {}", raw_specifier);
+            deno_println!("JSR module: {}", raw_specifier);
             return Ok(ModuleSpecifier::from_str(raw_specifier).unwrap());
         } else if raw_specifier.starts_with("node:") {
             return self.resolve_node_builtin(raw_specifier, &referrer);
@@ -503,7 +503,7 @@ impl ModuleLoader for AiDenoModuleLoader {
             Err(err) => match self.resolve_npm_module(raw_specifier, &referrer) {
                 Ok(url) => return Ok(url),
                 Err(err2) => {
-                    dai_println!(
+                    deno_println!(
                         "Failed to fallback resoling npm module: {}, {}",
                         raw_specifier,
                         err2.to_string()
@@ -513,7 +513,7 @@ impl ModuleLoader for AiDenoModuleLoader {
             },
         };
 
-        dai_println!("resolve request: {:?} -> {:?}", raw_specifier, result);
+        deno_println!("resolve request: {:?} -> {:?}", raw_specifier, result);
 
         result
     }
@@ -525,7 +525,7 @@ impl ModuleLoader for AiDenoModuleLoader {
         is_dyn_import: bool,
         requested_module_type: RequestedModuleType,
     ) -> ModuleLoadResponse {
-        dai_println!(
+        deno_println!(
             "loading: {}, referrer: {:?}, is_dyn_import: {}",
             module_specifier,
             maybe_referrer,
@@ -562,7 +562,7 @@ impl ModuleLoader for AiDenoModuleLoader {
                 )));
             }
 
-            dai_println!("Loaded module: {}", final_url);
+            deno_println!("Loaded module: {}", final_url);
 
             let module_source = ModuleSource::new_with_redirect(
                 module_type,

@@ -10,3 +10,7 @@ ImGuiModal::IModalImpl *ImGuiModal::createModal() {
     ImGuiModal::IModalImpl *modal = new ImGuiModalOSX();
   return modal;
 }
+
+std::string ImGuiModal::getSystemFontPath() {
+  return "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc";
+}

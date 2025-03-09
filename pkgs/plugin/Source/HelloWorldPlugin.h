@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef __HelloWorldPlugin_h__
 #define __HelloWorldPlugin_h__
 
@@ -49,14 +51,17 @@ class HelloWorldPlugin : public Plugin {
   ASErr InitMenus(SPInterfaceMessage*);
   ASErr InitLiveEffect(SPInterfaceMessage*);
   ASErr GoLiveEffect(AILiveEffectGoMessage*);
+  ASErr LiveEffectScaleParameters(AILiveEffectScaleParamMessage*);
+  // ASErr LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage*);
+  ASErr LiveEffectInterpolate(AILiveEffectInterpParamMessage*);
   ASErr EditLiveEffectParameters(AILiveEffectEditParamMessage*);
 
   ASErr getDictionaryValues(const AILiveEffectParameters&, PluginParams*, PluginParams);
   ASErr putParamsToDictionaly(const AILiveEffectParameters& dict, PluginParams);
 
-  static void StaticHandleDenoAiAlert(const ai_deno::FunctionResult* result);
+  static void StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult* result);
 
-  void HandleDenoAiAlert(ai_deno::FunctionResult* request);
+  void HandleDenoAiAlert(ai_deno::JsonFunctionResult* request);
 };
 
 #endif

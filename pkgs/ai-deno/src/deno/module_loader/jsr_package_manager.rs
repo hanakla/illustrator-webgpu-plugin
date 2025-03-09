@@ -16,8 +16,8 @@ use std::sync::Arc;
 use sys_traits::impls::RealSys;
 use sys_traits::{FsCreateDirAll, FsRead, FsWrite};
 
-use crate::dai_println;
 use crate::deno::module_loader::http_client::AiDenoHttpClient;
+use crate::deno_println;
 
 const JSR_REGISTRY_URL: &str = "https://jsr.io";
 
@@ -60,7 +60,7 @@ impl JsrClient {
     pub async fn get_package_info(&self, name: &str) -> Result<JsrPackageInfo, JsErrorBox> {
         let url = Url::from_str(&format!("{}/{}/meta.json", self.registry_url, name)).unwrap();
 
-        dai_println!("Fetching package info: {}", url);
+        deno_println!("Fetching package info: {}", url);
 
         let response = self
             .client
@@ -95,7 +95,7 @@ impl JsrClient {
         )
         .unwrap();
 
-        dai_println!("Fetching version info: {}", url);
+        deno_println!("Fetching version info: {}", url);
 
         let response = self
             .client
@@ -119,7 +119,7 @@ impl JsrClient {
         )
         .unwrap();
 
-        dai_println!("Fetching module file: {}", url);
+        deno_println!("Fetching module file: {}", url);
 
         let content_type = if path.ends_with(".ts") {
             "application/typescript"
@@ -232,7 +232,7 @@ impl JsrPackageManager {
             match self.jsr_client.get_package_info(name).await {
                 Ok(info) => Some(Arc::new(info)),
                 Err(e) => {
-                    dai_println!("Failed to fetch package info: {}", e);
+                    deno_println!("Failed to fetch package info: {}", e);
                     None
                 }
             }
@@ -290,7 +290,7 @@ impl JsrPackageManager {
             match self.jsr_client.get_package_version_info(nv).await {
                 Ok(info) => Some(Arc::new(info)),
                 Err(e) => {
-                    dai_println!("Failed to fetch version info: {}", e);
+                    deno_println!("Failed to fetch version info: {}", e);
                     None
                 }
             }
@@ -438,7 +438,7 @@ impl JsrPackageManager {
             JsErrorBox::generic(format!("Failed to resolve package: {}", package_req))
         })?;
 
-        dai_println!(
+        deno_println!(
             "resolve_specifier_to_file_path: {}{}",
             package_req,
             subpath

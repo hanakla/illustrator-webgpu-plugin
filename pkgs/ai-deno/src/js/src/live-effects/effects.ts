@@ -1,8 +1,8 @@
 // import { createCanvas } from "npm:@napi-rs/canvas@0.1.68";
-import { Effect, StyleFilterFlag } from "../types.ts";
+import { AIPlugin, StyleFilterFlag } from "../types.ts";
 import { ui } from "../ui.ts";
 
-export const randomNoiseEffect: Effect<{}> = {
+export const randomNoiseEffect: AIPlugin<{}> = {
   id: "randomNoise-v1",
   title: "Random Noise V1",
   version: { major: 1, minor: 0 },

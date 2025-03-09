@@ -1,7 +1,6 @@
 pub use deno_runtime;
 
 mod async_bridge;
-pub(crate) mod debug;
 pub mod error;
 pub(super) mod ext;
 mod module;
@@ -11,7 +10,6 @@ mod runtime;
 mod traits;
 mod transpiler;
 
-pub use error::Error;
 pub use module::Module;
 pub use module::ModuleHandle;
 pub use runtime::{Runtime, RuntimeInitOptions};

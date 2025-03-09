@@ -54,9 +54,11 @@ ModalStatusCode AiDenoImGuiRenderComponents(
         const char* key    = keyStr.c_str();
         std::string value  = node["value"].get<std::string>();
 
+        ImGui::PushItemWidth(-1);
         if (ImGui::InputText(key, &value, ImGuiInputTextFlags_None)) {
           onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
         }
+        ImGui::PopItemWidth();
 
       } else if (type == "checkbox") {
         std::string key   = node["key"].get<std::string>();
@@ -73,6 +75,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
         int         max      = node["max"].get<int>();
         int         value    = node["value"].get<int>();
 
+        ImGui::PushItemWidth(-1);
         if (dataType == "int") {
           if (ImGui::SliderInt(label.c_str(), &value, min, max)) {
             onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
@@ -84,6 +87,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
             onChangeCallback(json::object({{node["key"].get<std::string>(), value}}));
           }
         }
+        ImGui::PopItemWidth();
       } else if (type == "select") {
         std::string label         = node["label"].get<std::string>();
         std::string key           = node["key"].get<std::string>();
@@ -103,13 +107,13 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     renderNode(renderTree);
 
     ImGui::Spacing();
-    if (ui::Button("Cancel", ButtonProps{.kind = ButtonKind::Default})) {
-      resultStatus = ModalStatusCode::Cancel;
-    }
+
+    static ButtonProps cancelBtnProps{.kind = ButtonKind::Default};
+    if (ui::Button("Cancel", cancelBtnProps)) { resultStatus = ModalStatusCode::Cancel; }
     ImGui::SameLine();
-    if (ui::Button("  OK  ", ButtonProps{.kind = ButtonKind::Primary})) {
-      resultStatus = ModalStatusCode::OK;
-    }
+
+    static ButtonProps okBtnProps{.kind = ButtonKind::Primary};
+    if (ui::Button("  OK  ", okBtnProps)) { resultStatus = ModalStatusCode::OK; }
 
     //    if (currentSize != nullptr) { *currentSize = ImGui::GetWindowSize(); }
 

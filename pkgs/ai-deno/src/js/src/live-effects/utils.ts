@@ -87,7 +87,8 @@ export function getNearestAligned256Resolution(
   };
 }
 
-export async function adjustImageToNearestAligned256Resolution(
+/** @deprecated */
+export async function resizeImageToNearestAligned256Resolution(
   imageDataLike: ImageDataLike
 ): Promise<ImageDataLike> {
   const { width: newWidth, height: newHeight } = getNearestAligned256Resolution(
@@ -98,6 +99,39 @@ export async function adjustImageToNearestAligned256Resolution(
   const resized = await resizeImageData(imageDataLike, newWidth, newHeight);
 
   return resized;
+}
+
+export async function addWebGPUAlignmentPadding(
+  imageDataLike: ImageDataLike
+): Promise<ImageDataLike> {
+  const { width, height } = imageDataLike;
+  const { width: newWidth, height: newHeight } = getNearestAligned256Resolution(
+    width,
+    height
+  );
+
+  const canvas = await createCanvasImpl(newWidth, newHeight);
+  const ctx = canvas.getContext("2d")!;
+  const imgData = await createImageDataImpl(imageDataLike.data, width, height);
+
+  ctx.putImageData(imgData, 0, 0);
+
+  return ctx.getImageData(0, 0, newWidth, newHeight);
+}
+
+export async function removeWebGPUAlignmentPadding(
+  imageDataLike: ImageDataLike,
+  originalWidth: number,
+  originalHeight: number
+): Promise<ImageDataLike> {
+  const { width, height } = imageDataLike;
+
+  const canvas = await createCanvasImpl(originalWidth, originalHeight);
+  const ctx = canvas.getContext("2d")!;
+  const imgData = await createImageDataImpl(imageDataLike.data, width, height);
+  ctx.putImageData(imgData, 0, 0);
+
+  return ctx.getImageData(0, 0, originalWidth, originalHeight);
 }
 
 export async function resizeImageData(
@@ -157,4 +191,8 @@ export async function toPng(imgData: ImageDataLike) {
 
   ctx.putImageData(img, 0, 0);
   return toBlob(canvas, "image/png", 100);
+}
+
+export function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }

@@ -4,7 +4,6 @@ extern crate once_cell;
 
 // use rustyscript::deno_core::v8;
 // use rustyscript::{Module, Runtime, RuntimeOptions};
-use crate::deno::deno_runtime::deno_core::error::JsError;
 use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInitOptions};
 
 use deno_core::{anyhow, serde_json::json};
@@ -17,18 +16,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+mod debug;
 mod deno;
 mod ext;
 
 pub type OpaqueAiMain = *mut c_void;
 pub type OpaqueDenoRuntime = *mut c_void;
 pub type OpaqueDenoModule = *mut c_void;
-
-// #[repr(C)]
-// pub struct ArrayBufferRef {
-//     ptr: *mut c_void,
-//     len: usize,
-// }
 
 #[repr(C)]
 pub struct ImageDataPayload {
@@ -39,40 +33,21 @@ pub struct ImageDataPayload {
 }
 
 #[repr(C)]
-pub struct NewFunctionResult<T> {
-    pub success: bool,
-    pub data: *mut T,
-}
-
-impl<T> NewFunctionResult<T> {
-    pub fn failed_default(message: &str) -> NewFunctionResult<T> {
-        NewFunctionResult {
-            success: false,
-            data: json!({
-                "message": message,
-            })
-            .to_string()
-            .as_ptr() as *mut T,
-        }
-    }
-}
-
-#[repr(C)]
-pub struct FunctionResult {
+pub struct JsonFunctionResult {
     success: bool,
     json: *mut c_char,
 }
 
-impl Display for FunctionResult {
+impl Display for JsonFunctionResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = unsafe { CStr::from_ptr(self.json) }.to_string_lossy();
         write!(f, "FunctionResult {}", json)
     }
 }
 
-impl FunctionResult {
-    pub fn failed_default() -> FunctionResult {
-        FunctionResult {
+impl JsonFunctionResult {
+    pub fn failed_default() -> JsonFunctionResult {
+        JsonFunctionResult {
             success: false,
             json: CString::new("{}".to_string()).unwrap().into_raw(),
         }
@@ -103,7 +78,7 @@ impl AlertPayload {
 struct AiMain {
     pub main_runtime: Runtime,
     pub main_module: ModuleHandle,
-    pub ai_alert: extern "C" fn(*const FunctionResult),
+    pub ai_alert: extern "C" fn(*const JsonFunctionResult),
 }
 
 fn package_root_dir() -> PathBuf {
@@ -116,7 +91,7 @@ fn package_root_dir() -> PathBuf {
 }
 
 #[no_mangle]
-pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) -> OpaqueAiMain {
+pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)) -> OpaqueAiMain {
     // let alert_fn = move |req: &str| alert_function(req, _ai_alert);
 
     dai_println!("Initializing");
@@ -146,7 +121,7 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const FunctionResult)) ->
 }
 
 #[no_mangle]
-pub extern "C" fn dispose_function_result(result: *mut FunctionResult) {
+pub extern "C" fn dispose_json_function_result(result: *mut JsonFunctionResult) {
     if result.is_null() {
         return;
     }
@@ -160,7 +135,7 @@ pub extern "C" fn dispose_function_result(result: *mut FunctionResult) {
 }
 
 #[no_mangle]
-pub extern "C" fn get_live_effects(ai_main_ref: OpaqueAiMain) -> *mut FunctionResult {
+pub extern "C" fn get_live_effects(ai_main_ref: OpaqueAiMain) -> *mut JsonFunctionResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
 
     dai_println!("✨️ get_live_effects");
@@ -176,7 +151,7 @@ pub extern "C" fn get_live_effect_view_tree(
     ai_main_ref: OpaqueAiMain,
     effect_id: *const c_char,
     params: *const c_char,
-) -> *mut FunctionResult {
+) -> *mut JsonFunctionResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
     let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
@@ -365,6 +340,105 @@ pub extern "C" fn dispose_do_live_effect_result(result: *mut DoLiveEffectResult)
     }
 }
 
+#[no_mangle]
+pub extern "C" fn edit_live_effect_parameters(
+    ai_main_ref: OpaqueAiMain,
+    effect_id: *const c_char,
+    params: *const c_char,
+) -> *mut JsonFunctionResult {
+    let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
+
+    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
+    let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
+
+    let result = execute_exported_function(ai_main, "editLiveEffectParameters", move |scope| {
+        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(scope, effect_id);
+
+        let params = v8::String::new(scope, params.as_str()).unwrap();
+        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::Local::<v8::Object>::try_from(params).unwrap();
+
+        let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into()];
+        Ok(args)
+    });
+
+    let boxed = Box::new(result);
+
+    Box::into_raw(boxed)
+}
+
+#[no_mangle]
+pub extern "C" fn live_effect_scale_parameters(
+    ai_main_ref: OpaqueAiMain,
+    effect_id: *const c_char,
+    params: *const c_char,
+    scale_factor: f64,
+) -> *mut JsonFunctionResult {
+    let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
+    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
+    let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
+
+    let result = execute_exported_function(ai_main, "liveEffectScaleParameters", move |scope| {
+        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(scope, effect_id);
+
+        let params = v8::String::new(scope, params.as_str()).unwrap();
+        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::Local::<v8::Object>::try_from(params).unwrap();
+
+        let scale = v8::Number::new(scope, scale_factor);
+
+        let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into(), scale.into()];
+        Ok(args)
+    });
+
+    let boxed = Box::new(result);
+
+    Box::into_raw(boxed)
+}
+
+#[no_mangle]
+pub extern "C" fn live_effect_interpolate(
+    ai_main_ref: OpaqueAiMain,
+    effect_id: *const c_char,
+    params_a: *const c_char,
+    params_b: *const c_char,
+    percent: f64,
+) -> *mut JsonFunctionResult {
+    let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
+    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
+    let params = unsafe { CStr::from_ptr(params_a).to_string_lossy().to_string() };
+    let target_params = unsafe { CStr::from_ptr(params_b).to_string_lossy().to_string() };
+
+    let result = execute_exported_function(ai_main, "liveEffectInterpolate", move |scope| {
+        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(scope, effect_id);
+
+        let params_a = v8::String::new(scope, params.as_str()).unwrap();
+        let params_a = v8::json::parse(scope, params_a).unwrap();
+        let params_a = v8::Local::<v8::Object>::try_from(params_a).unwrap();
+
+        let target_params = v8::String::new(scope, target_params.as_str()).unwrap();
+        let target_params = v8::json::parse(scope, target_params).unwrap();
+        let target_params = v8::Local::<v8::Object>::try_from(target_params).unwrap();
+
+        let percent = v8::Number::new(scope, percent);
+
+        let args: Vec<v8::Local<v8::Value>> = vec![
+            effect_id.into(),
+            params_a.into(),
+            target_params.into(),
+            percent.into(),
+        ];
+        Ok(args)
+    });
+
+    let boxed = Box::new(result);
+
+    Box::into_raw(boxed)
+}
+
 fn execute_export_function_and_raw_return<'a>(
     ai_main: &mut AiMain,
     function_name: &str,
@@ -459,14 +533,14 @@ fn execute_exported_function<'a, F>(
     ai_main: &mut AiMain,
     function_name: &str,
     args_factory: F,
-) -> FunctionResult
+) -> JsonFunctionResult
 where
     F: for<'b> FnOnce(
             &mut v8::HandleScope<'b>,
         ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>
         + 'static,
 {
-    let failed_res = FunctionResult {
+    let failed_res = JsonFunctionResult {
         success: false,
         json: CString::new("{}".to_string()).unwrap().into_raw(),
     };
@@ -511,24 +585,10 @@ where
         .unwrap()
         .to_rust_string_lossy(scope);
 
-    FunctionResult {
+    JsonFunctionResult {
         success: true,
         json: CString::new(result).unwrap().into_raw(),
     }
-}
-
-fn function_result_result_factory<'a>(
-    scope: &mut v8::HandleScope<'a>,
-    result: v8::Local<'a, v8::Value>,
-) -> Result<FunctionResult, anyhow::Error> {
-    let result = v8::json::stringify(scope, result)
-        .unwrap()
-        .to_rust_string_lossy(scope);
-
-    Ok(FunctionResult {
-        success: true,
-        json: CString::new(result).unwrap().into_raw(),
-    })
 }
 
 fn c_char_to_string(c_char: *mut c_char) -> String {

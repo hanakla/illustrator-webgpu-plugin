@@ -76,14 +76,14 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
 
   csl("✨️ Init Live Effect");
 
-  ai_deno::FunctionResult* effectResult = ai_deno::get_live_effects(aiDenoMain);
+  ai_deno::JsonFunctionResult* effectResult = ai_deno::get_live_effects(aiDenoMain);
   if (!effectResult->success) {
     csl("Failed to get live effects");
     return kCantHappenErr;
   }
 
   json effects = json::parse(effectResult->json);
-  ai_deno::dispose_function_result(effectResult);
+  ai_deno::dispose_json_function_result(effectResult);
 
   std::vector<AILiveEffectData> effectData;
   for (auto& effectDef : effects) {
@@ -163,7 +163,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
   AIRasterizeSettings settings = suai::createAIRasterSetting(
       {.type               = suai::RasterType::ARGB,
-       .antiAlias          = 2,
+       .antiAlias          = 4,
        .colorConvert       = suai::RasterSettingColorConvert::Standard,
        .preserveSpotColors = true,
        .resolution         = 72,  // Keep document resolution
@@ -350,7 +350,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         float ratioX = (artBoundsPts.right - artBoundsPts.left) / widthPx;
         float ratioY = (artBoundsPts.bottom - artBoundsPts.top) / heightPx;
 
-        csl("実際の変換比率: X=%.6f, Y=%.6f", ratioX, ratioY);
+        // csl("実際の変換比率: X=%.6f, Y=%.6f", ratioX, ratioY);
 
         // Centering image
         matrix.tx -= (widthDiff / 2.0) * ratioX;
@@ -420,23 +420,6 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
   suai::LiveEffect* effect = new suai::LiveEffect(message->effect);
 
   try {
-    //            // プレビューが表示されたかどうか。
-    //            m_previewed = false;
-    //            // コールバック関数で使用するため、message を保持する
-    //            m_effectMessage = message;
-    //            // 処理対象オブジェクトから効果の設定値を取得する。
-    //            // 初回処理時は既定値になる。
-    //            getDictionaryValues(message->parameters);
-    //            // 現時点の設定値を保持する。キャンセル時に復旧するため。
-    //            MyParms saved_parms = m_parms;
-    //
-    //            // オブジェクトに当該効果が複数使われている場合、クラス変数の
-    //            m_parms は
-    //            //
-    //            プレビューで効果が累積的に適用される際にそれぞれの設定値に置き換えられる。
-    //            // このため、編集中の設定値は一時的な構造体に保持する。
-    //            m_tmpParms = m_parms;
-
     std::string effectName = effect->getName();
 
     std::string normalizeEffectId = std::regex_replace(
@@ -487,7 +470,22 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
       currentParams.merge_patch(patch);
       pluginParams.params = currentParams;
 
-      ai_deno::FunctionResult* result = ai_deno::get_live_effect_view_tree(
+      // Normalize params
+      {
+        ai_deno::JsonFunctionResult* result = ai_deno::edit_live_effect_parameters(
+            this->aiDenoMain, pluginParams.effectName.c_str(),
+            currentParams.dump().c_str()
+        );
+
+        if (!result->success) {
+          csl("Failed to normalize live effect parameters: %s",
+              pluginParams.effectName.c_str());
+        } else {
+          currentParams = json::parse(result->json);
+        }
+      }
+
+      ai_deno::JsonFunctionResult* result = ai_deno::get_live_effect_view_tree(
           this->aiDenoMain, pluginParams.effectName.c_str(), currentParams.dump().c_str()
       );
 
@@ -498,7 +496,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
         modal->updateRenderTree(nodeTree);
       }
 
-      ai_deno::dispose_function_result(result);
+      ai_deno::dispose_json_function_result(result);
 
       // Rerender preview
       error = this->putParamsToDictionaly(message->parameters, pluginParams);
@@ -510,7 +508,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     modaloOnChangeCallback(initialParams);
 
     isModalOpened = true;
-    csl("Opening modal");
+    csl("Opening modal: %s", nodeTree.dump().c_str());
     ModalStatusCode dialogResult = modal->runModal(nodeTree, modaloOnChangeCallback);
     csl("Modal closed");
 
@@ -540,6 +538,99 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
   } catch (...) { error = kCantHappenErr; }
 
   return error;
+}
+
+ASErr HelloWorldPlugin::LiveEffectScaleParameters(AILiveEffectScaleParamMessage* message
+) {
+  std::cout << "SCALING LIVE!! EFFECT!!!" << std::endl;
+
+  ASErr error = kNoErr;
+
+  AILiveEffectHandle     effect     = message->effect;
+  AILiveEffectParameters parameters = message->parameters;
+  AIReal                 scale      = message->scaleFactor;
+
+  // default
+  message->scaledParams = false;
+
+  // Get the current parameters
+  PluginParams params;
+  error = this->getDictionaryValues(
+      parameters, &params,
+      PluginParams{
+          .effectName = "__FAILED_TO_GET_EFFECT_NAME__",
+          .params     = json(),
+      }
+  );
+
+  // Scale the parameters
+  ai_deno::JsonFunctionResult* result = ai_deno::live_effect_scale_parameters(
+      aiDenoMain, params.effectName.c_str(), params.params.dump().c_str(), scale
+  );
+
+  if (!result->success) {
+    csl("Failed to scale live effect parameters");
+    return kCantHappenErr;
+  }
+
+  json response = json::parse(result->json);
+
+  if (response["hasChanged"].get<bool>()) {
+    params.params = response["params"];
+    error         = this->putParamsToDictionaly(parameters, params);
+    CHKERR();
+
+    message->scaledParams = true;
+  }
+
+  ai_deno::dispose_json_function_result(result);
+
+  return error;
+}
+
+ASErr HelloWorldPlugin::LiveEffectInterpolate(AILiveEffectInterpParamMessage* message) {
+  csl("INTERPOLATING LIVE!! EFFECT!!!");
+
+  double percent = message->percent;
+
+  PluginParams paramsA;
+  ASErr        error = this->getDictionaryValues(
+      message->startParams, &paramsA,
+      PluginParams{
+                 .effectName = "__FAILED_TO_GET_EFFECT_NAME__",
+                 .params     = json(),
+      }
+  );
+  CHKERR();
+
+  PluginParams paramsB;
+  error = this->getDictionaryValues(
+      message->endParams, &paramsB,
+      PluginParams{
+          .effectName = "__FAILED_TO_GET_EFFECT_NAME__",
+          .params     = json(),
+      }
+  );
+  CHKERR();
+
+  ai_deno::JsonFunctionResult* result = ai_deno::live_effect_interpolate(
+      aiDenoMain, paramsA.effectName.c_str(), paramsA.params.dump().c_str(),
+      paramsB.params.dump().c_str(), percent
+  );
+
+  if (!result->success) {
+    csl("Failed to interpolate live effect parameters");
+    return kCantHappenErr;
+  }
+
+  json response = json::parse(result->json);
+
+  PluginParams outParams = {
+      .effectName = paramsA.effectName,
+      .params     = response,
+  };
+
+  this->putParamsToDictionaly(message->outParams, outParams);
 }
 
 ASErr HelloWorldPlugin::getDictionaryValues(
@@ -583,7 +674,8 @@ ASErr HelloWorldPlugin::putParamsToDictionaly(
   return error;
 }
 
-void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::FunctionResult* request) {
+void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult* request
+) {
   json req = json(request->json);
 
   if (req.contains("kind") && req["kind"] == "alert") {
@@ -594,7 +686,7 @@ void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::FunctionResult* re
   }
 }
 
-// void HelloWorldPlugin::HandleDenoAiAlert(ai_deno::FunctionResult *request)
+// void HelloWorldPlugin::HandleDenoAiAlert(ai_deno::JsonFunctionResult *request)
 //{
 // }
 

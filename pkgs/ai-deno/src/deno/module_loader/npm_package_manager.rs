@@ -27,7 +27,7 @@ use tar::Archive;
 use url::Url;
 use wildcard::Wildcard;
 
-use crate::dai_println;
+use crate::deno_println;
 
 pub use super::npm_client::NpmPackageError;
 
@@ -201,7 +201,7 @@ impl NpmPackageManager {
         //         }
         //     };
 
-        // dai_println!("Downloading package info: {}", pkg_url);
+        // deno_println!("Downloading package info: {}", pkg_url);
 
         // let response = self
         //     .npm_client
@@ -225,7 +225,7 @@ impl NpmPackageManager {
         version: &str,
         npm_client: Arc<NpmClient>,
     ) -> Result<NpmPackage, JsErrorBox> {
-        dai_println!("Installing npm package: {}@{:?}", name, version);
+        deno_println!("Installing npm package: {}@{:?}", name, version);
 
         if !self.packages_root_dir.exists() {
             std::fs::create_dir_all(&self.packages_root_dir)
@@ -269,10 +269,10 @@ impl NpmPackageManager {
             version: Version::parse_from_npm(&resolved_version).unwrap(),
         });
 
-        dai_println!("Package directory: {}", package_dir.display());
+        deno_println!("Package directory: {}", package_dir.display());
 
         if self.is_package_installed(name, version) {
-            dai_println!("package already installed: {}@{}", name, resolved_version);
+            deno_println!("package already installed: {}@{}", name, resolved_version);
         } else {
             if let Some(parent) = package_dir.parent() {
                 if !parent.exists() {
@@ -302,16 +302,16 @@ impl NpmPackageManager {
 
         // let (_, package_info) = npm_client.get_package_info(name, Some(version)).await?;
         let dependencies = self.extract_dependencies(&version_info)?;
-        dai_println!("Dependencies: {:?}", dependencies);
+        deno_println!("Dependencies: {:?}", dependencies);
 
         for (dep_name, dep_version) in dependencies {
             let fut = self.install_package_with_deps(&dep_name, &dep_version, npm_client.clone());
             match Box::pin(fut).await {
                 Ok(_) => {
-                    dai_println!("Npm package installed: {}@{}", dep_name, dep_version);
+                    deno_println!("Npm package installed: {}@{}", dep_name, dep_version);
                 }
                 Err(e) => {
-                    dai_println!(
+                    deno_println!(
                         "Failed to install npm package: {}@{} - {}",
                         dep_name,
                         dep_version,
@@ -356,7 +356,7 @@ impl NpmPackageManager {
         let (name, version, subpath) = parse_npm_specifier(specifier)?;
         let mut version = version;
 
-        dai_println!(
+        deno_println!(
             "resolve_specifier_to_package_dir: name: {} version:{:?} subpath: {}",
             name,
             version,
@@ -404,7 +404,7 @@ impl NpmPackageManager {
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect::<Vec<(String, String)>>();
 
-                    dai_println!("all_deps: {:?}", all_deps);
+                    deno_println!("all_deps: {:?}", all_deps);
 
                     for (dep_name, dep_version) in all_deps {
                         let dep_ver = Version::parse_from_npm(dep_version.as_str()).unwrap();
@@ -418,7 +418,7 @@ impl NpmPackageManager {
         }
 
         if version.is_none() {
-            dai_println!("version is none: name: {}", name);
+            deno_println!("version is none: name: {}", name);
             let pkg_info = self
                 .npm_cache
                 .load_package_info(name.as_str())
@@ -427,8 +427,8 @@ impl NpmPackageManager {
             if let Some(pkg_info) = pkg_info {
                 let dist_tags = pkg_info.dist_tags;
 
-                dai_println!("dist_tags: {:?}", dist_tags);
-                dai_println!("latest: {:?}", dist_tags.get("latest").unwrap().to_string());
+                deno_println!("dist_tags: {:?}", dist_tags);
+                deno_println!("latest: {:?}", dist_tags.get("latest").unwrap().to_string());
 
                 version = Some(dist_tags.get("latest").unwrap().to_string());
             }
@@ -445,7 +445,7 @@ impl NpmPackageManager {
         };
         let package_dir = self.compute_package_dir(&name, Some(&version));
 
-        dai_println!(
+        deno_println!(
             "Package directory: {}, {}",
             package_dir.display(),
             package_dir.exists()
@@ -469,7 +469,7 @@ impl NpmPackageManager {
     ) -> Result<PathBuf, NpmPackageError> {
         let (name, version, sub_path) = parse_npm_specifier(specifier)?;
 
-        dai_println!(
+        deno_println!(
             "resolve_specifier_to_file_path: {} sub_path: {:?}",
             specifier,
             sub_path
@@ -477,7 +477,7 @@ impl NpmPackageManager {
 
         let package_dir = self.resolve_specifier_to_package_dir(specifier, referrer)?;
 
-        dai_println!(
+        deno_println!(
             "package directory: {}, sub: {:?}",
             package_dir.display(),
             sub_path
@@ -494,7 +494,7 @@ impl NpmPackageManager {
         //         .unwrap()
         //         .to_string();
 
-        //     dai_println!("resolved entrypoint: {}", main_field);
+        //     deno_println!("resolved entrypoint: {}", main_field);
 
         //     let main_path = package_dir.join(main_field);
 
@@ -509,7 +509,7 @@ impl NpmPackageManager {
         // }
 
         let entry = resolve_entrypoint(pkg_json, sub_path, NodeModuleKind::Esm);
-        dai_println!("entry: {:?}", entry);
+        deno_println!("entry: {:?}", entry);
 
         let file_path = package_dir.join(entry);
 
@@ -540,7 +540,7 @@ impl NpmPackageManager {
 
         loop {
             let package_json_path = current_dir.join("package.json");
-            dai_println!("Checking package.json: {}", package_json_path.display());
+            deno_println!("Checking package.json: {}", package_json_path.display());
 
             if package_json_path.exists() {
                 let package_json = PackageJson::load_from_path(&self.sys, None, &package_json_path);
@@ -623,7 +623,7 @@ impl NpmPackageFolderResolver for NpmPackageManager {
         specifier: &str,
         referrer: &UrlOrPathRef,
     ) -> Result<PathBuf, PackageFolderResolveError> {
-        dai_println!(
+        deno_println!(
             "resolve_package_folder_from_package: specifier: {} referrer: {}",
             specifier,
             referrer.display()
@@ -632,18 +632,18 @@ impl NpmPackageFolderResolver for NpmPackageManager {
         let package_dir = self
             .resolve_specifier_to_package_dir(specifier, Some(referrer))
             .map_err(|e| {
-                dai_println!("Error: {:?}", e);
+                deno_println!("Error: {:?}", e);
 
                 PackageFolderResolveError(Box::new(PackageFolderResolveErrorKind::PackageNotFound(
                     PackageNotFoundError {
                         package_name: specifier.to_string(),
-                        referrer: referrer.clone().display(),
+                        referrer: referrer.display(),
                         referrer_extra: None,
                     },
                 )))
             })?;
 
-        dai_println!("Resolved package directory: {}", package_dir.display());
+        deno_println!("Resolved package directory: {}", package_dir.display());
 
         Ok(package_dir)
     }
@@ -654,7 +654,7 @@ impl InNpmPackageChecker for NpmPackageManager {
         let specifier = specifier.as_ref();
         let packages_url = Url::from_file_path(self.packages_root_dir.clone()).unwrap();
 
-        dai_println!(
+        deno_println!(
             "in_npm_package: {}, result: {}",
             specifier,
             specifier.starts_with(packages_url.as_str())

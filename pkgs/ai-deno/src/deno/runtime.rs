@@ -22,13 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::dai_println;
 use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
 use crate::deno::error::Error;
 use crate::deno::ext::worker::deno_worker_host;
 use crate::deno::module::{Module, ModuleHandle};
 use crate::deno::module_loader::npm_package_manager::NpmPackageManager;
 use crate::deno::transpiler::transpile;
+use crate::deno_println;
 use deno_core::error::JsError;
 use deno_error::JsErrorBox;
 use deno_runtime::{
@@ -340,7 +340,7 @@ impl Runtime {
                 .is_ready()
             {
                 // Event loop resolved - continue
-                dai_println!("Event loop resolved");
+                deno_println!("Event loop resolved");
             }
 
             Poll::Pending
