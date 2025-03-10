@@ -461,23 +461,56 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     bool isModalOpened = true;
 
     ImGuiModal::OnFireEventCallback modalOnFireEventCallback =
-        [this, &pluginParams, &currentParams, &error, &message](json event) {
+        [this, &pluginParams, &currentParams, &error, &message, &nodeTree,
+         &modal](json event) {
           csl("onFireEvent: %s", event.dump().c_str());
 
           ai_deno::JsonFunctionResult* result = ai_deno::edit_live_effect_fire_event(
               this->aiDenoMain, pluginParams.effectName.c_str(), event.dump().c_str()
           );
 
-          if (!result->success) { csl("Failed to fire event"); }
+          if (!result->success) {
+            csl("Failed to fire event");
+            ai_deno::dispose_json_function_result(result);
+            return;
+          }
 
-          currentParams       = json::parse(result->json);
-          pluginParams.params = currentParams;
+          {
+            json res     = json::parse(result->json);
+            bool updated = res["updated"].get<bool>();
+            csl("Result: %s", res.dump().c_str());
+            ai_deno::dispose_json_function_result(result);
 
-          // Rerender preview
-          error = this->putParamsToDictionaly(message->parameters, pluginParams);
-          CHKERR();
-          error = sAILiveEffect->UpdateParameters(message->context);
-          CHKERR();
+            if (!updated) return;
+
+            csl("Updated");
+
+            currentParams       = res["params"];
+            pluginParams.params = currentParams;
+
+            csl("Updated params: %s", currentParams.dump().c_str());
+
+            // Rerender preview
+            error = this->putParamsToDictionaly(message->parameters, pluginParams);
+            CHKERR();
+            error = sAILiveEffect->UpdateParameters(message->context);
+            CHKERR();
+          }
+
+          // rerender tree
+          {
+            ai_deno::JsonFunctionResult* result = ai_deno::get_live_effect_view_tree(
+                this->aiDenoMain, pluginParams.effectName.c_str(),
+                currentParams.dump().c_str()
+            );
+
+            if (!result->success) {
+              std::cerr << "Failed to get live effect view tree" << std::endl;
+            } else {
+              nodeTree = json::parse(result->json);
+              modal->updateRenderTree(nodeTree);
+            }
+          }
         };
 
     ImGuiModal::OnChangeCallback modaloOnChangeCallback =

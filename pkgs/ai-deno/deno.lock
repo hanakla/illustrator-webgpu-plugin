@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@denosaurs/plug@1": "1.0.5",
     "jsr:@denosaurs/plug@1.0.5": "1.0.5",
+    "jsr:@es-toolkit/es-toolkit@1.33.0": "1.33.0",
     "jsr:@gfx/canvas@*": "0.5.6",
     "jsr:@gfx/canvas@0.5.6": "0.5.6",
     "jsr:@std/assert@0.214": "0.214.0",
@@ -17,6 +18,7 @@
     "jsr:@std/path@0.214": "0.214.0",
     "jsr:@std/path@0.217": "0.217.0",
     "jsr:@std/path@0.217.0": "0.217.0",
+    "jsr:@std/path@1.0.8": "1.0.8",
     "jsr:@std/path@^1.0.8": "1.0.8"
   },
   "jsr": {
@@ -28,6 +30,9 @@
         "jsr:@std/fs@0.214",
         "jsr:@std/path@0.214"
       ]
+    },
+    "@es-toolkit/es-toolkit@1.33.0": {
+      "integrity": "0d2404dad0ee48ba3a2020790f788c5d6e11d73d8e02dbf685841c0d453b2643"
     },
     "@gfx/canvas@0.5.6": {
       "integrity": "4f34b91daca182fb422e308692a5fa54c2f638d2e46c587a3974c1f9233407d1",

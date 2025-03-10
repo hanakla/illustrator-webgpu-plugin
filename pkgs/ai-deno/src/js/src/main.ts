@@ -1,6 +1,7 @@
 import { AIEffectPlugin, AIPlugin } from "./types.ts";
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
+import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
 import { homedir } from "node:os";
 
 // import { blurEffect } from "./live-effects/blurEffect.ts";
@@ -106,17 +107,15 @@ export function getEffectViewNode(id: string, params: any): UINode {
       throw new Error("Unextected null localNodeState");
     }
 
+    const clone = structuredClone(localNodeState.latestParams);
     if (typeof update === "function") {
-      update = update(structuredClone(localNodeState.latestParams));
+      update = update(Object.freeze(clone));
     }
 
-    Object.assign(localNodeState.latestParams, update);
+    const next = Object.assign({}, localNodeState.latestParams, update);
 
     // Normalize parameters
-    localNodeState.latestParams = editLiveEffectParameters(
-      id,
-      localNodeState.latestParams
-    );
+    localNodeState.latestParams = editLiveEffectParameters(id, next);
   };
 
   try {
@@ -143,33 +142,44 @@ export function editLiveEffectParameters(id: string, params: any) {
   return effect.liveEffect.editLiveEffectParameters?.(params) ?? params;
 }
 
-// TODO
 export async function editLiveEffectFireCallback(
   effectId: string,
   event: {
     type: "click" | "change";
     nodeId: string;
   }
-) {
+): Promise<{ updated: false } | { updated: true; params: any }> {
   const effect = findEffect(effectId);
-  if (!effect) return {};
-  if (!nodeState || nodeState.effectId !== effectId) return {};
+  const node = nodeState?.nodeMap.get(event.nodeId);
 
-  const node = nodeState.nodeMap.get(event.nodeId);
-  if (!node) {
-    return {};
+  if (!effect || !node || !nodeState || nodeState.effectId !== effectId) {
+    return {
+      updated: false,
+    };
   }
 
+  const current = nodeState.latestParams;
   switch (event.type) {
-    case "click":
-      if ("onClick" in node) await node.onClick?.({ type: "click" });
+    case "click": {
+      if ("onClick" in node && typeof node.onClick === "function")
+        await node.onClick?.({ type: "click" });
       break;
+    }
     // case "change":
     //   node.onChange?.(event.key, event.value);
     //   break;
   }
 
-  return nodeState.latestParams;
+  if (isEqual(current, nodeState.latestParams)) {
+    return {
+      updated: false,
+    };
+  }
+
+  return {
+    updated: true,
+    params: nodeState.latestParams,
+  };
 }
 
 function attachNodeIds(node: UINode) {

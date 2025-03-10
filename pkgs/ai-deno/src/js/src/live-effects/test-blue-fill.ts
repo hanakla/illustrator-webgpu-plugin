@@ -25,6 +25,10 @@ export const testBlueFill = definePlugin({
         type: "real",
         default: 100,
       },
+      count: {
+        type: "int",
+        default: 0,
+      },
     },
     styleFilterFlags: {
       main: StyleFilterFlag.kPostEffectFilter,
@@ -86,12 +90,21 @@ export const testBlueFill = definePlugin({
         height,
       };
     },
-    renderUI: (params) =>
-      ui.group({ direction: "col" }, [
-        ui.button({
-          text: "Test",
-          onClick: () => console.log("Hi from TestBlueFill"),
-        }),
+    renderUI: (params, setParam) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "row" }, [
+          ui.button({
+            text: "Test",
+            onClick: () => {
+              console.log("Hi from TestBlueFill");
+              setParam((prev) => {
+                console.log("prev params", prev);
+                return { count: prev.count + 1 };
+              });
+            },
+          }),
+          ui.text({ text: `Count: ${params.count}` }),
+        ]),
 
         // ui.text({ text: "Use new buffer" }),
         ui.checkbox({
@@ -126,6 +139,7 @@ export const testBlueFill = definePlugin({
           max: 100,
           value: params.opacity,
         }),
-      ]),
+      ]);
+    },
   },
 });

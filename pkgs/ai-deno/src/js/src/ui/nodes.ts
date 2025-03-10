@@ -7,7 +7,8 @@ export const ui = {
     direction,
     children,
   }),
-  button: (): UINodeButton => ({
+  button: (props: Omit<UINodeButton, "type">): UINodeButton => ({
+    ...props,
     type: "button",
   }),
   slider: (props: Omit<UINodeSlider, "type">): UINode => ({
@@ -29,10 +30,6 @@ export const ui = {
   text: (props: Omit<UINodeText, "type">): UINode => ({
     ...props,
     type: "text",
-  }),
-  button: (props: Omit<UINodeButton, "type">): UINode => ({
-    ...props,
-    type: "button",
   }),
   select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect => ({
     ...props,

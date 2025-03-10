@@ -1,6 +1,7 @@
 // src/js/src/main.ts
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
+import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
 import { homedir } from "node:os";
 
 // src/js/src/types.ts
@@ -15,7 +16,8 @@ var ui = {
     direction,
     children
   }),
-  button: () => ({
+  button: (props) => ({
+    ...props,
     type: "button"
   }),
   slider: (props) => ({
@@ -37,10 +39,6 @@ var ui = {
   text: (props) => ({
     ...props,
     type: "text"
-  }),
-  button: (props) => ({
-    ...props,
-    type: "button"
   }),
   select: (props) => ({
     ...props,
@@ -552,6 +550,10 @@ var testBlueFill = definePlugin({
       opacity: {
         type: "real",
         default: 100
+      },
+      count: {
+        type: "int",
+        default: 0
       }
     },
     styleFilterFlags: {
@@ -600,42 +602,53 @@ var testBlueFill = definePlugin({
         height
       };
     },
-    renderUI: (params) => ui.group({ direction: "col" }, [
-      ui.button({
-        text: "Test",
-        onClick: () => console.log("Hi from TestBlueFill")
-      }),
-      // ui.text({ text: "Use new buffer" }),
-      ui.checkbox({
-        label: "Use new buffer",
-        key: "useNewBuffer",
-        value: params.useNewBuffer
-      }),
-      // ui.text({ text: "Fill other channels" }),
-      ui.checkbox({
-        label: "Fill other channels",
-        key: "fillOtherChannels",
-        value: params.fillOtherChannels
-      }),
-      ui.text({ text: "Padding" }),
-      ui.slider({
-        label: "Padding",
-        key: "padding",
-        dataType: "int",
-        min: 0,
-        max: 100,
-        value: params.padding
-      }),
-      ui.text({ text: "Opacity" }),
-      ui.slider({
-        label: "Opacity",
-        key: "opacity",
-        dataType: "float",
-        min: 0,
-        max: 100,
-        value: params.opacity
-      })
-    ])
+    renderUI: (params, setParam) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "row" }, [
+          ui.button({
+            text: "Test",
+            onClick: () => {
+              console.log("Hi from TestBlueFill");
+              setParam((prev) => {
+                console.log("prev params", prev);
+                return { count: prev.count + 1 };
+              });
+            }
+          }),
+          ui.text({ text: `Count: ${params.count}` })
+        ]),
+        // ui.text({ text: "Use new buffer" }),
+        ui.checkbox({
+          label: "Use new buffer",
+          key: "useNewBuffer",
+          value: params.useNewBuffer
+        }),
+        // ui.text({ text: "Fill other channels" }),
+        ui.checkbox({
+          label: "Fill other channels",
+          key: "fillOtherChannels",
+          value: params.fillOtherChannels
+        }),
+        ui.text({ text: "Padding" }),
+        ui.slider({
+          label: "Padding",
+          key: "padding",
+          dataType: "int",
+          min: 0,
+          max: 100,
+          value: params.padding
+        }),
+        ui.text({ text: "Opacity" }),
+        ui.slider({
+          label: "Opacity",
+          key: "opacity",
+          dataType: "float",
+          min: 0,
+          max: 100,
+          value: params.opacity
+        })
+      ]);
+    }
   }
 });
 
@@ -1722,14 +1735,12 @@ function getEffectViewNode(id, params) {
     if (!localNodeState) {
       throw new Error("Unextected null localNodeState");
     }
+    const clone = structuredClone(localNodeState.latestParams);
     if (typeof update === "function") {
-      update = update(structuredClone(localNodeState.latestParams));
+      update = update(Object.freeze(clone));
     }
-    Object.assign(localNodeState.latestParams, update);
-    localNodeState.latestParams = editLiveEffectParameters(
-      id,
-      localNodeState.latestParams
-    );
+    const next = Object.assign({}, localNodeState.latestParams, update);
+    localNodeState.latestParams = editLiveEffectParameters(id, next);
   };
   try {
     const tree = effect.liveEffect.renderUI(params, setParam);
@@ -1755,18 +1766,29 @@ function editLiveEffectParameters(id, params) {
 async function editLiveEffectFireCallback(effectId, event) {
   var _a;
   const effect = findEffect(effectId);
-  if (!effect) return {};
-  if (!nodeState || nodeState.effectId !== effectId) return {};
-  const node = nodeState.nodeMap.get(event.nodeId);
-  if (!node) {
-    return {};
+  const node = nodeState == null ? void 0 : nodeState.nodeMap.get(event.nodeId);
+  if (!effect || !node || !nodeState || nodeState.effectId !== effectId) {
+    return {
+      updated: false
+    };
   }
+  const current = nodeState.latestParams;
   switch (event.type) {
-    case "click":
-      if ("onClick" in node) await ((_a = node.onClick) == null ? void 0 : _a.call(node, { type: "click" }));
+    case "click": {
+      if ("onClick" in node && typeof node.onClick === "function")
+        await ((_a = node.onClick) == null ? void 0 : _a.call(node, { type: "click" }));
       break;
+    }
   }
-  return nodeState.latestParams;
+  if (isEqual(current, nodeState.latestParams)) {
+    return {
+      updated: false
+    };
+  }
+  return {
+    updated: true,
+    params: nodeState.latestParams
+  };
 }
 function attachNodeIds(node) {
   const nodeMap = /* @__PURE__ */ new Map();

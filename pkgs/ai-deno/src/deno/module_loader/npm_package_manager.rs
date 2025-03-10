@@ -487,35 +487,46 @@ impl NpmPackageManager {
             PackageJson::load_from_path(&self.sys, None, &package_dir.join("package.json"))
                 .map_err(|e| NpmPackageError::ResolutionFailed(e.to_string()))?;
 
-        // if sub_path.is_empty() {
-        //     let main_field = pkg_json
-        //         .main(NodeModuleKind::Esm)
-        //         .or_else(|| Some("index.js"))
-        //         .unwrap()
-        //         .to_string();
+        if sub_path.is_empty() {
+            let main_field = pkg_json
+                .main(NodeModuleKind::Esm)
+                .or_else(|| Some("index.js"))
+                .unwrap()
+                .to_string();
 
-        //     deno_println!("resolved entrypoint: {}", main_field);
+            deno_println!("resolved entrypoint: {}", main_field);
 
-        //     let main_path = package_dir.join(main_field);
+            let main_path = package_dir.join(main_field);
 
-        //     if main_path.exists() {
-        //         return Ok(main_path);
-        //     }
+            if main_path.exists() {
+                return Ok(main_path);
+            }
 
-        //     return Err(NpmPackageError::ResolutionFailed(format!(
-        //         "main module could not be resolved: {}",
-        //         package_dir.display()
-        //     )));
-        // }
+            return Err(NpmPackageError::ResolutionFailed(format!(
+                "main module could not be resolved: {}",
+                package_dir.display()
+            )));
+        } else {
+            let file_path = package_dir.join(sub_path);
 
-        let entry = resolve_entrypoint(pkg_json, sub_path, NodeModuleKind::Esm);
-        deno_println!("entry: {:?}", entry);
+            if file_path.exists() {
+                return Ok(file_path);
+            }
 
-        let file_path = package_dir.join(entry);
-
-        if file_path.exists() {
-            return Ok(file_path);
+            return Err(NpmPackageError::ResolutionFailed(format!(
+                "module could not be resolved: {}",
+                file_path.display()
+            )));
         }
+
+        // let entry = resolve_entrypoint(pkg_json, sub_path, NodeModuleKind::Esm);
+        // deno_println!("entry: {:?}", entry);
+
+        // let file_path = package_dir.join(entry);
+
+        // if file_path.exists() {
+        //     return Ok(file_path);
+        // }
 
         // if !sub_path.ends_with(".js") && !sub_path.ends_with(".json") {
         //     let js_path = package_dir.join(format!("{}.js", sub_path));
@@ -529,10 +540,10 @@ impl NpmPackageManager {
         //     }
         // }
 
-        Err(NpmPackageError::ResolutionFailed(format!(
-            "module could not be resolved: {}",
-            file_path.display()
-        )))
+        // Err(NpmPackageError::ResolutionFailed(format!(
+        //     "module could not be resolved: {}",
+        //     file_path.display()
+        // )))
     }
 
     fn resolve_closest_package_json(&self, dir: &Path) -> Option<PathBuf> {

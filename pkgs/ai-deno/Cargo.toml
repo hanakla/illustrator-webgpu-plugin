@@ -8,7 +8,7 @@ name = "ai_deno"
 crate-type = ["cdylib", "staticlib"]
 
 [features]
-default = []
+default = ["debug_deno"]
 debug_deno = []
 
 [dependencies]

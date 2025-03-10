@@ -265,7 +265,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 }
 
 - (void)setOnFireEventCallback:(ImGuiModal::OnFireEventCallback)onFireEventCallback {
-  onFireEventCallback = onFireEventCallback;
+  self->onFireEventCallback = onFireEventCallback;
 }
 
 - (ModalStatusCode)getStatusCode {
@@ -293,6 +293,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   // Start the Dear ImGui frame
   ImGui_ImplMetal_NewFrame(renderPassDescriptor);
   ImGui_ImplOSX_NewFrame(self);
+  ImGui::NewFrame();
 
 //  ImVec2 windowSize;
   resultStatus = AiDenoImGuiRenderComponents(
@@ -302,6 +303,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
     onFireEventCallback
 //    &windowSize
   );
+    
+  ImGui::Render();
 
 //  std::cout << "windowSize: " << windowSize.x << ", " << windowSize.y << std::endl;
 
