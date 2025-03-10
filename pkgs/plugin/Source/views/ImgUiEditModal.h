@@ -22,12 +22,24 @@ using json = nlohmann::json;
 
 namespace ImGuiModal {
   typedef std::function<void(json)> OnChangeCallback;
+  typedef std::function<void(json)> OnFireEventCallback;
+
+  struct EventCallbackPayload {
+    std::string type;
+    std::string nodeId;
+
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(EventCallbackPayload, type, nodeId)
+  };
 
   class IModalImpl {
    public:
-    virtual ModalStatusCode
-                 runModal(const json& renderTree, OnChangeCallback onChange) = 0;
-    virtual void updateRenderTree(const json& renderTree)                    = 0;
+    virtual ModalStatusCode runModal(
+        const json&         renderTree,
+        OnChangeCallback    onChange,
+        OnFireEventCallback onFireEventCallback
+    ) = 0;
+
+    virtual void updateRenderTree(const json& renderTree) = 0;
   };
 
 #ifdef __APPLE__

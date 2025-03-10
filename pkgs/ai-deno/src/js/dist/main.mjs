@@ -8,12 +8,15 @@ function definePlugin(plugin) {
   return plugin;
 }
 
-// src/js/src/ui.ts
+// src/js/src/ui/nodes.ts
 var ui = {
   group: ({ direction = "row" }, children) => ({
     type: "group",
     direction,
     children
+  }),
+  button: () => ({
+    type: "button"
   }),
   slider: (props) => ({
     ...props,
@@ -27,6 +30,10 @@ var ui = {
     ...props,
     type: "textInput"
   }),
+  numberInput: (props) => ({
+    ...props,
+    type: "numberInput"
+  }),
   text: (props) => ({
     ...props,
     type: "text"
@@ -37,13 +44,37 @@ var ui = {
   }),
   select: (props) => ({
     ...props,
-    selectedIndex: props.options.indexOf(props.value),
+    selectedIndex: props.options.findIndex(
+      (option) => option.value === props.value
+    ),
     type: "select"
   }),
   separator: () => ({
     type: "separator"
   })
 };
+
+// src/js/src/ui/locale.ts
+var texts = (t3) => t3;
+function useTranslator(texts2) {
+  const locale = getLocale(Object.keys(texts2), "en");
+  return (key, params = {}) => {
+    var _a;
+    const text = (_a = texts2[locale]) == null ? void 0 : _a[key];
+    if (!text) return key;
+    return text.replace(/\{\{(.+?)\}\}/g, (_, key2) => {
+      const value = params[key2];
+      return value == null ? "" : String(value);
+    });
+  };
+}
+function getLocale(acceptLocales, fallbackLocale) {
+  const userLocale = navigator.language.split("-")[0];
+  if (acceptLocales.includes(userLocale)) {
+    return userLocale;
+  }
+  return fallbackLocale;
+}
 
 // src/js/src/live-effects/utils.ts
 import { decodeBase64 } from "jsr:@std/encoding@1.0.7";
@@ -112,14 +143,42 @@ async function paddingImageData(data, padding) {
   ctx.putImageData(imgData, padding, padding);
   return ctx.getImageData(0, 0, width, height);
 }
-function lerp(a, b, t) {
-  return a + (b - a) * t;
+function lerp(a, b, t3) {
+  return a + (b - a) * t3;
 }
 
 // src/js/src/live-effects/chromatic-aberration.ts
+var t = useTranslator(
+  texts({
+    en: {
+      title: "Chromatic Aberration V1",
+      colorMode: "Color Mode",
+      strength: "Strength",
+      angle: "Angle",
+      opacity: "Opacity",
+      blendMode: "Blend Mode",
+      blendOver: "Over",
+      blendeUnder: "Under",
+      debuggingParameters: "Debugging parameters",
+      padding: "Padding"
+    },
+    ja: {
+      title: "\u8272\u53CE\u5DEE V1",
+      colorMode: "\u30AB\u30E9\u30FC\u30E2\u30FC\u30C9",
+      strength: "\u5F37\u5EA6",
+      angle: "\u89D2\u5EA6",
+      opacity: "\u4E0D\u900F\u660E\u5EA6",
+      blendMode: "\u30D6\u30EC\u30F3\u30C9\u30E2\u30FC\u30C9",
+      blendOver: "\u4E0A\u306B\u5408\u6210",
+      blendeUnder: "\u4E0B\u306B\u5408\u6210",
+      debuggingParameters: "\u30C7\u30D0\u30C3\u30B0\u30D1\u30E9\u30E1\u30FC\u30BF",
+      padding: "\u30D1\u30C7\u30A3\u30F3\u30B0"
+    }
+  })
+);
 var chromaticAberration = definePlugin({
   id: "chromatic-aberration-v1",
-  title: "Chromatic Aberration V1",
+  title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -167,25 +226,31 @@ var chromaticAberration = definePlugin({
     }),
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
-        ui.group({ direction: "row" }, [
-          // ui.text({ text: "Color Mode"}),
-          ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: ["rgb", "cmyk"] })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("colorMode") }),
+          ui.select({ key: "colorMode", label: t("colorMode"), value: params.colorMode, options: [
+            { value: "rgb", label: "RGB" },
+            { value: "cmyk", label: "CMYK" }
+          ] })
         ]),
-        ui.group({ direction: "row" }, [
-          // ui.text({ text: "Strength"}),
-          ui.slider({ key: "strength", label: "Strength", dataType: "float", min: 0, max: 200, value: params.strength })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("strength") }),
+          ui.slider({ key: "strength", label: t("strength"), dataType: "float", min: 0, max: 200, value: params.strength })
         ]),
-        ui.group({ direction: "row" }, [
-          // ui.text({ text: "Angle"}),
-          ui.slider({ key: "angle", label: "Angle", dataType: "float", min: 0, max: 360, value: params.angle })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("angle") }),
+          ui.slider({ key: "angle", label: t("angle"), dataType: "float", min: 0, max: 360, value: params.angle })
         ]),
-        ui.group({ direction: "row" }, [
-          // ui.text({ text: "Opacity"}),
-          ui.slider({ key: "opacity", label: "Opacity", dataType: "float", min: 0, max: 100, value: params.opacity })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("opacity") }),
+          ui.slider({ key: "opacity", label: t("opacity"), dataType: "float", min: 0, max: 100, value: params.opacity })
         ]),
-        ui.group({ direction: "row" }, [
-          // ui.text({ text: "Blend Mode"}),
-          ui.select({ key: "blendMode", label: "Blend Mode", value: params.blendMode, options: ["over", "under"] })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Blend Mode" }),
+          ui.select({ key: "blendMode", label: t("blendMode"), value: params.blendMode, options: [
+            { value: "over", label: t("blendOver") },
+            { value: "under", label: t("blendeUnder") }
+          ] })
         ])
         // ui.separator(),
         // ui.group({ direction: "col" }, [
@@ -495,7 +560,7 @@ var testBlueFill = definePlugin({
     },
     editLiveEffectParameters: (params) => params,
     liveEffectScaleParameters: (params, scaleFactor) => params,
-    liveEffectInterpolate: (paramsA, paramsB, t) => paramsA,
+    liveEffectInterpolate: (paramsA, paramsB, t3) => paramsA,
     doLiveEffect: async (init, params, input) => {
       let width = input.width;
       let height = input.height;
@@ -536,16 +601,23 @@ var testBlueFill = definePlugin({
       };
     },
     renderUI: (params) => ui.group({ direction: "col" }, [
+      ui.button({
+        text: "Test",
+        onClick: () => console.log("Hi from TestBlueFill")
+      }),
+      // ui.text({ text: "Use new buffer" }),
       ui.checkbox({
         label: "Use new buffer",
         key: "useNewBuffer",
         value: params.useNewBuffer
       }),
+      // ui.text({ text: "Fill other channels" }),
       ui.checkbox({
         label: "Fill other channels",
         key: "fillOtherChannels",
         value: params.fillOtherChannels
       }),
+      ui.text({ text: "Padding" }),
       ui.slider({
         label: "Padding",
         key: "padding",
@@ -554,6 +626,7 @@ var testBlueFill = definePlugin({
         max: 100,
         value: params.padding
       }),
+      ui.text({ text: "Opacity" }),
       ui.slider({
         label: "Opacity",
         key: "opacity",
@@ -567,6 +640,32 @@ var testBlueFill = definePlugin({
 });
 
 // src/js/src/live-effects/directional-blur.ts
+var t2 = useTranslator({
+  en: {
+    title: "Directional Blur",
+    strength: "Size (px)",
+    direction: "Direction",
+    opacity: "Opacity",
+    blurMode: "Blur Mode",
+    behind: "Behind",
+    front: "Front",
+    both: "Both",
+    fadeScale: "Scale to fade",
+    fadeDirection: "Direction to fade"
+  },
+  ja: {
+    title: "\u65B9\u5411\u6027\u30D6\u30E9\u30FC",
+    strength: "\u5927\u304D\u3055 (px)",
+    direction: "\u65B9\u5411",
+    opacity: "\u4E0D\u900F\u660E\u5EA6",
+    blurMode: "\u30D6\u30E9\u30FC\u30E2\u30FC\u30C9",
+    behind: "\u5F8C\u65B9",
+    front: "\u524D\u65B9",
+    both: "\u4E21\u65B9",
+    fadeScale: "\u7E2E\u5C0F\u7387",
+    fadeDirection: "\u7E2E\u5C0F\u65B9\u5411"
+  }
+});
 var directionalBlur = definePlugin({
   id: "directional-blur-v1",
   title: "Directional Blur V1",
@@ -626,64 +725,68 @@ var directionalBlur = definePlugin({
     },
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "Directional Blur" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t2("strength") }),
           ui.slider({
             key: "strength",
-            label: "Strength (px)",
+            label: t2("strength"),
             dataType: "float",
             min: 0,
             max: 500,
             value: params.strength
           })
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "Direction" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t2("direction") }),
           ui.slider({
             key: "angle",
-            label: "Angle",
+            label: t2("direction"),
             dataType: "float",
             min: 0,
             max: 360,
             value: params.angle
           })
         ]),
-        ui.group({ direction: "row" }, [
+        ui.group({ direction: "col" }, [
           ui.text({ text: "Opacity" }),
           ui.slider({
             key: "opacity",
-            label: "Opacity",
+            label: t2("direction"),
             dataType: "float",
             min: 0,
             max: 100,
             value: params.opacity
           })
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "Blur Mode" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t2("blurMode") }),
           ui.select({
             key: "blurMode",
-            label: "Blur Mode",
+            label: t2("blurMode"),
             value: params.blurMode,
-            options: ["both", "behind", "front"]
+            options: [
+              { value: "both", label: t2("both") },
+              { value: "behind", label: t2("behind") },
+              { value: "front", label: t2("front") }
+            ]
           })
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "\u7E2E\u5C0F\u7387" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t2("fadeScale") }),
           ui.slider({
             key: "fadeOut",
-            label: "\u7E2E\u5C0F\u7387",
+            label: t2("fadeScale"),
             dataType: "float",
             min: 0,
             max: 1,
             value: params.fadeOut
           })
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "\u7E2E\u5C0F\u65B9\u5411" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t2("fadeDirection") }),
           ui.slider({
             key: "fadeDirection",
-            label: "\u7E2E\u5C0F\u65B9\u5411",
+            label: t2("fadeDirection"),
             dataType: "float",
             min: -1,
             max: 1,
@@ -1001,10 +1104,10 @@ var glow = definePlugin({
         transparentOriginal: params.transparentOriginal
       };
     },
-    liveEffectInterpolate: (paramsA, paramsB, t) => {
+    liveEffectInterpolate: (paramsA, paramsB, t3) => {
       return {
-        strength: lerp(paramsA.strength, paramsB.strength, t),
-        transparentOriginal: t < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal
+        strength: lerp(paramsA.strength, paramsB.strength, t3),
+        transparentOriginal: t3 < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal
       };
     },
     renderUI: (params) => {
@@ -1015,7 +1118,7 @@ var glow = definePlugin({
             label: "Blur Strength",
             dataType: "float",
             min: 0,
-            max: 100,
+            max: 500,
             value: params.strength
           })
         ]),
@@ -1282,7 +1385,7 @@ var dithering = definePlugin({
       },
       strength: {
         type: "real",
-        default: 1
+        default: 100
       }
     },
     editLiveEffectParameters: (params) => {
@@ -1296,27 +1399,34 @@ var dithering = definePlugin({
         colorMode: params.colorMode
       };
     },
-    liveEffectInterpolate: (paramsA, paramsB, t) => {
+    liveEffectInterpolate: (paramsA, paramsB, t3) => {
       return {
-        threshold: lerp(paramsA.threshold, paramsB.threshold, t),
-        strength: lerp(paramsA.strength, paramsB.strength, t),
-        patternType: t < 0.5 ? paramsA.patternType : paramsB.patternType,
-        colorMode: t < 0.5 ? paramsA.colorMode : paramsB.colorMode
+        threshold: lerp(paramsA.threshold, paramsB.threshold, t3),
+        strength: lerp(paramsA.strength, paramsB.strength, t3),
+        patternType: t3 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        colorMode: t3 < 0.5 ? paramsA.colorMode : paramsB.colorMode
       };
     },
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
-          ui.select({ key: "patternType", label: "Pattern Type", value: params.patternType, options: ["bayer2x2", "bayer4x4", "bayer8x8"] })
+          ui.select({ key: "patternType", label: "Pattern Type", value: params.patternType, options: [
+            { value: "bayer2x2", label: "2x2 Bayer" },
+            { value: "bayer4x4", label: "4x4 Bayer" },
+            { value: "bayer8x8", label: "8x8 Bayer" }
+          ] })
         ]),
         ui.group({ direction: "row" }, [
-          ui.slider({ key: "threshold", label: "Threshold", dataType: "float", min: 0, max: 1, value: params.threshold })
+          ui.slider({ key: "threshold", label: "Threshold", dataType: "float", min: 0, max: 100, value: params.threshold })
         ]),
         ui.group({ direction: "row" }, [
-          ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: ["monochrome", "color"] })
+          ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: [
+            { value: "monochrome", label: "Monochrome" },
+            { value: "color", label: "Color" }
+          ] })
         ]),
         ui.group({ direction: "row" }, [
-          ui.slider({ key: "strength", label: "Strength", dataType: "float", min: 0, max: 1, value: params.strength })
+          ui.slider({ key: "strength", label: "Strength", dataType: "float", min: 0, max: 100, value: params.strength })
         ])
       ]);
     },
@@ -1493,8 +1603,8 @@ var dithering = definePlugin({
       });
       const uniformData = new ArrayBuffer(16);
       const uniformView = new DataView(uniformData);
-      uniformView.setFloat32(0, params.threshold, true);
-      uniformView.setFloat32(4, params.strength, true);
+      uniformView.setFloat32(0, params.threshold / 100, true);
+      uniformView.setFloat32(4, params.strength / 100, true);
       let patternTypeValue = 1;
       if (params.patternType === "bayer2x2") patternTypeValue = 0;
       else if (params.patternType === "bayer4x4") patternTypeValue = 1;
@@ -1600,14 +1710,36 @@ function getLiveEffects() {
     version: effect.version
   }));
 }
+var nodeState = null;
 function getEffectViewNode(id, params) {
   var _a, _b;
   const effect = findEffect(id);
   if (!effect) return null;
   params = getParams(id, params);
   params = ((_b = (_a = effect.liveEffect).editLiveEffectParameters) == null ? void 0 : _b.call(_a, params)) ?? params;
+  let localNodeState = null;
+  const setParam = (update) => {
+    if (!localNodeState) {
+      throw new Error("Unextected null localNodeState");
+    }
+    if (typeof update === "function") {
+      update = update(structuredClone(localNodeState.latestParams));
+    }
+    Object.assign(localNodeState.latestParams, update);
+    localNodeState.latestParams = editLiveEffectParameters(
+      id,
+      localNodeState.latestParams
+    );
+  };
   try {
-    return effect.liveEffect.renderUI(params);
+    const tree = effect.liveEffect.renderUI(params, setParam);
+    const nodeMap = attachNodeIds(tree);
+    nodeState = localNodeState = {
+      effectId: effect.id,
+      nodeMap,
+      latestParams: params
+    };
+    return tree;
   } catch (e) {
     console.error(e);
     throw e;
@@ -1619,6 +1751,38 @@ function editLiveEffectParameters(id, params) {
   if (!effect) throw new Error(`Effect not found: ${id}`);
   params = getParams(id, params);
   return ((_b = (_a = effect.liveEffect).editLiveEffectParameters) == null ? void 0 : _b.call(_a, params)) ?? params;
+}
+async function editLiveEffectFireCallback(effectId, event) {
+  var _a;
+  const effect = findEffect(effectId);
+  if (!effect) return {};
+  if (!nodeState || nodeState.effectId !== effectId) return {};
+  const node = nodeState.nodeMap.get(event.nodeId);
+  if (!node) {
+    return {};
+  }
+  switch (event.type) {
+    case "click":
+      if ("onClick" in node) await ((_a = node.onClick) == null ? void 0 : _a.call(node, { type: "click" }));
+      break;
+  }
+  return nodeState.latestParams;
+}
+function attachNodeIds(node) {
+  const nodeMap = /* @__PURE__ */ new Map();
+  const traverseNode = (node2, nodeId = "") => {
+    if (node2 == null) return;
+    node2.nodeId = nodeId;
+    nodeMap.set(nodeId, node2);
+    if (node2.type === "group") {
+      node2.children.forEach((child, index) => {
+        if (child == null) return;
+        traverseNode(child, `${node2.nodeId}.${index}-${child.type}`);
+      });
+    }
+  };
+  traverseNode(node, ".root");
+  return nodeMap;
 }
 function liveEffectScaleParameters(id, params, scaleFactor) {
   const effect = findEffect(id);
@@ -1633,12 +1797,12 @@ function liveEffectScaleParameters(id, params, scaleFactor) {
     params: result ?? params
   };
 }
-function liveEffectInterpolate(id, params, params2, t) {
+function liveEffectInterpolate(id, params, params2, t3) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
   params = getParams(id, params);
   params2 = getParams(id, params2);
-  return effect.liveEffect.liveEffectInterpolate(params, params2, t);
+  return effect.liveEffect.liveEffectInterpolate(params, params2, t3);
 }
 var doLiveEffect = async (id, state, width, height, data) => {
   const effect = findEffect(id);
@@ -1712,6 +1876,7 @@ async function retry(maxRetries, fn) {
 }
 export {
   doLiveEffect,
+  editLiveEffectFireCallback,
   editLiveEffectParameters,
   getEffectViewNode,
   getLiveEffects,

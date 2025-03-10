@@ -32,6 +32,7 @@ using json = nlohmann::json;
   ModalStatusCode resultStatus;
   ImGuiWindowFlags windowFlags;
   ImGuiModal::OnChangeCallback onChangeCallback;
+  ImGuiModal::OnFireEventCallback onFireEventCallback;
 }
 @property(nonatomic, strong) id<MTLCommandQueue> commandQueue;
 
@@ -39,6 +40,7 @@ using json = nlohmann::json;
 
 - (void)setRenderTree:(json)renderTree;
 - (void)setOnChange:(ImGuiModal::OnChangeCallback)onChange;
+- (void)setOnFireEventCallback:(ImGuiModal::OnFireEventCallback)onFireEvent;
 - (ModalStatusCode)getStatusCode;
 - (void)updateAndDrawView;
 @end
@@ -49,7 +51,9 @@ using json = nlohmann::json;
 }
 - (instancetype)initWithWindow:(NSWindow*)window;
 - (void)updateRenderTree:(json)renderTree;
-- (ModalStatusCode)runModal:(json)renderTree onChange:(ImGuiModal::OnChangeCallback)onChange;
+- (ModalStatusCode)runModal:(json)renderTree
+    onChange:(ImGuiModal::OnChangeCallback)onChange
+    onFireEvent:(ImGuiModal::OnFireEventCallback)onFireEventCallback;
 - (void)releaseDialog;
 @end
 
@@ -76,10 +80,10 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
     this->controller = windowController;
   }
 
-  ModalStatusCode runModal(const json& renderTree, ImGuiModal::OnChangeCallback onChange) override {
+    ModalStatusCode runModal(const json& renderTree, ImGuiModal::OnChangeCallback onChange, ImGuiModal::OnFireEventCallback onFireEventCallback) override {
     ModalStatusCode result = ModalStatusCode::None;
 
-    result = [this->controller runModal:renderTree onChange:onChange];
+    result = [this->controller runModal:renderTree onChange:onChange onFireEvent:onFireEventCallback];
     [this->controller releaseDialog];
     this->controller = nullptr;
 
@@ -93,6 +97,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 
  private:
   ImGuiModal::OnChangeCallback onChangeCallback;
+  ImGuiModal::OnFireEventCallback onFireEventCallback;
   WindowController* controller;
   NSWindow* window;
 };
@@ -179,17 +184,21 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   return [super initWithWindow:window];
 }
 
-- (void)updateRenderTree:(json)renderTree {
+- (void) updateRenderTree:(json)renderTree {
   // if (imGuiView == nullptr) return;
   std::cout << "updateRenderTree: " << renderTree.dump() << std::endl;
   [self->imGuiView setRenderTree:renderTree];
 }
 
-- (ModalStatusCode)runModal:(json)renderNodes onChange:(ImGuiModal::OnChangeCallback)callbackFunc {
+- (ModalStatusCode) runModal:(json)renderNodes
+  onChange:(ImGuiModal::OnChangeCallback)callbackFunc
+  onFireEvent:(ImGuiModal::OnFireEventCallback)onFireEventCallback
+{
 
   ModalStatusCode result = ModalStatusCode::None;
   //    [self.window.contentView setParms:parms];
   [self.window.contentView setOnChange:callbackFunc];
+  [self.window.contentView setOnFireEventCallback:onFireEventCallback];
 
   NSModalSession session =
       [[NSApplication sharedApplication] beginModalSessionForWindow:self.window];
@@ -255,6 +264,10 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   onChangeCallback = callbackFunc;
 }
 
+- (void)setOnFireEventCallback:(ImGuiModal::OnFireEventCallback)onFireEventCallback {
+  onFireEventCallback = onFireEventCallback;
+}
+
 - (ModalStatusCode)getStatusCode {
   return resultStatus;
 }
@@ -285,7 +298,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   resultStatus = AiDenoImGuiRenderComponents(
     self->currentRenderTree,
     windowFlags,
-    onChangeCallback
+    onChangeCallback,
+    onFireEventCallback
 //    &windowSize
   );
 

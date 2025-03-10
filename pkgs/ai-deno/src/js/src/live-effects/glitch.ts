@@ -1,6 +1,6 @@
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
-import { ui } from "../ui.ts";
+import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
@@ -30,10 +30,24 @@ export const glitch = definePlugin({
         type: "real",
         default: 0.3,
       },
+      angle: {
+        type: "real",
+        default: 0.0,
+      },
+      bias: {
+        type: "real",
+        default: 0.0,
+      },
+      seed: {
+        type: "int",
+        default: Math.floor(Math.random() * 10000),
+      },
     },
     editLiveEffectParameters: (params) => {
       params.intensity = Math.max(0, Math.min(1, params.intensity));
       params.colorShift = Math.max(0, Math.min(1, params.colorShift));
+      params.angle = Math.max(-1, Math.min(1, params.angle));
+      params.bias = Math.max(-1, Math.min(1, params.bias));
       return params;
     },
     liveEffectScaleParameters(params, scaleFactor) {
@@ -43,6 +57,10 @@ export const glitch = definePlugin({
       return {
         intensity: lerp(paramsA.intensity, paramsB.intensity, t),
         colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t),
+        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t)),
+        angle: lerp(paramsA.angle, paramsB.angle, t),
+        bias: lerp(paramsA.bias, paramsB.bias, t),
+        seed: paramsA.seed, // シード値は補間しない
       };
     },
 
@@ -81,6 +99,39 @@ export const glitch = definePlugin({
             value: params.colorShift,
           }),
         ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Angle" }),
+          ui.slider({
+            key: "angle",
+            label: "Angle",
+            dataType: "float",
+            min: -1,
+            max: 1,
+            value: params.angle,
+          }),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Direction Bias" }),
+          ui.slider({
+            key: "bias",
+            label: "Direction Bias",
+            dataType: "float",
+            min: -1,
+            max: 1,
+            value: params.bias,
+          }),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Seed" }),
+          ui.slider({
+            key: "seed",
+            label: "Seed",
+            dataType: "int",
+            min: 0,
+            max: 10000,
+            value: params.seed,
+          }),
+        ]),
       ]);
     },
 
@@ -97,7 +148,10 @@ export const glitch = definePlugin({
           struct Params {
             intensity: f32,
             colorShift: f32,
-            slices: i32,
+            slices: f32,
+            angle: f32,
+            bias: f32,
+            seed: f32,
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -118,12 +172,25 @@ export const glitch = definePlugin({
             var shiftedCoord = texCoord;
 
             if (params.intensity > 0.0) {
-              let sliceY = floor(texCoord.y * 20.0);
-              let random = fract(sin(sliceY * 43758.5453) * 43758.5453);
+              // 角度に基づいて斜めのスライスを計算
+              let angle = params.angle * 3.14159;
+              // xとyの座標を角度に基づいて回転させた座標でスライスを決定
+              let sliceCoord = texCoord.x * sin(angle) + texCoord.y * cos(angle);
+              let sliceIndex = floor(sliceCoord * params.slices);
+              // シード値を使用してランダム値を計算
+              let seed = params.seed;
+              let random = fract(sin(sliceIndex * 43758.5453 + seed) * 43758.5453);
 
               if (random < params.intensity) {
-                let shift = (random - 0.5) * params.intensity * 0.2;
-                shiftedCoord.x = clamp(texCoord.x + shift, 0.0, 1.0);
+                let shift = (random - 0.5 + params.bias * 0.5) * params.intensity * 0.2;
+
+                // シフト方向も角度に垂直な方向に
+                let shiftAngle = angle + 3.14159 * 0.5; // 垂直方向（90度回転）
+                let xShift = shift * cos(shiftAngle);
+                let yShift = shift * sin(shiftAngle);
+
+                shiftedCoord.x = clamp(texCoord.x + xShift, 0.0, 1.0);
+                shiftedCoord.y = clamp(texCoord.y + yShift, 0.0, 1.0);
               }
             }
 
@@ -158,30 +225,26 @@ export const glitch = definePlugin({
     },
 
     doLiveEffect: async ({ device, pipeline }, params, imgData) => {
-      // 元のサイズを保存
+      imgData = await paddingImageData(imgData, params.colorShift);
       const outputWidth = imgData.width;
       const outputHeight = imgData.height;
 
-      // WebGPU alignment padding
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width;
       const inputHeight = imgData.height;
 
-      // 入力テクスチャ
       const texture = device.createTexture({
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       });
 
-      // 出力テクスチャ
       const resultTexture = device.createTexture({
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC,
       });
 
-      // サンプラー
       const sampler = device.createSampler({
         magFilter: "linear",
         minFilter: "linear",
@@ -189,21 +252,22 @@ export const glitch = definePlugin({
         addressModeV: "clamp-to-edge",
       });
 
-      // パラメータバッファ
       const uniformBuffer = device.createBuffer({
-        size: 16, // 3つのf32値 + パディング = 16バイト
+        size: 32, // 5つのf32値 + パディング = 32バイト (WebGPUでは16バイトアライメントが推奨)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      // パラメータデータ
       const uniformData = new Float32Array([
         params.intensity,
         params.colorShift,
-        params.slices,
+        Math.max(1, params.slices),
+        params.angle,
+        params.bias,
+        params.seed,
+        0.0, // パディング
         0.0, // パディング
       ]);
 
-      // バインドグループ
       const bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -214,16 +278,13 @@ export const glitch = definePlugin({
         ],
       });
 
-      // ステージングバッファ (結果読み取り用)
       const stagingBuffer = device.createBuffer({
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
 
-      // パラメータをGPUに転送
       device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
-      // 画像データをテクスチャに転送
       device.queue.writeTexture(
         { texture },
         imgData.data,
@@ -231,10 +292,8 @@ export const glitch = definePlugin({
         [inputWidth, inputHeight]
       );
 
-      // コマンドエンコーダ
       const commandEncoder = device.createCommandEncoder();
 
-      // コンピュートパス
       const computePass = commandEncoder.beginComputePass();
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
@@ -245,18 +304,15 @@ export const glitch = definePlugin({
       computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
       computePass.end();
 
-      // 結果のコピー
       commandEncoder.copyTextureToBuffer(
         { texture: resultTexture },
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
 
-      // コマンドの実行
       const commandBuffer = commandEncoder.finish();
       device.queue.submit([commandBuffer]);
 
-      // 結果の読み出し
       await stagingBuffer.mapAsync(GPUMapMode.READ);
 
       const copyArrayBuffer = stagingBuffer.getMappedRange();
@@ -264,14 +320,12 @@ export const glitch = definePlugin({
 
       stagingBuffer.unmap();
 
-      // 結果の画像データ作成
       const resultImageData = new ImageData(
         new Uint8ClampedArray(resultData),
         inputWidth,
         inputHeight
       );
 
-      // パディングを取り除く
       const finalImage = await removeWebGPUAlignmentPadding(
         resultImageData,
         outputWidth,

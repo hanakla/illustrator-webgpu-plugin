@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 // import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
-import { UINode } from "./ui.ts";
+import { UINode } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/directional-blur.ts";
 import { glow } from "./live-effects/glow.ts";
 import { dithering } from "./live-effects/dithering.ts";
@@ -83,6 +83,15 @@ export function getLiveEffects(): Array<{
   }));
 }
 
+type NodeState = {
+  effectId: string;
+  nodeMap: Map<string, UINode>;
+  latestParams: any;
+};
+
+// Holding latest editor tree and state
+let nodeState: NodeState | null = null;
+
 export function getEffectViewNode(id: string, params: any): UINode {
   const effect = findEffect(id);
   if (!effect) return null;
@@ -90,8 +99,35 @@ export function getEffectViewNode(id: string, params: any): UINode {
   params = getParams(id, params);
   params = effect.liveEffect.editLiveEffectParameters?.(params) ?? params;
 
+  let localNodeState: NodeState | null = null;
+
+  const setParam = (update: Partial<any> | ((prev: any) => any)) => {
+    if (!localNodeState) {
+      throw new Error("Unextected null localNodeState");
+    }
+
+    if (typeof update === "function") {
+      update = update(structuredClone(localNodeState.latestParams));
+    }
+
+    Object.assign(localNodeState.latestParams, update);
+
+    // Normalize parameters
+    localNodeState.latestParams = editLiveEffectParameters(
+      id,
+      localNodeState.latestParams
+    );
+  };
+
   try {
-    return effect.liveEffect.renderUI(params);
+    const tree = effect.liveEffect.renderUI(params, setParam);
+    const nodeMap = attachNodeIds(tree);
+    nodeState = localNodeState = {
+      effectId: effect.id,
+      nodeMap,
+      latestParams: params,
+    };
+    return tree;
   } catch (e) {
     console.error(e);
     throw e;
@@ -105,6 +141,60 @@ export function editLiveEffectParameters(id: string, params: any) {
   params = getParams(id, params);
 
   return effect.liveEffect.editLiveEffectParameters?.(params) ?? params;
+}
+
+// TODO
+export async function editLiveEffectFireCallback(
+  effectId: string,
+  event: {
+    type: "click" | "change";
+    nodeId: string;
+  }
+) {
+  const effect = findEffect(effectId);
+  if (!effect) return {};
+  if (!nodeState || nodeState.effectId !== effectId) return {};
+
+  const node = nodeState.nodeMap.get(event.nodeId);
+  if (!node) {
+    return {};
+  }
+
+  switch (event.type) {
+    case "click":
+      if ("onClick" in node) await node.onClick?.({ type: "click" });
+      break;
+    // case "change":
+    //   node.onChange?.(event.key, event.value);
+    //   break;
+  }
+
+  return nodeState.latestParams;
+}
+
+function attachNodeIds(node: UINode) {
+  const nodeMap = new Map<string, UINode>();
+
+  const traverseNode = (
+    node: (UINode & { nodeId?: string }) | null,
+    nodeId: string = ""
+  ) => {
+    if (node == null) return;
+
+    node.nodeId = nodeId;
+    nodeMap.set(nodeId, node);
+
+    if (node.type === "group") {
+      node.children.forEach((child, index) => {
+        if (child == null) return;
+        traverseNode(child, `${node.nodeId}.${index}-${child.type}`);
+      });
+    }
+  };
+
+  traverseNode(node, ".root");
+
+  return nodeMap;
 }
 
 export function liveEffectScaleParameters(

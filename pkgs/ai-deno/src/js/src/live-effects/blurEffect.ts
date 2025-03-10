@@ -3,7 +3,7 @@ import {
   DoLiveEffectPayload,
   definePlugin,
 } from "../types.ts";
-import { ui } from "../ui.ts";
+import { ui } from "../ui/nodes.ts";
 
 export const blurEffect = definePlugin({
   id: "blur-v1",

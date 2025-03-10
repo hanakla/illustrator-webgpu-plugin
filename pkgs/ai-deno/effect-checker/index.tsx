@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { blurEffect } from "~ext/live-effects/blurEffect.ts";
+import { pixelSort } from "~ext/live-effects/pixel-sort.ts";
 import { glow } from "~ext/live-effects/glow.ts";
 import { glitch } from "~ext/live-effects/glitch.ts";
 import { dithering } from "~ext/live-effects/dithering.ts";
@@ -11,6 +12,7 @@ import { testBlueFill } from "~ext/live-effects/test-blue-fill.ts";
 
 const plugins = [
   // blurEffect,
+  pixelSort,
   glitch,
   testBlueFill,
   glow,
@@ -35,6 +37,7 @@ setTimeout(async () => {
   );
 
   let currentPlugin = plugins[0];
+  let prevPlugin = currentPlugin;
   const pluginRef = (...args: any) => currentPlugin;
   let params = getInitialParams(currentPlugin);
   let init = effectInits.get(currentPlugin.id);
@@ -69,13 +72,18 @@ setTimeout(async () => {
   requestAnimationFrame(async function loop() {
     if (!imgData) return requestAnimationFrame(loop);
 
-    console.time("doLiveEffect", pluginRef());
+    if (currentPlugin !== prevPlugin) {
+      prevPlugin = currentPlugin;
+      // console.clear();
+    }
+
+    console.time("doLiveEffect");
     const input = {
       width: imgData.width,
       height: imgData.height,
       data: Uint8ClampedArray.from(imgData.data),
     };
-    const result = await pluginRef().liveEffect.doLiveEffect(
+    const result = await currentPlugin.liveEffect.doLiveEffect(
       init,
       params,
       input
@@ -86,6 +94,7 @@ setTimeout(async () => {
     canvas.width = result.width;
     canvas.height = result.height;
     ctx.putImageData(resultData, 0, 0);
+    console.timeEnd("doLiveEffect", currentPlugin);
 
     requestAnimationFrame(loop);
   });
@@ -138,7 +147,6 @@ function Controls({
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const effectId = e.currentTarget.value;
       const effect = plugins.find((effect) => effect.id === effectId)!;
-      console.log(effectId);
       if (!effect) return;
 
       const nextParams = getInitialParams(effect);
@@ -177,10 +185,27 @@ function Controls({
             onChange={(e) => onParamChanged(node.key, e.currentTarget.value)}
           />
         );
+      case "numberInput":
+        return (
+          <input
+            type="number"
+            value={params[node.key]}
+            min={node.min}
+            max={node.max}
+            step={node.step ?? (node.dataType === "int" ? 1 : 0.01)}
+            onChange={(e) => {
+              const target = e.currentTarget as HTMLInputElement;
+              const value =
+                node.dataType === "int"
+                  ? parseInt(target.value)
+                  : parseFloat(target.value);
+              if (!Number.isNaN(value)) onParamChanged(node.key, value);
+            }}
+          />
+        );
       case "checkbox":
         return (
           <label style={{ display: "flex", alignItems: "center" }}>
-            {node.label}
             <input
               type="checkbox"
               checked={params[node.key]}
@@ -188,21 +213,27 @@ function Controls({
                 onParamChanged(node.key, e.currentTarget.checked)
               }
             />
+            {node.label}
           </label>
         );
       case "slider": {
         return (
           <label style={{ display: "flex", alignItems: "center" }}>
-            {node.label}
+            {/* {node.label} */}
             <input
               type="range"
               min={node.min}
               max={node.max}
               value={params[node.key]}
               step={node.dataType === "int" ? 1 : 0.01}
-              onChange={(e) =>
-                onParamChanged(node.key, parseFloat(e.currentTarget.value))
-              }
+              onChange={(e) => {
+                const target = e.currentTarget as HTMLInputElement;
+                const value =
+                  node.dataType === "int"
+                    ? parseInt(target.value)
+                    : parseFloat(target.value);
+                if (!Number.isNaN(value)) onParamChanged(node.key, value);
+              }}
             />
           </label>
         );
@@ -210,14 +241,15 @@ function Controls({
       case "select":
         return (
           <label style={{ display: "flex", alignItems: "center" }}>
-            {node.label}
+            {/* {node.label} */}
             <select
-              value={node.options[node.selectedIndex]}
+              value={node.options[node.selectedIndex].value}
+              style={{ width: "100%" }}
               onChange={(e) => onParamChanged(node.key, e.currentTarget.value)}
             >
               {node.options.map((option, i) => (
-                <option key={i} value={option}>
-                  {option}
+                <option key={i} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -240,7 +272,7 @@ function Controls({
         display: "flex",
         flexDirection: "column",
         gap: "8px",
-        padding: "4px",
+        paddingRight: "16px",
       }}
     >
       <label>

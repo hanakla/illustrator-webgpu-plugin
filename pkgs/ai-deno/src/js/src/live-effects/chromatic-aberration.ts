@@ -1,6 +1,7 @@
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
-import { ui } from "../ui.ts";
+import { ui } from "../ui/nodes.ts";
+import { texts, useTranslator } from "../ui/locale.ts";
 import {
   addWebGPUAlignmentPadding,
   lerp,
@@ -8,9 +9,38 @@ import {
   removeWebGPUAlignmentPadding,
 } from "./utils.ts";
 
+const t = useTranslator(
+  texts({
+    en: {
+      title: "Chromatic Aberration V1",
+      colorMode: "Color Mode",
+      strength: "Strength",
+      angle: "Angle",
+      opacity: "Opacity",
+      blendMode: "Blend Mode",
+      blendOver: "Over",
+      blendeUnder: "Under",
+      debuggingParameters: "Debugging parameters",
+      padding: "Padding",
+    },
+    ja: {
+      title: "色収差 V1",
+      colorMode: "カラーモード",
+      strength: "強度",
+      angle: "角度",
+      opacity: "不透明度",
+      blendMode: "ブレンドモード",
+      blendOver: "上に合成",
+      blendeUnder: "下に合成",
+      debuggingParameters: "デバッグパラメータ",
+      padding: "パディング",
+    },
+  })
+);
+
 export const chromaticAberration = definePlugin({
   id: "chromatic-aberration-v1",
-  title: "Chromatic Aberration V1",
+  title: t("title"),
   version: { major: 1, minor: 0 },
 
   liveEffect: {
@@ -60,34 +90,40 @@ export const chromaticAberration = definePlugin({
     renderUI: (params) => {
       // prettier-ignore
       return ui.group({ direction: "col" }, [
-      ui.group({ direction: "row" }, [
-        // ui.text({ text: "Color Mode"}),
-        ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: ['rgb', 'cmyk'] }),
-      ]),
-      ui.group({ direction: "row" }, [
-        // ui.text({ text: "Strength"}),
-        ui.slider({ key: "strength", label: "Strength", dataType: 'float', min: 0, max: 200, value: params.strength }),
-      ]),
-      ui.group({ direction: "row" }, [
-        // ui.text({ text: "Angle"}),
-        ui.slider({ key: "angle", label: "Angle", dataType: 'float', min: 0, max: 360, value: params.angle }),
-      ]),
-      ui.group({ direction: "row" }, [
-        // ui.text({ text: "Opacity"}),
-        ui.slider({ key: "opacity", label: "Opacity", dataType: 'float', min: 0, max: 100, value: params.opacity }),
-      ]),
-      ui.group({ direction: "row" }, [
-        // ui.text({ text: "Blend Mode"}),
-        ui.select({ key: "blendMode", label: "Blend Mode", value: params.blendMode, options: ['over', 'under'] }),
-      ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("colorMode") }),
+          ui.select({ key: "colorMode", label: t("colorMode"), value: params.colorMode, options: [
+            {value: 'rgb', label: "RGB"},
+            {value: 'cmyk', label: "CMYK"},
+          ] }),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("strength") }),
+          ui.slider({ key: "strength", label: t("strength"), dataType: 'float', min: 0, max: 200, value: params.strength }),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("angle") }),
+          ui.slider({ key: "angle", label: t("angle"), dataType: 'float', min: 0, max: 360, value: params.angle }),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("opacity")}),
+          ui.slider({ key: "opacity", label: t("opacity"), dataType: 'float', min: 0, max: 100, value: params.opacity }),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Blend Mode"}),
+          ui.select({ key: "blendMode", label: t("blendMode"), value: params.blendMode, options: [
+            {value: 'over', label: t("blendOver")},
+            {value: 'under', label: t('blendeUnder')}
+          ]}),
+        ]),
 
-      // ui.separator(),
+        // ui.separator(),
 
-      // ui.group({ direction: "col" }, [
-      //   ui.text({ text: "Debugging parameters" }),
-      //   ui.slider({ key: "padding", label: "Padding", dataType: 'int', min: 0, max: 200, value: params.padding }),
-      // ]),
-    ])
+        // ui.group({ direction: "col" }, [
+        //   ui.text({ text: "Debugging parameters" }),
+        //   ui.slider({ key: "padding", label: "Padding", dataType: 'int', min: 0, max: 200, value: params.padding }),
+        // ]),
+      ])
     },
     initLiveEffect: async () => {
       const device = await navigator.gpu.requestAdapter().then((adapter) =>

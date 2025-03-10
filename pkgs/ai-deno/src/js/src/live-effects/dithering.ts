@@ -1,6 +1,6 @@
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
-import { ui } from "../ui.ts";
+import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
@@ -34,7 +34,7 @@ export const dithering = definePlugin({
       },
       strength: {
         type: "real",
-        default: 1.0,
+        default: 100,
       },
     },
     editLiveEffectParameters: (params) => {
@@ -64,16 +64,23 @@ export const dithering = definePlugin({
       // prettier-ignore
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
-          ui.select({ key: "patternType", label: "Pattern Type", value: params.patternType, options: ['bayer2x2', 'bayer4x4', 'bayer8x8'] }),
+          ui.select({ key: "patternType", label: "Pattern Type", value: params.patternType, options: [
+            { value: 'bayer2x2', label: '2x2 Bayer' },
+            { value: 'bayer4x4', label: '4x4 Bayer' },
+            { value: 'bayer8x8', label: '8x8 Bayer' },
+          ]}),
         ]),
         ui.group({ direction: "row" }, [
-          ui.slider({ key: "threshold", label: "Threshold", dataType: 'float', min: 0, max: 1.0, value: params.threshold }),
+          ui.slider({ key: "threshold", label: "Threshold", dataType: 'float', min: 0, max: 100, value: params.threshold }),
         ]),
         ui.group({ direction: "row" }, [
-          ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: ['monochrome', 'color'] }),
+          ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: [
+            { value: 'monochrome', label: 'Monochrome' },
+            { value: 'color', label: 'Color' },
+          ]}),
         ]),
         ui.group({ direction: "row" }, [
-          ui.slider({ key: "strength", label: "Strength", dataType: 'float', min: 0, max: 1.0, value: params.strength }),
+          ui.slider({ key: "strength", label: "Strength", dataType: 'float', min: 0, max: 100, value: params.strength }),
         ]),
       ])
     },
@@ -276,10 +283,10 @@ export const dithering = definePlugin({
       const uniformView = new DataView(uniformData);
 
       // threshold (float32)
-      uniformView.setFloat32(0, params.threshold, true);
+      uniformView.setFloat32(0, params.threshold / 100, true);
 
       // strength (float32)
-      uniformView.setFloat32(4, params.strength, true);
+      uniformView.setFloat32(4, params.strength / 100, true);
 
       // patternType (uint32)
       let patternTypeValue = 1; // Default to 4x4

@@ -460,56 +460,82 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
 
     bool isModalOpened = true;
 
-    ImGuiModal::OnChangeCallback modaloOnChangeCallback = [&pluginParams, &isModalOpened,
-                                                           &isPreviewed, &error, &message,
-                                                           &currentParams, &nodeTree,
-                                                           &modal, this](json patch) {
-      if (isModalOpened) isPreviewed = true;
-      csl("onChange: {}", patch.dump().c_str());
+    ImGuiModal::OnFireEventCallback modalOnFireEventCallback =
+        [this, &pluginParams, &currentParams, &error, &message](json event) {
+          csl("onFireEvent: %s", event.dump().c_str());
 
-      currentParams.merge_patch(patch);
-      pluginParams.params = currentParams;
+          ai_deno::JsonFunctionResult* result = ai_deno::edit_live_effect_fire_event(
+              this->aiDenoMain, pluginParams.effectName.c_str(), event.dump().c_str()
+          );
 
-      // Normalize params
-      {
-        ai_deno::JsonFunctionResult* result = ai_deno::edit_live_effect_parameters(
-            this->aiDenoMain, pluginParams.effectName.c_str(),
-            currentParams.dump().c_str()
-        );
+          if (!result->success) { csl("Failed to fire event"); }
 
-        if (!result->success) {
-          csl("Failed to normalize live effect parameters: %s",
-              pluginParams.effectName.c_str());
-        } else {
-          currentParams = json::parse(result->json);
-        }
-      }
+          currentParams       = json::parse(result->json);
+          pluginParams.params = currentParams;
 
-      ai_deno::JsonFunctionResult* result = ai_deno::get_live_effect_view_tree(
-          this->aiDenoMain, pluginParams.effectName.c_str(), currentParams.dump().c_str()
-      );
+          // Rerender preview
+          error = this->putParamsToDictionaly(message->parameters, pluginParams);
+          CHKERR();
+          error = sAILiveEffect->UpdateParameters(message->context);
+          CHKERR();
+        };
 
-      if (!result->success) {
-        std::cerr << "Failed to get live effect view tree" << std::endl;
-      } else {
-        nodeTree = json::parse(result->json);
-        modal->updateRenderTree(nodeTree);
-      }
+    ImGuiModal::OnChangeCallback modaloOnChangeCallback =
+        [&pluginParams, &isModalOpened, &isPreviewed, &error, &message, &currentParams,
+         &nodeTree, &modal, this](json patch) {
+          if (isModalOpened) isPreviewed = true;
+          csl("onChange: {}", patch.dump().c_str());
 
-      ai_deno::dispose_json_function_result(result);
+          currentParams.merge_patch(patch);
+          pluginParams.params = currentParams;
 
-      // Rerender preview
-      error = this->putParamsToDictionaly(message->parameters, pluginParams);
-      CHKERR();
-      error = sAILiveEffect->UpdateParameters(message->context);
-      CHKERR();
-    };
+          // Normalize params
+          {
+            ai_deno::JsonFunctionResult* result = ai_deno::edit_live_effect_parameters(
+                this->aiDenoMain, pluginParams.effectName.c_str(),
+                currentParams.dump().c_str()
+            );
+
+            if (!result->success) {
+              csl("Failed to normalize live effect parameters: %s",
+                  pluginParams.effectName.c_str());
+            }
+
+            currentParams = json::parse(result->json);
+
+            ai_deno::dispose_json_function_result(result);
+          }
+
+          // rerender tree
+          {
+            ai_deno::JsonFunctionResult* result = ai_deno::get_live_effect_view_tree(
+                this->aiDenoMain, pluginParams.effectName.c_str(),
+                currentParams.dump().c_str()
+            );
+
+            if (!result->success) {
+              std::cerr << "Failed to get live effect view tree" << std::endl;
+            } else {
+              nodeTree = json::parse(result->json);
+              modal->updateRenderTree(nodeTree);
+            }
+
+            ai_deno::dispose_json_function_result(result);
+
+            // Rerender preview
+            error = this->putParamsToDictionaly(message->parameters, pluginParams);
+            CHKERR();
+            error = sAILiveEffect->UpdateParameters(message->context);
+            CHKERR();
+          }
+        };
 
     modaloOnChangeCallback(initialParams);
 
     isModalOpened = true;
     csl("Opening modal: %s", nodeTree.dump().c_str());
-    ModalStatusCode dialogResult = modal->runModal(nodeTree, modaloOnChangeCallback);
+    ModalStatusCode dialogResult =
+        modal->runModal(nodeTree, modaloOnChangeCallback, modalOnFireEventCallback);
     csl("Modal closed");
 
     if (dialogResult == ModalStatusCode::OK) {

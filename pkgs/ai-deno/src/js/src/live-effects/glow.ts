@@ -1,6 +1,6 @@
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
-import { ui } from "../ui.ts";
+import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
@@ -53,7 +53,7 @@ export const glow = definePlugin({
             label: "Blur Strength",
             dataType: "float",
             min: 0,
-            max: 100,
+            max: 500,
             value: params.strength,
           }),
         ]),

@@ -7,6 +7,9 @@ export const ui = {
     direction,
     children,
   }),
+  button: (): UINodeButton => ({
+    type: "button",
+  }),
   slider: (props: Omit<UINodeSlider, "type">): UINode => ({
     ...props,
     type: "slider",
@@ -19,6 +22,10 @@ export const ui = {
     ...props,
     type: "textInput",
   }),
+  numberInput: (props: Omit<UINodeNumberInput, "type">): UINode => ({
+    ...props,
+    type: "numberInput",
+  }),
   text: (props: Omit<UINodeText, "type">): UINode => ({
     ...props,
     type: "text",
@@ -29,7 +36,9 @@ export const ui = {
   }),
   select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect => ({
     ...props,
-    selectedIndex: props.options.indexOf(props.value),
+    selectedIndex: props.options.findIndex(
+      (option) => option.value === props.value
+    ),
     type: "select",
   }),
   separator: (): UISeparator => ({
@@ -67,6 +76,17 @@ export type UINodeTextInput = {
   value: string;
 };
 
+export type UINodeNumberInput = {
+  type: "numberInput";
+  dataType: "int" | "float";
+  key: string;
+  label: string;
+  value: number;
+  max?: number;
+  min?: number;
+  step?: number;
+};
+
 export type UINodeText = {
   type: "text";
   text: string;
@@ -74,13 +94,15 @@ export type UINodeText = {
 
 export type UINodeButton = {
   type: "button";
+  text: string;
+  onClick?: (e: { type: "click" }) => void | Promise<void>;
 };
 
 export type UISelect = {
   type: "select";
   key: string;
   label: string;
-  options: string[];
+  options: { value: string; label: string }[];
   value: string;
   selectedIndex: number;
 };

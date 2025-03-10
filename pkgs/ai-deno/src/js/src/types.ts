@@ -1,4 +1,4 @@
-import { UINode } from "./ui.ts";
+import { UINode } from "./ui/nodes.ts";
 
 export type ParameterSchema = {
   [name: string]: {
@@ -130,7 +130,12 @@ export type AIPlugin<
       percent: number
     ) => Params;
 
-    renderUI: (params: Params) => UINode;
+    renderUI: (
+      params: Params,
+      setParam: (
+        update: Partial<Params> | ((prev: Params) => Partial<Params>)
+      ) => void
+    ) => UINode;
   };
 };
 

@@ -1,5 +1,5 @@
 import { definePlugin, StyleFilterFlag } from "../types.ts";
-import { ui } from "../ui.ts";
+import { ui } from "../ui/nodes.ts";
 import { toPng } from "./utils.ts";
 import { paddingImageData } from "./utils.ts";
 
@@ -88,16 +88,26 @@ export const testBlueFill = definePlugin({
     },
     renderUI: (params) =>
       ui.group({ direction: "col" }, [
+        ui.button({
+          text: "Test",
+          onClick: () => console.log("Hi from TestBlueFill"),
+        }),
+
+        // ui.text({ text: "Use new buffer" }),
         ui.checkbox({
           label: "Use new buffer",
           key: "useNewBuffer",
           value: params.useNewBuffer,
         }),
+
+        // ui.text({ text: "Fill other channels" }),
         ui.checkbox({
           label: "Fill other channels",
           key: "fillOtherChannels",
           value: params.fillOtherChannels,
         }),
+
+        ui.text({ text: "Padding" }),
         ui.slider({
           label: "Padding",
           key: "padding",
@@ -106,6 +116,8 @@ export const testBlueFill = definePlugin({
           max: 100,
           value: params.padding,
         }),
+
+        ui.text({ text: "Opacity" }),
         ui.slider({
           label: "Opacity",
           key: "opacity",

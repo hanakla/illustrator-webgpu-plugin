@@ -1,12 +1,40 @@
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
-import { ui } from "../ui.ts";
+import { useTranslator } from "../ui/locale.ts";
+import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
 } from "./utils.ts";
+
+const t = useTranslator({
+  en: {
+    title: "Directional Blur",
+    strength: "Size (px)",
+    direction: "Direction",
+    opacity: "Opacity",
+    blurMode: "Blur Mode",
+    behind: "Behind",
+    front: "Front",
+    both: "Both",
+    fadeScale: "Scale to fade",
+    fadeDirection: "Direction to fade",
+  },
+  ja: {
+    title: "方向性ブラー",
+    strength: "大きさ (px)",
+    direction: "方向",
+    opacity: "不透明度",
+    blurMode: "ブラーモード",
+    behind: "後方",
+    front: "前方",
+    both: "両方",
+    fadeScale: "縮小率",
+    fadeDirection: "縮小方向",
+  },
+});
 
 export const directionalBlur = definePlugin({
   id: "directional-blur-v1",
@@ -68,64 +96,68 @@ export const directionalBlur = definePlugin({
 
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "Directional Blur" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("strength") }),
           ui.slider({
             key: "strength",
-            label: "Strength (px)",
+            label: t("strength"),
             dataType: "float",
             min: 0,
             max: 500,
             value: params.strength,
           }),
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "Direction" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("direction") }),
           ui.slider({
             key: "angle",
-            label: "Angle",
+            label: t("direction"),
             dataType: "float",
             min: 0,
             max: 360,
             value: params.angle,
           }),
         ]),
-        ui.group({ direction: "row" }, [
+        ui.group({ direction: "col" }, [
           ui.text({ text: "Opacity" }),
           ui.slider({
             key: "opacity",
-            label: "Opacity",
+            label: t("direction"),
             dataType: "float",
             min: 0,
             max: 100,
             value: params.opacity,
           }),
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "Blur Mode" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("blurMode") }),
           ui.select({
             key: "blurMode",
-            label: "Blur Mode",
+            label: t("blurMode"),
             value: params.blurMode,
-            options: ["both", "behind", "front"],
+            options: [
+              { value: "both", label: t("both") },
+              { value: "behind", label: t("behind") },
+              { value: "front", label: t("front") },
+            ],
           }),
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "縮小率" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("fadeScale") }),
           ui.slider({
             key: "fadeOut",
-            label: "縮小率",
+            label: t("fadeScale"),
             dataType: "float",
             min: 0.0,
             max: 1.0,
             value: params.fadeOut,
           }),
         ]),
-        ui.group({ direction: "row" }, [
-          ui.text({ text: "縮小方向" }),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("fadeDirection") }),
           ui.slider({
             key: "fadeDirection",
-            label: "縮小方向",
+            label: t("fadeDirection"),
             dataType: "float",
             min: -1.0,
             max: 1.0,

@@ -9,6 +9,8 @@ use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInitOptions};
 use deno_core::{anyhow, serde_json::json};
 use deno_runtime::deno_core::v8;
 use deno_runtime::deno_core::PollEventLoopOptions;
+use ext::ai_user_extension;
+use ext::AiExtOptions;
 use homedir::my_home;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Display;
@@ -96,9 +98,9 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
 
     dai_println!("Initializing");
     let mut runtime = Runtime::new(&mut RuntimeInitOptions {
-        //     extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
-        //         alert: alert_fn,
-        //     })],
+        extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
+            // alert: alert_fn,
+        })],
         package_root_dir: package_root_dir(),
         ..Default::default()
     })
@@ -360,6 +362,34 @@ pub extern "C" fn edit_live_effect_parameters(
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
         let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into()];
+        Ok(args)
+    });
+
+    let boxed = Box::new(result);
+
+    Box::into_raw(boxed)
+}
+
+/// Fire view event and returns normalized next parameters
+#[no_mangle]
+pub extern "C" fn edit_live_effect_fire_event(
+    ai_main_ref: OpaqueAiMain,
+    effect_id: *const c_char,
+    event_payload: *const c_char,
+) -> *mut JsonFunctionResult {
+    let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
+    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
+    let event_payload = unsafe { CStr::from_ptr(event_payload).to_string_lossy().to_string() };
+
+    let result = execute_exported_function(ai_main, "editLiveEffectFireCallback", move |scope| {
+        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(scope, effect_id);
+
+        let event_payload = v8::String::new(scope, event_payload.as_str()).unwrap();
+        let event_payload = v8::json::parse(scope, event_payload).unwrap();
+        let event_payload = v8::Local::<v8::Object>::try_from(event_payload).unwrap();
+
+        let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), event_payload.into()];
         Ok(args)
     });
 

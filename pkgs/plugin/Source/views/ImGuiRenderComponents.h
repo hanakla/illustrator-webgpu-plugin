@@ -57,16 +57,29 @@ namespace {
     int pushedColor = 0;
   };
 
-  std::tuple<const char**, size_t> parseSelectOptions(const json& j) {
-    std::vector<std::string> stringVec = j.get<std::vector<std::string>>();
-    size_t                   size      = stringVec.size();
+  std::tuple<const char**, std::vector<std::string>, size_t>
+  parseSelectOptions(const json& j) {
+    // j =  Array<{ value: string; label: string }>
+    size_t size = j.size();
 
-    const char** result = new const char*[size];
+    std::vector<std::string> labelsVec;
+    std::vector<std::string> valuesVec;
+
     for (size_t i = 0; i < size; i++) {
-      result[i] = strdup(stringVec[i].c_str());
+      if (!j[i].contains("value") || !j[i].contains("label")) {
+        throw std::runtime_error("Invalid select options");
+      }
+
+      valuesVec.push_back(j[i]["value"].get<std::string>());
+      labelsVec.push_back(j[i]["label"].get<std::string>());
     }
 
-    return {result, size};
+    const char** labels = new const char*[size];
+    for (size_t i = 0; i < size; i++) {
+      labels[i] = strdup(labelsVec[i].c_str());
+    }
+
+    return {labels, valuesVec, size};
   }
 
   void freeSelectOptions(const char** options, size_t size) {
@@ -106,9 +119,10 @@ namespace {
 }  // namespace
 
 ModalStatusCode AiDenoImGuiRenderComponents(
-    json&                        renderTree,
-    ImGuiWindowFlags             windowFlags,
-    ImGuiModal::OnChangeCallback onChangeCallback
+    json& renderTree,
+    ImGuiWindowFlags,
+    ImGuiModal::OnChangeCallback,
+    ImGuiModal::OnFireEventCallback
 );
 
 #endif
