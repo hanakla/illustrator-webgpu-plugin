@@ -96,18 +96,18 @@ namespace {
 
     bool Button(const char* label, ButtonProps props) {
       styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
-      styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(1.0f, 4.0f));
+      styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
 
       if (props.kind == ButtonKind::Primary) {
         styleStack.pushColor(ImGuiCol_Button, currentTheme.accentColor500);
         styleStack.pushColor(ImGuiCol_ButtonHovered, currentTheme.accentColor600);
         styleStack.pushColor(ImGuiCol_ButtonActive, currentTheme.accentColor700);
-        styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
       } else if (props.kind == ButtonKind::Default) {
         styleStack.pushVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
+        styleStack.pushColor(ImGuiCol_Border, currentTheme.gray600);
         styleStack.pushColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        styleStack.pushColor(ImGuiCol_ButtonHovered, currentTheme.gray800);
-        styleStack.pushColor(ImGuiCol_ButtonActive, currentTheme.gray700);
+        styleStack.pushColor(ImGuiCol_ButtonHovered, currentTheme.gray500);
+        styleStack.pushColor(ImGuiCol_ButtonActive, currentTheme.gray600);
       }
 
       bool result = ImGui::Button(label, props.size);

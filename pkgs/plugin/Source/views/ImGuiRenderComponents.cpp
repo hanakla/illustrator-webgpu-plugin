@@ -46,6 +46,8 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     } else if (type == "button") {
       std::string label = node["text"].get<std::string>();
 
+      ui::styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
+      ui::styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
       if (ImGui::Button(label.c_str())) {
         json payload = ImGuiModal::EventCallbackPayload{
             .type   = "click",
@@ -56,10 +58,11 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
         onFireEventCallback(payload);
       }
+      ui::styleStack.clear();
 
     } else if (type == "textInput") {
       std::string keyStr = node["key"].get<std::string>();
-      const char* key    = keyStr.c_str();
+      const char* key    = std::string("###" + keyStr).c_str();
       std::string value  = node["value"].get<std::string>();
 
       ImGui::PushItemWidth(-1);
@@ -70,7 +73,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
     } else if (type == "numberInput") {
       std::string key      = node["key"].get<std::string>();
-      std::string label    = node["label"].get<std::string>();
+      std::string label    = "###" + node["label"].get<std::string>();
       std::string dataType = node["dataType"].get<std::string>();
 
       if (dataType == "int") {
@@ -122,9 +125,8 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     } else if (type == "slider") {
       std::string key      = node["key"].get<std::string>();
       std::string dataType = node["dataType"].get<std::string>();
-      std::string label    = node["label"].get<std::string>();
+      std::string label    = "###" + node["label"].get<std::string>();
 
-      ImGui::PushItemWidth(-1);
       if (dataType == "int") {
         int min   = node["min"].get<int>();
         int max   = node["max"].get<int>();
@@ -142,9 +144,9 @@ ModalStatusCode AiDenoImGuiRenderComponents(
           onChangeCallback(json::object({{key, value}}));
         }
       }
-      ImGui::PopItemWidth();
+
     } else if (type == "select") {
-      std::string label            = node["label"].get<std::string>();
+      std::string label            = "###" + node["label"].get<std::string>();
       std::string key              = node["key"].get<std::string>();
       int         selectedIndex    = node["selectedIndex"].get<int>();
       auto [labels, values, count] = parseSelectOptions(node["options"]);
@@ -160,11 +162,16 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   };
 
   static bool is_open = true;
+
+  ImGui::SetNextWindowPos(ImVec2(0, 0), 0, ImVec2(0, 0));
   ImGui::Begin("polygon specs", &is_open, windowFlags);
 
   renderNode(renderTree);
 
-  ImGui::Spacing();
+  ImGui::Dummy(ImVec2(0, 8));
+
+  ImGui::Dummy(ImVec2(64, 0));
+  ImGui::SameLine();
 
   static ButtonProps cancelBtnProps{.kind = ButtonKind::Default};
   if (ui::Button("Cancel", cancelBtnProps)) { resultStatus = ModalStatusCode::Cancel; }
@@ -174,9 +181,11 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   if (ui::Button("  OK  ", okBtnProps)) { resultStatus = ModalStatusCode::OK; }
 
   if (currentSize != nullptr) {
-    ImVec2 max   = ImGui::GetWindowContentRegionMax();
-    ImVec2 min   = ImGui::GetWindowContentRegionMin();
-    ImVec2 size  = ImVec2(max.x - min.x, max.y - min.y);
+    // ImVec2 max  = ImGui::GetWindowContentRegionMax();
+    // ImVec2 min  = ImGui::GetWindowContentRegionMin();
+    // ImVec2 size = ImVec2(max.x - min.x, max.y - min.y);
+    ImVec2 size = ImGui::GetWindowSize();
+
     *currentSize = size;
   }
 

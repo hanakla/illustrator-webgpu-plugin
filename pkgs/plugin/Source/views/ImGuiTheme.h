@@ -3,13 +3,13 @@
 #include "../../deps/imgui/imgui.h"
 #include "../consts.h"
 #include "../spectrum-tokens.hpp"
+#include "./ImGuiTheme.h"
 
 void ImGuiSetSpectrumTheme() {
   SpectrumTokens tokens = currentTheme;
   ImGuiStyle&    style  = ImGui::GetStyle();
   ImVec4*        colors = style.Colors;
 
-  // カラーパレットを設定（SpectrumTokensを使用）
   colors[ImGuiCol_Text]         = tokens.gray900;
   colors[ImGuiCol_TextDisabled] = tokens.gray600;
   // colors[ImGuiCol_WindowBg]             = tokens.backgroundBaseColor;
@@ -42,13 +42,14 @@ void ImGuiSetSpectrumTheme() {
   // colors[ImGuiCol_TextSelectedBg]       = tokens.accentColor600;
 
   // 他のカスタム設定（サイズなど）
-  style.WindowPadding  = ImVec2(8, 8);  // ウィンドウのパディング
-  style.FramePadding   = ImVec2(5, 5);  // フレームのパディング
-  style.ItemSpacing    = ImVec2(8, 4);  // アイテム間のスペース
-  style.ScrollbarSize  = 12.0f;         // スクロールバーのサイズ
-  style.GrabMinSize    = 10.0f;         // グラブサイズ
-  style.WindowRounding = 4.0f;          // ウィンドウの角丸
-  style.FrameRounding  = 4.0f;          // フレームの角丸
-  style.GrabRounding   = 4.0f;          // グラブの角丸
-  style.PopupRounding  = 4.0f;          // ポップアップの角丸
+  style.WindowPadding =
+      ImVec2(kMyDialogPadding, kMyDialogPadding);  // ウィンドウのパディング
+  style.FramePadding   = ImVec2(5, 5);             // フレームのパディング
+  style.ItemSpacing    = ImVec2(12, 8);            // アイテム間のスペース
+  style.ScrollbarSize  = 12.0f;                    // スクロールバーのサイズ
+  style.GrabMinSize    = 10.0f;                    // グラブサイズ
+  style.WindowRounding = 4.0f;                     // ウィンドウの角丸
+  style.FrameRounding  = 4.0f;                     // フレームの角丸
+  style.GrabRounding   = 4.0f;                     // グラブの角丸
+  style.PopupRounding  = 4.0f;                     // ポップアップの角丸
 }

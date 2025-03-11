@@ -1,6 +1,6 @@
 // src/js/src/main.ts
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
-import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
+import { toFileUrl as toFileUrl2, join as join2, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
 import { homedir } from "node:os";
 
@@ -96,6 +96,18 @@ var createImageDataImpl = typeof window === "undefined" ? async (data, width, he
     settings
   );
 };
+async function toBlob(canvas, mime, quality) {
+  if (typeof window === "undefined") {
+    mime = mime.replace(/^image\//, "");
+    const b64 = canvas.toDataURL(mime, quality).split(",")[1];
+    const buffer = decodeBase64(b64);
+    return new Blob([buffer], { type: mime });
+  } else {
+    return new Promise((r) => {
+      canvas.toBlob((b) => r(b), mime, quality);
+    });
+  }
+}
 function getNearestAligned256Resolution(width, height, bytesPerPixel = 4) {
   const currentBytesPerRow = width * bytesPerPixel;
   const targetBytesPerRow = Math.ceil(currentBytesPerRow / 256) * 256;
@@ -140,6 +152,17 @@ async function paddingImageData(data, padding) {
   );
   ctx.putImageData(imgData, padding, padding);
   return ctx.getImageData(0, 0, width, height);
+}
+async function toPng(imgData) {
+  const canvas = await createCanvasImpl(imgData.width, imgData.height);
+  const ctx = canvas.getContext("2d");
+  const img = await createImageDataImpl(
+    imgData.data,
+    imgData.width,
+    imgData.height
+  );
+  ctx.putImageData(img, 0, 0);
+  return toBlob(canvas, "image/png", 100);
 }
 function lerp(a, b, t3) {
   return a + (b - a) * t3;
@@ -529,6 +552,11 @@ var chromaticAberration = definePlugin({
 });
 
 // src/js/src/live-effects/test-blue-fill.ts
+import { toFileUrl, join } from "jsr:@std/path@1.0.8";
+var global = {
+  lastInput: null,
+  inputSize: null
+};
 var testBlueFill = definePlugin({
   id: "test-blue-fill",
   title: "Test Blue Fill",
@@ -567,6 +595,8 @@ var testBlueFill = definePlugin({
       let width = input.width;
       let height = input.height;
       let len = input.data.length;
+      global.lastInput = input;
+      global.inputSize = { width, height };
       const alpha = Math.round(255 * (params.opacity / 100));
       let buffer = params.useNewBuffer ? Uint8ClampedArray.from(input.data) : input.data;
       if (params.padding > 0) {
@@ -603,17 +633,43 @@ var testBlueFill = definePlugin({
       };
     },
     renderUI: (params, setParam) => {
+      var _a, _b;
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
           ui.button({
-            text: "Test",
+            text: "Update view",
             onClick: () => {
-              console.log("Hi from TestBlueFill");
               setParam((prev) => {
-                console.log("prev params", prev);
                 return { count: prev.count + 1 };
               });
             }
+          }),
+          ui.button({
+            text: "Save input as PNG",
+            onClick: async () => {
+              if (!global.lastInput) {
+                alert("No input data");
+                return;
+              }
+              const path = new URL(
+                "./test-blue-fill.png",
+                toFileUrl(join(Deno.cwd(), "./"))
+              );
+              const png = await toPng(global.lastInput);
+              Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
+              console.log(`Saved to ${path}`);
+            }
+          }),
+          ui.button({
+            text: "Alert",
+            onClick: () => {
+              console.log("Hello");
+            }
+          })
+        ]),
+        ui.group({ direction: "row" }, [
+          ui.text({
+            text: `Input: ${(_a = global.inputSize) == null ? void 0 : _a.width}x${(_b = global.inputSize) == null ? void 0 : _b.height}`
           }),
           ui.text({ text: `Count: ${params.count}` })
         ]),
@@ -1670,7 +1726,7 @@ var dithering = definePlugin({
 });
 
 // src/js/src/main.ts
-var EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
+var EFFECTS_DIR = new URL(toFileUrl2(join2(homedir(), ".ai-deno/effects")));
 var allPlugins = [
   // randomNoiseEffect,
   // blurEffect,

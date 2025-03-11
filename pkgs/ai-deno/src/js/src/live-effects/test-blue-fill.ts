@@ -1,7 +1,20 @@
+import { toFileUrl, join } from "jsr:@std/path@1.0.8";
 import { definePlugin, StyleFilterFlag } from "../types.ts";
 import { ui } from "../ui/nodes.ts";
 import { toPng } from "./utils.ts";
 import { paddingImageData } from "./utils.ts";
+
+const global: {
+  lastInput: {
+    data: Uint8ClampedArray;
+    width: number;
+    height: number;
+  } | null;
+  inputSize: { width: number; height: number } | null;
+} = {
+  lastInput: null,
+  inputSize: null,
+};
 
 export const testBlueFill = definePlugin({
   id: "test-blue-fill",
@@ -41,6 +54,9 @@ export const testBlueFill = definePlugin({
       let width = input.width;
       let height = input.height;
       let len = input.data.length;
+
+      global.lastInput = input;
+      global.inputSize = { width, height };
 
       const alpha = Math.round(255 * (params.opacity / 100));
 
@@ -94,15 +110,45 @@ export const testBlueFill = definePlugin({
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
           ui.button({
-            text: "Test",
+            text: "Update view",
             onClick: () => {
-              console.log("Hi from TestBlueFill");
               setParam((prev) => {
-                console.log("prev params", prev);
                 return { count: prev.count + 1 };
               });
             },
           }),
+
+          ui.button({
+            text: "Save input as PNG",
+            onClick: async () => {
+              if (!global.lastInput) {
+                alert("No input data");
+                return;
+              }
+
+              const path = new URL(
+                "./test-blue-fill.png",
+                toFileUrl(join(Deno.cwd(), "./"))
+              );
+              const png = await toPng(global.lastInput);
+              Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
+              console.log(`Saved to ${path}`);
+            },
+          }),
+
+          ui.button({
+            text: "Alert",
+            onClick: () => {
+              console.log("Hello");
+            },
+          }),
+        ]),
+
+        ui.group({ direction: "row" }, [
+          ui.text({
+            text: `Input: ${global.inputSize?.width}x${global.inputSize?.height}`,
+          }),
+
           ui.text({ text: `Count: ${params.count}` }),
         ]),
 
