@@ -3,4 +3,4 @@
 
 #define kPluginName "dinostrator"
 
-#endif  // End HelloWorldID.h
+#endif  // End AiDenoId.h

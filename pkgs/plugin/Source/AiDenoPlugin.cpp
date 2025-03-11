@@ -6,8 +6,8 @@
 
 #include "./libs/regex.h"
 #include "./views/ImgUIEditModal.h"
-#include "HelloWorldPlugin.h"
-#include "HelloWorldSuites.h"
+#include "AiDenoPlugin.h"
+#include "AiDenoSuites.h"
 #include "consts.h"
 
 #include "debugHelper.h"

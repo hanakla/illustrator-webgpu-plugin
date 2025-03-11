@@ -1,4 +1,4 @@
-#include "HelloWorldSuites.h"
+#include "AiDenoSuites.h"
 #include "IllustratorSDK.h"
 
 // Suite externs

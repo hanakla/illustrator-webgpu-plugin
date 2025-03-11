@@ -13,7 +13,7 @@
 #include "libai_deno.h"
 
 #include "./views/ImgUIEditModal.h"
-#include "HelloWorldID.h"
+#include "AiDenoId.h"
 #include "debugHelper.h"
 #include "super-illustrator.h"
 
@@ -30,9 +30,8 @@ struct PluginPreferences {
   AIPoint* windowPosition = nullptr;
 };
 
-Plugin*
-     AllocatePlugin(SPPluginRef pluginRef);
-void FixupReload(Plugin* plugin);
+Plugin* AllocatePlugin(SPPluginRef pluginRef);
+void    FixupReload(Plugin* plugin);
 
 class HelloWorldPlugin : public Plugin {
  public:
