@@ -1,6 +1,6 @@
 #ifndef __HelloWorld_H__
 #define __HelloWorld_H__
 
-#define kHelloWorldPluginName	"HelloWorld"
+#define kPluginName "dinostrator"
 
-#endif // End HelloWorldID.h
+#endif  // End HelloWorldID.h

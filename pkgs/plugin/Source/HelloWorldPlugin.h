@@ -26,8 +26,13 @@ struct PluginParams {
   json        params;
 };
 
-Plugin* AllocatePlugin(SPPluginRef pluginRef);
-void    FixupReload(Plugin* plugin);
+struct PluginPreferences {
+  AIPoint* windowPosition = nullptr;
+};
+
+Plugin*
+     AllocatePlugin(SPPluginRef pluginRef);
+void FixupReload(Plugin* plugin);
 
 class HelloWorldPlugin : public Plugin {
  public:
@@ -58,6 +63,9 @@ class HelloWorldPlugin : public Plugin {
 
   ASErr getDictionaryValues(const AILiveEffectParameters&, PluginParams*, PluginParams);
   ASErr putParamsToDictionaly(const AILiveEffectParameters& dict, PluginParams);
+
+  PluginPreferences getPreferences(ASErr* error);
+  void              putPreferences(PluginPreferences& preferences, ASErr* error);
 
   static void StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult* result);
 

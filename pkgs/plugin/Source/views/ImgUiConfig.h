@@ -5,7 +5,7 @@
 static const float kMyDialogWidth = 350.0f;
 
 #ifdef __APPLE__
-static const float kMyDialogHeight = 190.0f;
+static const float kMyDialogHeight = 220.0f;
 #else
 static const float kMyDialogHeight = 200.0f;
 #endif

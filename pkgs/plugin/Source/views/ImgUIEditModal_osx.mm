@@ -33,11 +33,11 @@ using json = nlohmann::json;
   ImGuiWindowFlags windowFlags;
   ImGuiModal::OnChangeCallback onChangeCallback;
   ImGuiModal::OnFireEventCallback onFireEventCallback;
+  bool isFirstResized;
 }
 @property(nonatomic, strong) id<MTLCommandQueue> commandQueue;
 
 - (instancetype)initWithFrame:(NSRect)frameRect device:(id<MTLDevice>)device;
-
 - (void)setRenderTree:(json)renderTree;
 - (void)setOnChange:(ImGuiModal::OnChangeCallback)onChange;
 - (void)setOnFireEventCallback:(ImGuiModal::OnFireEventCallback)onFireEvent;
@@ -52,8 +52,10 @@ using json = nlohmann::json;
 - (instancetype)initWithWindow:(NSWindow*)window;
 - (void)updateRenderTree:(json)renderTree;
 - (ModalStatusCode)runModal:(json)renderTree
+    lastPosition:(std::tuple<int, int>*)lastPosition
     onChange:(ImGuiModal::OnChangeCallback)onChange
     onFireEvent:(ImGuiModal::OnFireEventCallback)onFireEventCallback;
+- (void)restoreWindowPosition:(NSWindow *)window pos:(std::tuple<int, int>)pos;
 - (void)releaseDialog;
 @end
 
@@ -80,10 +82,15 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
     this->controller = windowController;
   }
 
-    ModalStatusCode runModal(const json& renderTree, ImGuiModal::OnChangeCallback onChange, ImGuiModal::OnFireEventCallback onFireEventCallback) override {
+  ModalStatusCode runModal(
+    const json& renderTree,
+    std::tuple<int, int>* lastPosition,
+    ImGuiModal::OnChangeCallback onChange,
+    ImGuiModal::OnFireEventCallback onFireEventCallback
+  ) override {
     ModalStatusCode result = ModalStatusCode::None;
 
-    result = [this->controller runModal:renderTree onChange:onChange onFireEvent:onFireEventCallback];
+    result = [this->controller runModal:renderTree lastPosition:lastPosition onChange:onChange onFireEvent:onFireEventCallback];
     [this->controller releaseDialog];
     this->controller = nullptr;
 
@@ -101,6 +108,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   WindowController* controller;
   NSWindow* window;
 };
+
+
 
 @implementation WindowController
 
@@ -125,7 +134,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   io.IniFilename = nullptr; // Disable .ini file
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable
-//  io.Fonts->AddFontDefault();
+  // io.Fonts->AddFontDefault();
   ImGuiSetSpectrumTheme();
 
   // Setup Platform/Renderer bindings
@@ -159,7 +168,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 
   // Setup fonts
   ImFontConfig config;
-//    config.FontNo = 1;
+  //  config.FontNo = 1;
   config.MergeMode = false;
 
   // Specify CJK ranges
@@ -191,18 +200,19 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 }
 
 - (ModalStatusCode) runModal:(json)renderNodes
+  lastPosition:(std::tuple<int, int>*)lastPosition
   onChange:(ImGuiModal::OnChangeCallback)callbackFunc
   onFireEvent:(ImGuiModal::OnFireEventCallback)onFireEventCallback
 {
-
   ModalStatusCode result = ModalStatusCode::None;
   //    [self.window.contentView setParms:parms];
   [self.window.contentView setOnChange:callbackFunc];
   [self.window.contentView setOnFireEventCallback:onFireEventCallback];
 
   NSModalSession session =
-      [[NSApplication sharedApplication] beginModalSessionForWindow:self.window];
+      [[NSApplication sharedApplication] beginModalSessionForWindow:self.window ];
 
+  [self restoreWindowPosition:lastPosition];
   [self->imGuiView setRenderTree:renderNodes];
 
   while ([self.window isVisible]) {
@@ -216,9 +226,45 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   }
   [NSApp endModalSession:session];
 
+  NSPoint pos = [self.window frame].origin;
+  *lastPosition = std::make_tuple(static_cast<int>(pos.x), static_cast<int>(pos.y));
+
   if (result != ModalStatusCode::None) [self.window performClose:nil];
 
   return result;
+}
+
+- (void)restoreWindowPosition:(std::tuple<int, int>*)pos {
+    NSScreen *screen = [self.window screen] ?: [NSScreen mainScreen];
+    NSRect screenFrame = [screen visibleFrame];
+
+    NSSize windowSize = [self.window frame].size;
+
+    std::tuple<int, int> position = pos == nullptr ? std::make_tuple(
+        (int)(NSMidX(screenFrame) - windowSize.width * .5),
+        (int)(NSMidY(screenFrame) - windowSize.height * .5)
+    ) : *pos;
+
+    auto [x,y] = position;
+
+    NSPoint targetPoint = NSMakePoint(x, y);
+
+
+    if (targetPoint.x + windowSize.width > NSMaxX(screenFrame)) {
+        targetPoint.x = NSMaxX(screenFrame) - windowSize.width;
+    }
+    if (targetPoint.x < NSMinX(screenFrame)) {
+        targetPoint.x = NSMinX(screenFrame);
+    }
+
+    if (targetPoint.y + windowSize.height > NSMaxY(screenFrame)) {
+        targetPoint.y = NSMaxY(screenFrame) - windowSize.height;
+    }
+    if (targetPoint.y < NSMinY(screenFrame)) {
+        targetPoint.y = NSMinY(screenFrame);
+    }
+
+    [self.window setFrameOrigin:targetPoint];
 }
 
 - (void)releaseDialog {
@@ -252,6 +298,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
       | ImGuiWindowFlags_AlwaysAutoResize
       | ImGuiWindowFlags_NoFocusOnAppearing;
   }
+
+    self->isFirstResized = false;
 
   return self;
 }
@@ -295,18 +343,16 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   ImGui_ImplOSX_NewFrame(self);
   ImGui::NewFrame();
 
-//  ImVec2 windowSize;
+  ImVec2 windowSize;
   resultStatus = AiDenoImGuiRenderComponents(
     self->currentRenderTree,
     windowFlags,
     onChangeCallback,
-    onFireEventCallback
-//    &windowSize
+    onFireEventCallback,
+    &windowSize
   );
-    
-  ImGui::Render();
 
-//  std::cout << "windowSize: " << windowSize.x << ", " << windowSize.y << std::endl;
+  ImGui::Render();
 
   ImDrawData* draw_data = ImGui::GetDrawData();
 
@@ -325,6 +371,22 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   //  Present
   [commandBuffer presentDrawable:self.currentDrawable];
   [commandBuffer commit];
+
+  // Update window size based on ImGui content
+
+  // if ((windowSize.x > kMyDialogWidth || windowSize.y > kMyDialogHeight) && !self->isFirstResized) {
+  //   self->isFirstResized = true;
+
+  //   NSRect frame = NSMakeRect(0, 0, windowSize.x, windowSize.y);
+  //   [self setFrame:frame];
+
+  //   NSRect winFrame = NSMakeRect(
+  //     self.window.frame.origin.x,
+  //     self.window.frame.origin.y,
+  //     windowSize.x, windowSize.y
+  //   );
+  //   [[self window] setFrame:[[self window] frameRectForContentRect:winFrame] display:YES];
+  // }
 }
 
 - (void)reshape {

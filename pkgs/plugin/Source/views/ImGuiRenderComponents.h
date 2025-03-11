@@ -122,7 +122,8 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     json& renderTree,
     ImGuiWindowFlags,
     ImGuiModal::OnChangeCallback,
-    ImGuiModal::OnFireEventCallback
+    ImGuiModal::OnFireEventCallback,
+    ImVec2* currentSize
 );
 
 #endif

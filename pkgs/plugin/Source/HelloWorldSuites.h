@@ -23,5 +23,6 @@ extern "C" AIMenuSuite*          sAIMenu;
 extern "C" AIPathSuite*          sAIPath;
 extern "C" AIPathStyleSuite*     sAIPathStyle;
 extern "C" AILayerSuite*         sAILayer;
+extern "C" AIPreferenceSuite*    sAIPref;
 
 #endif

@@ -18,12 +18,10 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     json&                           renderTree,
     ImGuiWindowFlags                windowFlags,
     ImGuiModal::OnChangeCallback    onChangeCallback,
-    ImGuiModal::OnFireEventCallback onFireEventCallback
-    //    ImVec2*                      currentSize
+    ImGuiModal::OnFireEventCallback onFireEventCallback,
+    ImVec2*                         currentSize
 ) {
   ModalStatusCode resultStatus = ModalStatusCode::None;
-
-  ImGui::SetNextWindowPos(ImVec2(0, 0), 0, ImVec2(0, 0));
 
   std::function<void(json)> renderNode = [&](json node) -> void {
     if (!node.contains("type")) return;
@@ -175,7 +173,12 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   static ButtonProps okBtnProps{.kind = ButtonKind::Primary};
   if (ui::Button("  OK  ", okBtnProps)) { resultStatus = ModalStatusCode::OK; }
 
-  //    if (currentSize != nullptr) { *currentSize = ImGui::GetWindowSize(); }
+  if (currentSize != nullptr) {
+    ImVec2 max   = ImGui::GetWindowContentRegionMax();
+    ImVec2 min   = ImGui::GetWindowContentRegionMin();
+    ImVec2 size  = ImVec2(max.x - min.x, max.y - min.y);
+    *currentSize = size;
+  }
 
   ImGui::End();
 

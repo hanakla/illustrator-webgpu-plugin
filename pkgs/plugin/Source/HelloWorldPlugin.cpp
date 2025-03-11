@@ -25,12 +25,11 @@ void FixupReload(Plugin* plugin) {
 
 HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef)
     : Plugin(pluginRef), fLiveEffect(nullptr), aiDenoMain(nullptr) {
-  strncpy(fPluginName, kHelloWorldPluginName, kMaxStringLength);
+  strncpy(fPluginName, kPluginName, kMaxStringLength);
 }
 
 HelloWorldPlugin::~HelloWorldPlugin() {
   csl("Shutting down");
-  delete aiDenoMain;
 }
 
 ASErr HelloWorldPlugin::StartupPlugin(SPInterfaceMessage* message) {
@@ -565,11 +564,30 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
 
     modaloOnChangeCallback(initialParams);
 
+    PluginPreferences pref = this->getPreferences(&error);
+    CHKERR();
+
+    std::tuple<int, int>* lastPosition;
+    if (pref.windowPosition != nullptr) {
+      std::tuple<int, int> pos =
+          std::make_tuple(pref.windowPosition->h, pref.windowPosition->v);
+      lastPosition = &pos;
+    }
+
     isModalOpened = true;
     csl("Opening modal: %s", nodeTree.dump().c_str());
-    ModalStatusCode dialogResult =
-        modal->runModal(nodeTree, modaloOnChangeCallback, modalOnFireEventCallback);
-    csl("Modal closed");
+    ModalStatusCode dialogResult = modal->runModal(
+        nodeTree, lastPosition, modaloOnChangeCallback, modalOnFireEventCallback
+    );
+
+    if (lastPosition != nullptr) {
+      csl("Saving window position");
+      pref.windowPosition    = new AIPoint();
+      pref.windowPosition->h = std::get<0>(*lastPosition);
+      pref.windowPosition->v = std::get<1>(*lastPosition);
+      this->putPreferences(pref, &error);
+      CHKERR();
+    }
 
     if (dialogResult == ModalStatusCode::OK) {
       csl("Put params to dictionary");
@@ -731,6 +749,33 @@ ASErr HelloWorldPlugin::putParamsToDictionaly(
   );
 
   return error;
+}
+
+PluginPreferences HelloWorldPlugin::getPreferences(ASErr* err = nullptr) {
+  AIErr error = kNoErr;
+  if (err == nullptr) err = &error;
+
+  PluginPreferences pref;
+
+  auto pos = suai::pref::getPoint(
+      AI_DENO_PREF_PREFIX, AI_DENO_PREF_WINDOW_POSITION, std::nullopt, &error
+  );
+  CHKERR();
+  pref.windowPosition = pos ? new AIPoint(*pos) : nullptr;
+
+  csl("Get preferences: %s", pref.windowPosition == nullptr ? "null" : "not null");
+
+  return pref;
+}
+
+void HelloWorldPlugin::putPreferences(PluginPreferences& pref, ASErr* err = nullptr) {
+  AIErr error = kNoErr;
+  if (err == nullptr) err = &error;
+
+  suai::pref::putPoint(
+      AI_DENO_PREF_PREFIX, AI_DENO_PREF_WINDOW_POSITION, pref.windowPosition, &error
+  );
+  CHKERR();
 }
 
 void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult* request

@@ -10,6 +10,7 @@ extern "C" AIArtSuite*        sAIArt;
 extern "C" AIPathSuite*       sAIPath;
 extern "C" AIPathStyleSuite*  sAIPathStyle;
 extern "C" AILayerSuite*      sAILayer;
+extern "C" AIPreferenceSuite* sAIPref;
 
 #ifndef CHKERR
 #define CHKERR(...)                                                         \
@@ -113,16 +114,13 @@ namespace suai {
   };
 
   struct RasterRecord {
-      
-  public:
+   public:
     ai::int16 flags;
-    AIRect        bounds;
-    ai::int32     byteWidth;
-    ai::int16     colorSpace;
-    ai::int16     bitsPerPixel;
-    ai::int16     originalColorSpace;
-      
-    
+    AIRect    bounds;
+    ai::int32 byteWidth;
+    ai::int16 colorSpace;
+    ai::int16 bitsPerPixel;
+    ai::int16 originalColorSpace;
 
     static RasterRecord from(const AIRasterRecord& record) {
       RasterRecord newRecord;
@@ -135,51 +133,52 @@ namespace suai {
       return newRecord;
     };
 
-//    json toJson() {
-//      json flagsJson = {
-//          {"maskImageType", (bool)(flags & AIRasterFlags::kRasterMaskImageType)},
-//          {"invertBits", (bool)(flags & AIRasterFlags::kRasterInvertBits)},
-//          {"graySubtractive", (bool)(flags & AIRasterFlags::kRasterGraySubtractive)},
-//          {"createdInSharedSpace",
-//           (bool)(flags & AIRasterFlags::kRasterCreatedInSharedSpace)},
-//          {"createInSingleBuffer",
-//           (bool)(flags & AIRasterFlags::kRasterCreateInSingleBuffer)}
-//      };
-//
-//      json colorSpaceName = getRasterColorSpaceName(colorSpace);
-//
-//      json record = {
-//          {"flags", flagsJson},           {"bounds", bounds.toJson()},
-//          {"byteWidth", byteWidth},       {"colorSpace", colorSpaceName},
-//          {"bitsPerPixel", bitsPerPixel}, {"originalColorSpace", originalColorSpace}
-//      };
-//
-//      return record;
-//    }
+    //    json toJson() {
+    //      json flagsJson = {
+    //          {"maskImageType", (bool)(flags & AIRasterFlags::kRasterMaskImageType)},
+    //          {"invertBits", (bool)(flags & AIRasterFlags::kRasterInvertBits)},
+    //          {"graySubtractive", (bool)(flags &
+    //          AIRasterFlags::kRasterGraySubtractive)},
+    //          {"createdInSharedSpace",
+    //           (bool)(flags & AIRasterFlags::kRasterCreatedInSharedSpace)},
+    //          {"createInSingleBuffer",
+    //           (bool)(flags & AIRasterFlags::kRasterCreateInSingleBuffer)}
+    //      };
+    //
+    //      json colorSpaceName = getRasterColorSpaceName(colorSpace);
+    //
+    //      json record = {
+    //          {"flags", flagsJson},           {"bounds", bounds.toJson()},
+    //          {"byteWidth", byteWidth},       {"colorSpace", colorSpaceName},
+    //          {"bitsPerPixel", bitsPerPixel}, {"originalColorSpace", originalColorSpace}
+    //      };
+    //
+    //      return record;
+    //    }
   };
 
-//  std::string
-//  getRasterColorSpaceName(AIRasterColorSpace colorSpace) {
-//    return mapValue(
-//        colorSpace, "Invalid",
-//        {{kColorSpaceHasAlpha, "ColorSpaceHasAlpha"},
-//         {kGrayColorSpace, "Gray"},
-//         {kRGBColorSpace, "RGB"},
-//         {kCMYKColorSpace, "CMYK"},
-//         {kLabColorSpace, "Lab"},
-//         {kSeparationColorSpace, "Separation"},
-//         {kNChannelColorSpace, "NChannel"},
-//         {kIndexedColorSpace, "Indexed"},
-//         {kAlphaGrayColorSpace, "AlphaGray"},
-//         {kAlphaRGBColorSpace, "AlphaRGB"},
-//         {kAlphaCMYKColorSpace, "AlphaCMYK"},
-//         {kAlphaLabColorSpace, "AlphaLab"},
-//         {kAlphaSeparationColorSpace, "AlphaSeparation"},
-//         {kAlphaNChannelColorSpace, "AlphaNChannel"},
-//         {kAlphaIndexedColorSpace, "AlphaIndexed"},
-//         {kInvalidColorSpace, "Invalid"}}
-//    );
-//  }
+  //  std::string
+  //  getRasterColorSpaceName(AIRasterColorSpace colorSpace) {
+  //    return mapValue(
+  //        colorSpace, "Invalid",
+  //        {{kColorSpaceHasAlpha, "ColorSpaceHasAlpha"},
+  //         {kGrayColorSpace, "Gray"},
+  //         {kRGBColorSpace, "RGB"},
+  //         {kCMYKColorSpace, "CMYK"},
+  //         {kLabColorSpace, "Lab"},
+  //         {kSeparationColorSpace, "Separation"},
+  //         {kNChannelColorSpace, "NChannel"},
+  //         {kIndexedColorSpace, "Indexed"},
+  //         {kAlphaGrayColorSpace, "AlphaGray"},
+  //         {kAlphaRGBColorSpace, "AlphaRGB"},
+  //         {kAlphaCMYKColorSpace, "AlphaCMYK"},
+  //         {kAlphaLabColorSpace, "AlphaLab"},
+  //         {kAlphaSeparationColorSpace, "AlphaSeparation"},
+  //         {kAlphaNChannelColorSpace, "AlphaNChannel"},
+  //         {kAlphaIndexedColorSpace, "AlphaIndexed"},
+  //         {kInvalidColorSpace, "Invalid"}}
+  //    );
+  //  }
 
   struct RasterSettingsInit {
     RasterType type;
@@ -721,6 +720,64 @@ namespace suai {
       return jsonObj;
     }
   }  // namespace art
+
+  namespace pref {
+    // memo: PreferenceExists returns false if preference is not stored in filesystem
+    bool isExists(
+        const std::string& prefix,
+        const std::string& suffix,
+        AIErr*             error = nullptr
+    ) {
+      const char* _prefix = prefix.c_str();
+      const char* _suffix = suffix.c_str();
+
+      AIBoolean exists = false;
+
+      AIErr err = sAIPref->PreferenceExists(_prefix, _suffix, &exists);
+      if (error != nullptr) *error = err;
+
+      return (bool)exists;
+    }
+
+    // bool isExists(const char* prefix, const char* suffix, AIErr* error = nullptr) {
+    //   AIBoolean exists = false;
+    //   AIErr     err    = sAIPref->PreferenceExists(prefix, suffix, &exists);
+    //   if (error != nullptr) *error = err;
+    //   return (bool)exists;
+    // }
+
+    std::optional<AIPoint> getPoint(
+        const std::string&     prefix,
+        const std::string&     suffix,
+        std::optional<AIPoint> defaultValue,
+        AIErr*                 error = nullptr
+    ) {
+      const char* _p = str::strdup(prefix.c_str());
+      const char* _s = str::strdup(suffix.c_str());
+
+        auto point = AIPoint{-1234, -12345};
+        sAIPref->GetPointPreference(_p, _s, &point);
+
+      if (point.h == -1234 && point.v == -12345) { return defaultValue; }
+
+      return point;
+    }
+
+    void putPoint(
+        const std::string& prefix,
+        const std::string& suffix,
+        AIPoint*           value,
+        AIErr*             error = nullptr
+    ) {
+      const char* _p = prefix.c_str();
+      const char* _s = suffix.c_str();
+
+      std::cout << "putPoint: " << _p << " = " << _s << std::endl;
+
+      AIErr err = sAIPref->PutPointPreference(_p, _s, value);
+      if (error != nullptr) *error = err;
+    }
+  }  // namespace pref
 
   namespace dict {
     AIDictKey getKey(std::string name) {
