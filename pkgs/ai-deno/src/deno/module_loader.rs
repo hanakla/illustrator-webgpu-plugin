@@ -1,18 +1,16 @@
 use cjs_code_analyzer::AiDenoCjsCodeAnalyzer;
-use deno_core::FastString;
+use deno_ast::MediaType;
 use deno_error::JsErrorBox;
-use deno_graph::{ModuleGraph, ModuleSpecifier};
+use deno_graph::ModuleSpecifier;
 use deno_resolver::{
     cjs::CjsTracker,
-    npm::{
-        ByonmNpmResolver, ByonmNpmResolverCreateOptions, CreateInNpmPkgCheckerOptions,
-        DenoInNpmPackageChecker,
-    },
+    npm::{ByonmNpmResolver, ByonmNpmResolverCreateOptions},
 };
 use deno_runtime::{
     deno_core::{
-        error::ModuleLoaderError, url::Url, ModuleLoadResponse, ModuleLoader, ModuleSource,
-        ModuleSourceCode, ModuleType, RequestedModuleType, ResolutionKind,
+        error::ModuleLoaderError, url::Url, FastString, ModuleCodeString, ModuleLoadResponse,
+        ModuleLoader, ModuleName, ModuleSource, ModuleSourceCode, ModuleType, RequestedModuleType,
+        ResolutionKind, SourceMapData,
     },
     deno_fs::{sync::MaybeArc, RealFs},
     deno_node::{NodeExtInitServices, NodeResolver, NodeResolverRc},
@@ -22,22 +20,19 @@ use jsr_package_manager::{parse_jsr_specifier, JsrPackageManager};
 use node_resolver::{
     analyze::NodeCodeTranslator,
     cache::{NodeResolutionSys, NodeResolutionThreadLocalCache},
-    DenoIsBuiltInNodeModuleChecker, InNpmPackageChecker, NodeResolutionKind, PackageJsonResolver,
-    ResolutionMode, UrlOrPathRef,
+    DenoIsBuiltInNodeModuleChecker, NodeResolutionKind, PackageJsonResolver, ResolutionMode,
+    UrlOrPathRef,
 };
 use npm_package_manager::{parse_npm_specifier, NpmPackageManager};
 use require_loader::AiDenoRequireLoader;
-use std::{borrow::Cow, path::PathBuf, rc::Rc, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, path::PathBuf, rc::Rc, str::FromStr, sync::Arc};
 use sys_traits::{impls::RealSys, FsRead};
-
-const NODE_MODULES_DIR: &str = "node_modules";
-const JSR_REGISTRY_URL: &str = "https://jsr.io";
 
 mod cache_provider;
 
-use crate::deno_println;
+use crate::{dai_println, deno_println};
 
-use super::{module, transpiler::transpile};
+use super::transpiler::transpile;
 
 mod cache_db;
 mod cjs_code_analyzer;
@@ -47,21 +42,15 @@ mod npm_client;
 pub mod npm_package_manager;
 mod require_loader;
 
-// struct EmptyPackageFolderResolver;
-// impl NpmPackageFolderResolver for EmptyPackageFolderResolver {
-//     fn resolve_package_folder_from_package(
-//         &self,
-//         specifier: &str,
-//         referrer: &node_resolver::UrlOrPathRef,
-//     ) -> Result<PathBuf, node_resolver::errors::PackageFolderResolveError> {
-//         Err(PackageNotFoundError {
-//             package_name: specifier.to_string(),
-//             referrer: referrer.display(),
-//             referrer_extra: None,
-//         }
-//         .into())
-//     }
-// }
+type ExtensionTranspiler = dyn Fn(
+    ModuleName,
+    ModuleCodeString,
+) -> Result<(ModuleCodeString, Option<SourceMapData>), JsErrorBox>;
+
+pub struct AiDenoModuleLoaderInit {
+    pub package_root_dir: PathBuf,
+    pub allowed_module_schemas: HashSet<String>,
+}
 
 #[derive(Clone)]
 pub struct AiDenoModuleLoader {
@@ -85,12 +74,13 @@ pub struct AiDenoModuleLoader {
     >,
     pub pkg_manager: NpmPackageManager,
     pub jsr_manager: JsrPackageManager,
+    pub allowed_module_schemas: HashSet<String>,
     sys: Arc<RealSys>,
 }
 
 impl AiDenoModuleLoader {
-    pub fn new(package_root_dir: PathBuf) -> Self {
-        let root_node_modules_dir = package_root_dir.join("npm");
+    pub fn new(options: AiDenoModuleLoaderInit) -> Self {
+        let root_node_modules_dir = options.package_root_dir.join("npm");
 
         let real_sys = RealSys::default();
 
@@ -163,7 +153,7 @@ impl AiDenoModuleLoader {
         //     byonm: byonm_npm_resolver.clone(),
         // };
 
-        let jsr_manager = JsrPackageManager::new(package_root_dir.clone());
+        let jsr_manager = JsrPackageManager::new(options.package_root_dir.clone());
 
         Self {
             // package_root_dir,
@@ -178,6 +168,7 @@ impl AiDenoModuleLoader {
             cjs_translator: MaybeArc::new(cjs_translator),
             pkg_manager,
             jsr_manager,
+            allowed_module_schemas: options.allowed_module_schemas,
             sys: Arc::new(real_sys),
         }
     }
@@ -207,6 +198,23 @@ impl AiDenoModuleLoader {
             node_resolver: self.node_resolver.clone(),
             sys: RealSys::default(),
         }
+    }
+
+    pub fn extension_transpiler(&self) -> Rc<ExtensionTranspiler> {
+        let allowed_schemas = self.allowed_module_schemas.clone();
+
+        Rc::new(move |specifier, source| {
+            let allowed = allowed_schemas
+                .iter()
+                .any(|s| specifier.as_str().starts_with(s));
+
+            dai_println!("extension_transpiler: {}, {}", specifier, allowed);
+            if allowed {
+                Ok((source, None))
+            } else {
+                transpile(specifier, source)
+            }
+        })
     }
 
     async fn resolve_and_ensure_npm_module(
@@ -496,6 +504,12 @@ impl ModuleLoader for AiDenoModuleLoader {
             return Ok(ModuleSpecifier::from_str(raw_specifier).unwrap());
         } else if raw_specifier.starts_with("node:") {
             return self.resolve_node_builtin(raw_specifier, &referrer);
+        } else if (self
+            .allowed_module_schemas
+            .iter()
+            .any(|s| raw_specifier.starts_with(s)))
+        {
+            return Ok(ModuleSpecifier::from_str(raw_specifier).unwrap());
         }
 
         let result = match deno_core::resolve_import(raw_specifier, raw_referrer) {

@@ -1,4 +1,4 @@
-import { AIEffectPlugin, AIPlugin } from "./types.ts";
+import { AIEffectPlugin, AIPlugin, RGBAColor } from "./types.ts";
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
@@ -7,17 +7,22 @@ import { homedir } from "node:os";
 // import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
-import { UINode } from "./ui/nodes.ts";
+import { AnyEventHandler, ChangeEventHandler, UINode } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/directional-blur.ts";
-import { glow } from "./live-effects/glow.ts";
+import { kirakiraGlow } from "./live-effects/kirakira-glow.ts";
 import { dithering } from "./live-effects/dithering.ts";
+import { pixelSort } from "./live-effects/pixel-sort.ts";
+import { glitch } from "./live-effects/glitch.ts";
+import { logger } from "./logger.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allPlugins: AIPlugin<any, any>[] = [
   // randomNoiseEffect,
   // blurEffect,
-  glow,
+  glitch,
+  pixelSort,
+  kirakiraGlow,
   dithering,
   chromaticAberration,
   directionalBlur,
@@ -51,7 +56,7 @@ await Promise.all(
 export async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
 
-  console.log(
+  logger.log(
     "[deno_ai(js)] loadEffects",
     `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
   );
@@ -62,11 +67,11 @@ export async function loadEffects() {
     }),
   ];
 
-  console.log("[deno_ai(js)] loadEffects metas", metas);
+  logger.log("[deno_ai(js)] loadEffects metas", metas);
 
   await Promise.allSettled(
     metas.map((dir) => {
-      console.log("dir", dir);
+      logger.log("dir", dir);
       // const pkgDir = join(fromFileUrl(EFFECTS_DIR), dir.name);
     })
   );
@@ -77,6 +82,8 @@ export function getLiveEffects(): Array<{
   title: string;
   version: { major: number; minor: number };
 }> {
+  logger.log("[deno_ai(js)] allEffectPlugins", allEffectPlugins);
+
   return Object.values(allEffectPlugins).map((effect) => ({
     id: effect.id,
     title: effect.title,
@@ -128,7 +135,7 @@ export function getEffectViewNode(id: string, params: any): UINode {
     };
     return tree;
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     throw e;
   }
 }
@@ -147,6 +154,7 @@ export async function editLiveEffectFireCallback(
   event: {
     type: "click" | "change";
     nodeId: string;
+    value: any;
   }
 ): Promise<{ updated: false } | { updated: true; params: any }> {
   const effect = findEffect(effectId);
@@ -162,12 +170,17 @@ export async function editLiveEffectFireCallback(
   switch (event.type) {
     case "click": {
       if ("onClick" in node && typeof node.onClick === "function")
-        await node.onClick?.({ type: "click" });
+        await node.onClick({ type: "click" });
       break;
     }
-    // case "change":
-    //   node.onChange?.(event.key, event.value);
-    //   break;
+    case "change": {
+      if ("onChange" in node && typeof node.onChange === "function") {
+        await (node.onChange as ChangeEventHandler)({
+          type: "change",
+          value: event.value,
+        });
+      }
+    }
   }
 
   if (isEqual(current, nodeState.latestParams)) {
@@ -205,6 +218,27 @@ function attachNodeIds(node: UINode) {
   traverseNode(node, ".root");
 
   return nodeMap;
+}
+
+export function liveEffectAdjustColors(
+  id: string,
+  params: any,
+  adjustCallback: (color: RGBAColor) => RGBAColor
+) {
+  const effect = findEffect(id);
+  if (!effect) throw new Error(`Effect not found: ${id}`);
+
+  params = getParams(id, params);
+
+  const result = effect.liveEffect.liveEffectAdjustColors(
+    params,
+    adjustCallback
+  );
+
+  return {
+    hasChanged: !isEqual(result, params),
+    params: result,
+  };
 }
 
 export function liveEffectScaleParameters(
@@ -256,11 +290,11 @@ export const doLiveEffect = async (
 
   const init = effectInits.get(effect);
   if (!init) {
-    console.error("Effect not initialized", id);
+    logger.error("Effect not initialized", id);
     return null;
   }
 
-  console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
+  logger.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
     const result = await effect.liveEffect.doLiveEffect(
       init,
@@ -285,7 +319,7 @@ export const doLiveEffect = async (
 
     return result;
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     throw e;
   }
 };
@@ -314,7 +348,7 @@ const getDefaultValus = (effectId: string) => {
 
 function findEffect(id: string) {
   const effect = allEffectPlugins[id];
-  if (!effect) console.error(`Effect not found: ${id}`);
+  if (!effect) logger.error(`Effect not found: ${id}`);
   return effect;
 }
 

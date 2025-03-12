@@ -1,3 +1,7 @@
+use std::backtrace::Backtrace;
+
+use crate::dai_println;
+
 use super::error::Error;
 use deno_ast::{MediaType, SourceMapOption};
 use deno_error::JsErrorBox;
@@ -21,10 +25,12 @@ fn should_transpile(media_type: MediaType) -> bool {
 
 // SEE: https://github.com/denoland/deno/blob/56f67b58511d59c5da4b62aec1dced30a17b5de4/runtime/transpile.rs#L24
 pub fn transpile(filename: FastString, source: FastString) -> Result<ModuleContents, JsErrorBox> {
+    dai_println!("transpile: {}", filename);
+
     let specifier = deno_core::url::Url::parse(&filename).unwrap();
     let mut media_type = MediaType::from_specifier(&specifier);
 
-    if media_type == MediaType::Unknown && filename.as_str().contains(("/node:")) {
+    if media_type == MediaType::Unknown && filename.starts_with("node:") {
         media_type = MediaType::TypeScript;
     }
 

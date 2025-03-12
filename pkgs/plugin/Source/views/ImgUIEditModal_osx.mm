@@ -390,13 +390,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   [commandBuffer commit];
 
   // Update window size based on ImGui content
-    std::cout << "Frame: " << ImGui::GetFrameCount() << std::endl;
   if (!self->isFirstSized && ImGui::GetFrameCount() > 1) {
     self->isFirstSized = true;
-
-      std::cout <<
-          "windowSize: " << windowSize.x << "(kMy: " << kMyDialogWidth << "), " << windowSize.y << "(kMy: " << kMyDialogHeight << ")" << std::endl;
-      std::cout << "Resized" << std::endl;
 
     NSRect frame = NSMakeRect(0, 0, windowSize.x, windowSize.y);
     [self setFrame:frame];

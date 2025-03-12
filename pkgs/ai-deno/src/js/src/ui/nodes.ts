@@ -27,6 +27,10 @@ export const ui = {
     ...props,
     type: "numberInput",
   }),
+  colorInput: (props: Omit<UINodeColorInput, "type">): UINode => ({
+    ...props,
+    type: "colorInput",
+  }),
   text: (props: Omit<UINodeText, "type">): UINode => ({
     ...props,
     type: "text",
@@ -43,6 +47,21 @@ export const ui = {
   }),
 };
 
+type ChangeEvent<T = any> = {
+  type: "change";
+  value: T;
+};
+
+type ClickEvent = {
+  type: "click";
+};
+
+export type ChangeEventHandler<T = any> = (
+  event: ChangeEvent<T>
+) => void | Promise<void>;
+
+export type ClickEventHandler = (event: ClickEvent) => void | Promise<void>;
+
 export type UINodeGroup = {
   type: "group";
   direction: "col" | "row";
@@ -51,37 +70,56 @@ export type UINodeGroup = {
 
 export type UINodeSlider = {
   type: "slider";
-  key: string;
-  label: string;
+  key?: string;
   dataType: "int" | "float";
   min: number;
   max: number;
   value: number;
+  onChange?: ChangeEventHandler<number>;
 };
 
 export type UINodeCheckbox = {
   type: "checkbox";
-  key: string;
+  key?: string;
   label: string;
   value: boolean;
+  onChange?: ChangeEventHandler<boolean>;
 };
 
 export type UINodeTextInput = {
   type: "textInput";
-  key: string;
-  label: string;
+  key?: string;
   value: string;
+  onChange?: ChangeEventHandler<string>;
 };
 
 export type UINodeNumberInput = {
   type: "numberInput";
   dataType: "int" | "float";
-  key: string;
-  label: string;
+  key?: string;
   value: number;
   max?: number;
   min?: number;
   step?: number;
+  onChange?: ChangeEventHandler<number>;
+};
+
+export type UINodeColorInput = {
+  type: "colorInput";
+  key?: string;
+  // dataType: "rgb" | "rgba";
+  value: {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  };
+  onChange?: ChangeEventHandler<{
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }>;
 };
 
 export type UINodeText = {
@@ -92,16 +130,16 @@ export type UINodeText = {
 export type UINodeButton = {
   type: "button";
   text: string;
-  onClick?: (e: { type: "click" }) => void | Promise<void>;
+  onClick?: ClickEventHandler;
 };
 
 export type UISelect = {
   type: "select";
   key: string;
-  label: string;
   options: { value: string; label: string }[];
   value: string;
   selectedIndex: number;
+  onChange?: ChangeEventHandler<string>;
 };
 
 export type UISeparator = {
@@ -113,6 +151,8 @@ export type UINode =
   | UINodeSlider
   | UINodeCheckbox
   | UINodeTextInput
+  | UINodeNumberInput
+  | UINodeColorInput
   | UINodeText
   | UINodeButton
   | UISelect

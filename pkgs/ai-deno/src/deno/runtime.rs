@@ -24,20 +24,20 @@
 
 use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
 use crate::deno::error::Error;
+use crate::deno::ext::bootstrap::bootstrap_deno;
 use crate::deno::ext::worker::deno_worker_host;
 use crate::deno::module::{Module, ModuleHandle};
 use crate::deno::module_loader::npm_package_manager::NpmPackageManager;
 use crate::deno::transpiler::transpile;
 use crate::deno_println;
-use deno_core::error::JsError;
 use deno_error::JsErrorBox;
 use deno_runtime::{
     deno_broadcast_channel,
     deno_broadcast_channel::InMemoryBroadcastChannel,
     deno_cache, deno_canvas, deno_console, deno_core,
     deno_core::{
-        error::AnyError, futures::FutureExt, url::Url, v8, FastString, JsRuntime, ModuleSpecifier,
-        PollEventLoopOptions, RuntimeOptions,
+        error::AnyError, error::JsError, futures::FutureExt, url::Url, v8, FastString, JsRuntime,
+        ModuleSpecifier, PollEventLoopOptions, RuntimeOptions,
     },
     deno_cron,
     deno_cron::local::LocalCronHandler,
@@ -63,6 +63,7 @@ use deno_runtime::{
 use homedir::my_home;
 use node_resolver::errors::PackageNotFoundError;
 use node_resolver::{InNpmPackageChecker, NpmPackageFolderResolver, UrlOrPath};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -70,20 +71,24 @@ use std::task::Poll;
 use std::time::Duration;
 use sys_traits::impls::RealSys;
 
-use super::module_loader::AiDenoModuleLoader;
+use super::module_loader::{self, AiDenoModuleLoader, AiDenoModuleLoaderInit};
 
-pub struct RuntimeInitOptions {
+pub struct RuntimeInit {
     pub extensions: Vec<deno_runtime::deno_core::Extension>,
     pub package_root_dir: PathBuf,
     pub timeout: Duration,
+    /// A set of (extra) module schemas that are allowed to be imported by the runtime.
+    /// (Ex. "example:")
+    pub allowed_module_schemas: HashSet<String>,
 }
 
-impl Default for RuntimeInitOptions {
+impl Default for RuntimeInit {
     fn default() -> Self {
         Self {
             extensions: vec![],
             package_root_dir: my_home().unwrap().unwrap().join(".ai-deno"),
             timeout: Duration::MAX,
+            allowed_module_schemas: HashSet::new(),
         }
     }
 }
@@ -96,8 +101,12 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn new(option: &mut RuntimeInitOptions) -> Result<Self, Error> {
-        let runtime_options = runtime_options_factory(option);
+    pub fn new(option: RuntimeInit) -> Result<Self, Error> {
+        let runtime_options = runtime_options_factory(
+            option.package_root_dir.clone(),
+            option.allowed_module_schemas,
+            option.extensions,
+        );
         let bootstrap_options = BootstrapOptions {
             ..Default::default()
         };
@@ -377,7 +386,11 @@ impl AsyncBridgeExt for Runtime {
     }
 }
 
-fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
+fn runtime_options_factory(
+    package_root_dir: PathBuf,
+    allowed_module_schemas: HashSet<String>,
+    extra_extensions: Vec<deno_runtime::deno_core::Extension>,
+) -> RuntimeOptions {
     // let fs = RealSys::default();
     // let arcFs = Arc::new(fs.clone());
 
@@ -396,11 +409,18 @@ fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
     // let extra_extensions = options.extensions;
     // extensions.extend(extra_extensions);
 
-    let module_loader = AiDenoModuleLoader::new(options.package_root_dir.clone());
-    let extensions = get_all_extensions(&module_loader);
+    let module_loader = AiDenoModuleLoader::new(AiDenoModuleLoaderInit {
+        package_root_dir: package_root_dir.clone(),
+        allowed_module_schemas,
+    });
+    let mut extensions = get_all_extensions(&module_loader);
+    extensions.extend(extra_extensions);
+
+    let module_loader = Rc::new(module_loader);
+    let extension_transpiler = module_loader.extension_transpiler();
 
     let runtime_options = RuntimeOptions {
-        module_loader: Some(Rc::new(module_loader)),
+        module_loader: Some(module_loader),
         // module_loader: deno_module_loader::RustyLoader::new(LoaderOptions {
         //     cache_provider: (),
         //     fs_whitelist: (),
@@ -411,9 +431,7 @@ fn runtime_options_factory(options: &mut RuntimeInitOptions) -> RuntimeOptions {
         //     cwd: (),
         // }),
         extensions,
-        extension_transpiler: Some(Rc::new(|specifier, source| {
-            deno_runtime::transpile::maybe_transpile_source(specifier, source)
-        })),
+        extension_transpiler: Some(extension_transpiler),
         is_main: true,
         ..Default::default()
     };
@@ -459,6 +477,7 @@ fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno
 
     // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L391
     vec![
+        bootstrap_deno::init_ops_and_esm(BootstrapOptions::default()),
         deno_telemetry::deno_telemetry::init_ops_and_esm(),
         // Web APIs
         deno_webidl::deno_webidl::init_ops_and_esm(),
@@ -572,11 +591,11 @@ fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno
 }
 
 fn bootstrap_runtime(js_runtime: &mut JsRuntime, options: &BootstrapOptions) -> Result<(), Error> {
-    {
-        let op_state = js_runtime.op_state();
-        let mut state = op_state.borrow_mut();
-        state.put(options.clone());
-    }
+    // {
+    //     let op_state = js_runtime.op_state();
+    //     let mut state = op_state.borrow_mut();
+    //     state.put(options.clone());
+    // }
 
     // SEE: https://github.com/denoland/deno/blob/795ecfdca60d22183babdf887f7f66500c3983b3/runtime/worker.rs#L618
     let (
@@ -660,43 +679,6 @@ fn bootstrap_runtime(js_runtime: &mut JsRuntime, options: &BootstrapOptions) -> 
     }
 
     Ok(())
-}
-
-struct InNpmPackageCheckerStub {}
-
-impl InNpmPackageChecker for InNpmPackageCheckerStub {
-    fn in_npm_package(&self, specifier: &Url) -> bool {
-        false
-    }
-
-    fn in_npm_package_at_dir_path(&self, path: &std::path::Path) -> bool {
-        false
-    }
-
-    fn in_npm_package_at_file_path(&self, path: &std::path::Path) -> bool {
-        false
-    }
-}
-
-struct NpmPackageFolderResolverStub {}
-impl NpmPackageFolderResolver for NpmPackageFolderResolverStub {
-    fn resolve_package_folder_from_package(
-        &self,
-        specifier: &str,
-        referrer: &node_resolver::UrlOrPathRef,
-    ) -> Result<PathBuf, node_resolver::errors::PackageFolderResolveError> {
-        Err(node_resolver::errors::PackageFolderResolveError {
-            0: Box::new(
-                node_resolver::errors::PackageFolderResolveErrorKind::PackageNotFound(
-                    PackageNotFoundError {
-                        package_name: specifier.to_string(),
-                        referrer: UrlOrPath::from(referrer.display()),
-                        referrer_extra: None,
-                    },
-                ),
-            ),
-        })
-    }
 }
 
 pub trait RuntimeTrait {

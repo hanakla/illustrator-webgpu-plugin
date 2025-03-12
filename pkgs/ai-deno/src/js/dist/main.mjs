@@ -36,6 +36,10 @@ var ui = {
     ...props,
     type: "numberInput"
   }),
+  colorInput: (props) => ({
+    ...props,
+    type: "colorInput"
+  }),
   text: (props) => ({
     ...props,
     type: "text"
@@ -53,7 +57,7 @@ var ui = {
 };
 
 // src/js/src/ui/locale.ts
-var texts = (t3) => t3;
+var texts = (t4) => t4;
 function useTranslator(texts2) {
   const locale = getLocale(Object.keys(texts2), "en");
   return (key, params = {}) => {
@@ -123,6 +127,9 @@ async function addWebGPUAlignmentPadding(imageDataLike) {
     width,
     height
   );
+  if (newWidth === width && newHeight === height) {
+    return imageDataLike;
+  }
   const canvas = await createCanvasImpl(newWidth, newHeight);
   const ctx = canvas.getContext("2d");
   const imgData = await createImageDataImpl(imageDataLike.data, width, height);
@@ -164,8 +171,8 @@ async function toPng(imgData) {
   ctx.putImageData(img, 0, 0);
   return toBlob(canvas, "image/png", 100);
 }
-function lerp(a, b, t3) {
-  return a + (b - a) * t3;
+function lerp(a, b, t4) {
+  return a + (b - a) * t4;
 }
 
 // src/js/src/live-effects/chromatic-aberration.ts
@@ -567,6 +574,10 @@ var testBlueFill = definePlugin({
         type: "bool",
         default: false
       },
+      color: {
+        type: "color",
+        default: { r: 0, g: 0, b: 1, a: 1 }
+      },
       fillOtherChannels: {
         type: "bool",
         default: false
@@ -590,7 +601,7 @@ var testBlueFill = definePlugin({
     },
     editLiveEffectParameters: (params) => params,
     liveEffectScaleParameters: (params, scaleFactor) => params,
-    liveEffectInterpolate: (paramsA, paramsB, t3) => paramsA,
+    liveEffectInterpolate: (paramsA, paramsB, t4) => paramsA,
     doLiveEffect: async (init, params, input) => {
       let width = input.width;
       let height = input.height;
@@ -684,6 +695,11 @@ var testBlueFill = definePlugin({
           label: "Fill other channels",
           key: "fillOtherChannels",
           value: params.fillOtherChannels
+        }),
+        ui.text({ text: "Color" }),
+        ui.colorInput({
+          key: "color",
+          value: params.color
         }),
         ui.text({ text: "Padding" }),
         ui.slider({
@@ -1143,10 +1159,10 @@ var directionalBlur = definePlugin({
   }
 });
 
-// src/js/src/live-effects/glow.ts
-var glow = definePlugin({
-  id: "glow-effect-v1",
-  title: "Glow Effect V1",
+// src/js/src/live-effects/kirakira-glow.ts
+var kirakiraGlow = definePlugin({
+  id: "kirakira-glow-effect-v1",
+  title: "KiraKira Glow V1",
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -1173,10 +1189,10 @@ var glow = definePlugin({
         transparentOriginal: params.transparentOriginal
       };
     },
-    liveEffectInterpolate: (paramsA, paramsB, t3) => {
+    liveEffectInterpolate: (paramsA, paramsB, t4) => {
       return {
-        strength: lerp(paramsA.strength, paramsB.strength, t3),
-        transparentOriginal: t3 < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal
+        strength: lerp(paramsA.strength, paramsB.strength, t4),
+        transparentOriginal: t4 < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal
       };
     },
     renderUI: (params) => {
@@ -1468,12 +1484,12 @@ var dithering = definePlugin({
         colorMode: params.colorMode
       };
     },
-    liveEffectInterpolate: (paramsA, paramsB, t3) => {
+    liveEffectInterpolate: (paramsA, paramsB, t4) => {
       return {
-        threshold: lerp(paramsA.threshold, paramsB.threshold, t3),
-        strength: lerp(paramsA.strength, paramsB.strength, t3),
-        patternType: t3 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        colorMode: t3 < 0.5 ? paramsA.colorMode : paramsB.colorMode
+        threshold: lerp(paramsA.threshold, paramsB.threshold, t4),
+        strength: lerp(paramsA.strength, paramsB.strength, t4),
+        patternType: t4 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        colorMode: t4 < 0.5 ? paramsA.colorMode : paramsB.colorMode
       };
     },
     renderUI: (params) => {
@@ -1725,12 +1741,903 @@ var dithering = definePlugin({
   }
 });
 
+// src/js/src/live-effects/pixel-sort.ts
+var t3 = useTranslator({
+  en: {
+    title: "Pixel Sort V1",
+    algorithm: "Algorithm",
+    methodBitonic: "Bitonic Sort",
+    sortAmount: "Sort Amount",
+    direction: "Direction",
+    horizontal: "Horizontal",
+    vertical: "Vertical",
+    startPoint: "Start Point",
+    thresholdMin: "Threshold Min",
+    thresholdMax: "Threshold Max",
+    sliceLeft: "Slice Left",
+    sliceRight: "Slice Right",
+    sliceTop: "Slice Top",
+    sliceBottom: "Slice Bottom"
+  },
+  ja: {
+    title: "\u30D4\u30AF\u30BB\u30EB\u30BD\u30FC\u30C8 V1",
+    algorithm: "\u30A2\u30EB\u30B4\u30EA\u30BA\u30E0",
+    methodBitonic: "\u30D0\u30A4\u30C8\u30CB\u30C3\u30AF\u30BD\u30FC\u30C8",
+    sortAmount: "\u30BD\u30FC\u30C8\u91CF",
+    direction: "\u65B9\u5411",
+    horizontal: "\u6A2A",
+    vertical: "\u7E26",
+    startPoint: "\u59CB\u70B9",
+    thresholdMin: "\u8F1D\u5EA6\u306E\u3057\u304D\u3044\u5024(\u6700\u5C0F)",
+    thresholdMax: "\u8F1D\u5EA6\u306E\u3057\u304D\u3044\u5024(\u6700\u5927)",
+    sliceLeft: "\u5DE6\u30B9\u30E9\u30A4\u30B9",
+    sliceRight: "\u53F3\u30B9\u30E9\u30A4\u30B9",
+    sliceTop: "\u4E0A\u30B9\u30E9\u30A4\u30B9",
+    sliceBottom: "\u4E0B\u30B9\u30E9\u30A4\u30B9"
+  }
+});
+var pixelSort = definePlugin({
+  id: "pixel-sort-v1",
+  title: t3("title"),
+  version: { major: 1, minor: 0 },
+  liveEffect: {
+    styleFilterFlags: {
+      main: 2 /* kPostEffectFilter */,
+      features: []
+    },
+    paramSchema: {
+      sortAmount: {
+        type: "real",
+        default: 50
+      },
+      direction: {
+        type: "string",
+        enum: ["horizontal", "vertical"],
+        default: "horizontal"
+      },
+      startPoint: {
+        type: "real",
+        default: 0
+      },
+      thresholdMin: {
+        type: "real",
+        default: 0
+      },
+      thresholdMax: {
+        type: "real",
+        default: 100
+      },
+      algorithm: {
+        type: "string",
+        enum: ["bitonic"],
+        default: "bitonic"
+      },
+      sliceLeft: {
+        type: "real",
+        default: 0
+      },
+      sliceRight: {
+        type: "real",
+        default: 100
+      },
+      sliceTop: {
+        type: "real",
+        default: 0
+      },
+      sliceBottom: {
+        type: "real",
+        default: 100
+      }
+    },
+    editLiveEffectParameters: (params) => {
+      return {
+        sortAmount: Math.max(0, Math.min(100, params.sortAmount)),
+        direction: params.direction,
+        startPoint: Math.max(0, Math.min(100, params.startPoint)),
+        thresholdMin: Math.max(0, Math.min(100, params.thresholdMin)),
+        thresholdMax: Math.max(0, Math.min(100, params.thresholdMax)),
+        algorithm: params.algorithm,
+        sliceLeft: Math.max(0, Math.min(100, params.sliceLeft)),
+        sliceRight: Math.max(0, Math.min(100, params.sliceRight)),
+        sliceTop: Math.max(0, Math.min(100, params.sliceTop)),
+        sliceBottom: Math.max(0, Math.min(100, params.sliceBottom))
+      };
+    },
+    liveEffectScaleParameters(params, scaleFactor) {
+      return params;
+    },
+    liveEffectInterpolate: (paramsA, paramsB, t4) => {
+      return {
+        sortAmount: lerp(paramsA.sortAmount, paramsB.sortAmount, t4),
+        direction: t4 < 0.5 ? paramsA.direction : paramsB.direction,
+        startPoint: lerp(paramsA.startPoint, paramsB.startPoint, t4),
+        thresholdMin: lerp(paramsA.thresholdMin, paramsB.thresholdMin, t4),
+        thresholdMax: lerp(paramsA.thresholdMax, paramsB.thresholdMax, t4),
+        algorithm: "bitonic",
+        sliceLeft: lerp(paramsA.sliceLeft, paramsB.sliceLeft, t4),
+        sliceRight: lerp(paramsA.sliceRight, paramsB.sliceRight, t4),
+        sliceTop: lerp(paramsA.sliceTop, paramsB.sliceTop, t4),
+        sliceBottom: lerp(paramsA.sliceBottom, paramsB.sliceBottom, t4)
+      };
+    },
+    renderUI: (params) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("algorithm") }),
+          ui.select({
+            key: "algorithm",
+            label: t3("algorithm"),
+            value: params.algorithm,
+            options: [{ value: "bitonic", label: t3("methodBitonic") }]
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("sortAmount") }),
+          ui.slider({
+            key: "sortAmount",
+            label: t3("sortAmount"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.sortAmount
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("direction") }),
+          ui.select({
+            key: "direction",
+            label: t3("direction"),
+            value: params.direction,
+            options: [
+              { value: "horizontal", label: t3("horizontal") },
+              { value: "vertical", label: t3("vertical") }
+            ]
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("startPoint") }),
+          ui.slider({
+            key: "startPoint",
+            label: t3("startPoint"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.startPoint
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("thresholdMin") }),
+          ui.slider({
+            key: "thresholdMin",
+            label: t3("thresholdMin"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.thresholdMin
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("thresholdMax") }),
+          ui.slider({
+            key: "thresholdMax",
+            label: t3("thresholdMax"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.thresholdMax
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("sliceLeft") }),
+          ui.slider({
+            key: "sliceLeft",
+            label: t3("sliceLeft"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.sliceLeft
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("sliceRight") }),
+          ui.slider({
+            key: "sliceRight",
+            label: t3("sliceRight"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.sliceRight
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("sliceTop") }),
+          ui.slider({
+            key: "sliceTop",
+            label: t3("sliceTop"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.sliceTop
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("sliceBottom") }),
+          ui.slider({
+            key: "sliceBottom",
+            label: t3("sliceBottom"),
+            dataType: "float",
+            min: 0,
+            max: 100,
+            value: params.sliceBottom
+          })
+        ])
+      ]);
+    },
+    initLiveEffect: async () => {
+      const device = await navigator.gpu.requestAdapter().then(
+        (adapter) => adapter.requestDevice({
+          label: "WebGPU(Pixel Sort)"
+        })
+      );
+      if (!device) {
+        throw new Error("Failed to create WebGPU device");
+      }
+      const shader = device.createShaderModule({
+        label: "Pixel Sort Shader",
+        code: `
+          struct Params {
+            sortAmount: f32,
+            direction: u32,
+            startPoint: f32,
+            thresholdMin: f32,
+            thresholdMax: f32,
+            algorithm: u32,
+            sliceLeft: f32,
+            sliceRight: f32,
+            sliceTop: f32,
+            sliceBottom: f32,
+            padding: u32,
+          }
+
+          @group(0) @binding(0) var inputTexture: texture_storage_2d<rgba8unorm, read>;
+          @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+          @group(0) @binding(3) var<uniform> params: Params;
+
+          // \u5171\u6709\u30E1\u30E2\u30EA - \u30EF\u30FC\u30AF\u30B0\u30EB\u30FC\u30D7\u5185\u3067\u30D4\u30AF\u30BB\u30EB\u30C7\u30FC\u30BF\u3092\u5171\u6709
+          var<workgroup> groupCache: array<vec4f, 2048>;
+
+          // \u8F1D\u5EA6\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3092\u8003\u616E\u3057\u306A\u3044\uFF09
+          fn getLuminance(color: vec4f) -> f32 {
+            return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+          }
+
+          // \u8F1D\u5EA6\u306E\u95BE\u5024\u5224\u5B9A
+          fn isInThresholdRange(color: vec4f, minThreshold: f32, maxThreshold: f32) -> bool {
+            let lum = getLuminance(color);
+            return lum >= minThreshold && lum <= maxThreshold;
+          }
+
+          // 2\u3064\u306E\u30D4\u30AF\u30BB\u30EB\u3092\u6BD4\u8F03\u3057\u3066\u5165\u308C\u66FF\u3048
+          fn compareAndSwap(a: u32, b: u32, ascending: bool) {
+            let col_a = groupCache[a];
+            let col_b = groupCache[b];
+
+            let lum_a = getLuminance(col_a);
+            let lum_b = getLuminance(col_b);
+
+            let shouldSwap = (lum_a > lum_b) == ascending;
+
+            if (shouldSwap) {
+              groupCache[a] = col_b;
+              groupCache[b] = col_a;
+            }
+          }
+
+          @compute @workgroup_size(256, 1, 1)
+          fn computeMain(@builtin(global_invocation_id) globalId: vec3u,
+                          @builtin(local_invocation_id) localId: vec3u,
+                          @builtin(workgroup_id) workgroupId: vec3u) {
+            let dims = textureDimensions(inputTexture);
+
+            // \u65B9\u5411\u306B\u5FDC\u3058\u305F\u51E6\u7406\u5BFE\u8C61\u306E\u9577\u3055\u3068\u30A4\u30F3\u30C7\u30C3\u30AF\u30B9\u8A08\u7B97
+            let lineLength = select(dims.y, dims.x, params.direction == 0u);
+            let lineId = select(workgroupId.y, workgroupId.x, params.direction == 0u);
+
+            // \u51E6\u7406\u306E\u7BC4\u56F2\u8A2D\u5B9A
+            let startPoint = f32(params.startPoint / 100.0 * f32(lineLength));
+            let thresholdMin = params.thresholdMin / 100.0;
+            let thresholdMax = params.thresholdMax / 100.0;
+            let sliceLeft = params.sliceLeft / 100.0;
+            let sliceRight = params.sliceRight / 100.0;
+            let sliceTop = params.sliceTop / 100.0;
+            let sliceBottom = params.sliceBottom / 100.0;
+
+            // \u30BD\u30FC\u30C8\u3059\u308B\u7BC4\u56F2\u3092\u5236\u9650\u3059\u308B
+            let sortSize = i32(params.sortAmount / 100.0 * f32(lineLength - startPoint));
+            if (sortSize <= 1) {
+              return; // \u30BD\u30FC\u30C8\u30B5\u30A4\u30BA\u304C\u5C0F\u3055\u3059\u304E\u308B\u5834\u5408\u306F\u51E6\u7406\u3057\u306A\u3044
+            }
+
+            // \u6700\u5927\u30BD\u30FC\u30C8\u8981\u7D20\u6570 (2\u306E\u3079\u304D\u4E57\u306B\u5207\u308A\u4E0A\u3052)
+            var maxSortSize = 1;
+            while (maxSortSize < sortSize) {
+              maxSortSize *= 2;
+            }
+
+            // \u5404\u30B9\u30EC\u30C3\u30C9\u304C\u30ED\u30FC\u30C9\u3059\u308B\u30D4\u30AF\u30BB\u30EB\u30A4\u30F3\u30C7\u30C3\u30AF\u30B9
+            for (var i = i32(localId.x); i < maxSortSize; i += 256) {
+              // \u30B9\u30E9\u30A4\u30B9\u7BC4\u56F2\u3084\u958B\u59CB\u30DD\u30A4\u30F3\u30C8\u306E\u5224\u5B9A\u3092\u8003\u616E
+              let pixelIdx = startPoint + i;
+              if (pixelIdx >= lineLength) {
+                // \u7BC4\u56F2\u5916\u306F\u51E6\u7406\u3057\u306A\u3044\u3001\u30C7\u30D5\u30A9\u30EB\u30C8\u5024\u3067\u57CB\u3081\u308B
+                groupCache[i] = vec4f(0.0, 0.0, 0.0, 0.0);
+                continue;
+              }
+
+              // \u30C6\u30AF\u30B9\u30C1\u30E3\u5EA7\u6A19\u306E\u8A08\u7B97
+              var pos: vec2i;
+              if (params.direction == 0u) { // \u6C34\u5E73\u65B9\u5411
+                pos = vec2i(pixelIdx, lineId);
+              } else { // \u5782\u76F4\u65B9\u5411
+                pos = vec2i(lineId, pixelIdx);
+              }
+
+              // \u30B9\u30E9\u30A4\u30B9\u7BC4\u56F2\u30C1\u30A7\u30C3\u30AF
+              let texCoord = vec2f(pos) / vec2f(dims);
+              if (texCoord.x < sliceLeft || texCoord.x > sliceRight ||
+                  texCoord.y < sliceTop || texCoord.y > sliceBottom) {
+                // \u7BC4\u56F2\u5916\u306F\u51E6\u7406\u3057\u306A\u3044\u3001\u30C7\u30D5\u30A9\u30EB\u30C8\u5024\u3067\u57CB\u3081\u308B
+                groupCache[i] = vec4f(0.0, 0.0, 0.0, 0.0);
+                continue;
+              }
+
+              // \u30D4\u30AF\u30BB\u30EB\u3092\u8AAD\u307F\u53D6\u308A
+              let color = textureLoad(inputTexture, pos);
+
+              // \u95BE\u5024\u5224\u5B9A
+              if (isInThresholdRange(color, thresholdMin, thresholdMax)) {
+                groupCache[i] = color;
+              } else {
+                // \u8F1D\u5EA6\u304C\u7BC4\u56F2\u5916\u306E\u30D4\u30AF\u30BB\u30EB\u306F\u51E6\u7406\u3057\u306A\u3044\u305F\u3081\u306B\u30DE\u30FC\u30AF
+                groupCache[i] = vec4f(color.rgb, 0.0); // \u30A2\u30EB\u30D5\u30A1\u30920\u306B\u3059\u308B
+              }
+            }
+
+            // \u30D0\u30EA\u30A2\u3067\u540C\u671F - \u5168\u30B9\u30EC\u30C3\u30C9\u304C\u30C7\u30FC\u30BF\u3092\u30ED\u30FC\u30C9\u3057\u7D42\u308F\u308B\u307E\u3067\u5F85\u6A5F
+            workgroupBarrier();
+
+            // \u30D0\u30A4\u30C8\u30CB\u30C3\u30AF\u30BD\u30FC\u30C8\u306E\u5B9F\u88C5
+            let maxLevel = 31 - firstLeadingBit(u32(maxSortSize));
+
+            // \u5404\u30D5\u30A7\u30FC\u30BA\u3067\u306E\u30BD\u30FC\u30C8
+            for (var phase = 0; phase < maxLevel; phase++) {
+              // \u6BD4\u8F03\u30B5\u30A4\u30BA\u306E\u8A08\u7B97
+              for (var compSize = 1 << phase; compSize > 0; compSize >>= 1) {
+                // \u30D0\u30EA\u30A2\u3067\u540C\u671F
+                workgroupBarrier();
+
+                // \u5404\u30B9\u30EC\u30C3\u30C9\u304C\u51E6\u7406\u3059\u308B\u30D4\u30AF\u30BB\u30EB\u30DA\u30A2\u306E\u30A4\u30F3\u30C7\u30C3\u30AF\u30B9\u8A08\u7B97
+                for (var idx = i32(localId.x); idx < maxSortSize / 2; idx += 256) {
+                  // \u5BFE\u5FDC\u3059\u308B\u30DA\u30A2\u3092\u53D6\u5F97
+                  let a = idx * 2;
+                  let halfBlock = compSize;
+                  let blockStart = (a / (halfBlock * 2)) * (halfBlock * 2);
+                  let blockOffset = a % (halfBlock * 2);
+
+                  let b = blockStart + select(blockOffset < halfBlock
+                              , blockOffset + halfBlock
+                              , blockOffset - halfBlock);
+
+                  // \u6607\u9806/\u964D\u9806\u3092\u6C7A\u5B9A
+                  let blockId = a / (compSize * 2);
+                  let ascending = (blockId % 2) == 0;
+
+                  // \u30DA\u30A2\u306E\u6BD4\u8F03\u3068\u30B9\u30EF\u30C3\u30D7
+                  compareAndSwap(u32(a), u32(b), ascending);
+                }
+              }
+            }
+
+            // \u30D0\u30EA\u30A2\u3067\u540C\u671F - \u30BD\u30FC\u30C8\u5B8C\u4E86\u307E\u3067\u5F85\u6A5F
+            workgroupBarrier();
+
+            // \u7D50\u679C\u3092\u66F8\u304D\u623B\u3059
+            for (var i = i32(localId.x); i < maxSortSize; i += 256) {
+              let pixelIdx = startPoint + i;
+              if (pixelIdx >= lineLength) {
+                continue; // \u7BC4\u56F2\u5916\u306F\u51E6\u7406\u3057\u306A\u3044
+              }
+
+              // \u30C6\u30AF\u30B9\u30C1\u30E3\u5EA7\u6A19\u306E\u8A08\u7B97
+              var pos: vec2i;
+              if (params.direction == 0u) { // \u6C34\u5E73\u65B9\u5411
+                pos = vec2i(pixelIdx, lineId);
+              } else { // \u5782\u76F4\u65B9\u5411
+                pos = vec2i(lineId, pixelIdx);
+              }
+
+              // \u5143\u306E\u30D4\u30AF\u30BB\u30EB\u3092\u8AAD\u307F\u53D6\u308A
+              let originalColor = textureLoad(inputTexture, pos);
+
+              // \u30B9\u30E9\u30A4\u30B9\u7BC4\u56F2\u30C1\u30A7\u30C3\u30AF
+              let texCoord = vec2f(pos) / vec2f(dims);
+              if (texCoord.x < sliceLeft || texCoord.x > sliceRight ||
+                  texCoord.y < sliceTop || texCoord.y > sliceBottom) {
+                textureStore(resultTexture, pos, originalColor);
+                continue;
+              }
+
+              // \u30BD\u30FC\u30C8\u5F8C\u306E\u30D4\u30AF\u30BB\u30EB
+              let sortedColor = groupCache[i];
+
+              // \u30A2\u30EB\u30D5\u30A1\u5024\u304C0\u306E\u30D4\u30AF\u30BB\u30EB\u306F\u51E6\u7406\u5BFE\u8C61\u5916\u3060\u3063\u305F\u30D4\u30AF\u30BB\u30EB
+              if (sortedColor.a > 0.0) {
+                textureStore(resultTexture, pos, sortedColor);
+              } else {
+                // \u51E6\u7406\u5BFE\u8C61\u5916\u306E\u30D4\u30AF\u30BB\u30EB\u306F\u5143\u306E\u5024\u3092\u4FDD\u6301
+                textureStore(resultTexture, pos, originalColor);
+              }
+            }
+          }
+        `
+      });
+      device.addEventListener("lost", (e) => {
+        console.error(e);
+      });
+      device.addEventListener("uncapturederror", (e) => {
+        console.error(e.error);
+      });
+      const pipeline = device.createComputePipeline({
+        label: "Pixel Sort Pipeline",
+        layout: "auto",
+        compute: {
+          module: shader,
+          entryPoint: "computeMain"
+        }
+      });
+      return { device, pipeline };
+    },
+    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+      const outputWidth = imgData.width, outputHeight = imgData.height;
+      imgData = await addWebGPUAlignmentPadding(imgData);
+      const inputWidth = imgData.width, inputHeight = imgData.height;
+      const texture = device.createTexture({
+        label: "Input Texture",
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
+      });
+      const resultTexture = device.createTexture({
+        label: "Result Texture",
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
+      });
+      const uniformBuffer = device.createBuffer({
+        label: "Params Buffer",
+        size: 48,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      const bindGroup = device.createBindGroup({
+        label: "Main Bind Group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: texture.createView()
+          },
+          {
+            binding: 1,
+            resource: resultTexture.createView()
+          },
+          {
+            binding: 3,
+            resource: { buffer: uniformBuffer }
+          }
+        ]
+      });
+      const stagingBuffer = device.createBuffer({
+        label: "Staging Buffer",
+        size: inputWidth * inputHeight * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      const uniformData = new ArrayBuffer(48);
+      const view = new DataView(uniformData);
+      view.setFloat32(0, params.sortAmount, true);
+      view.setUint32(4, params.direction === "horizontal" ? 0 : 1, true);
+      view.setFloat32(8, params.startPoint, true);
+      view.setFloat32(12, params.thresholdMin, true);
+      view.setFloat32(16, params.thresholdMax, true);
+      view.setUint32(20, params.algorithm === "bitonic" ? 1 : 0, true);
+      view.setFloat32(24, params.sliceLeft, true);
+      view.setFloat32(28, params.sliceRight, true);
+      view.setFloat32(32, params.sliceTop, true);
+      view.setFloat32(36, params.sliceBottom, true);
+      view.setUint32(40, 0, true);
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeTexture(
+        { texture },
+        imgData.data,
+        { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
+        [inputWidth, inputHeight]
+      );
+      const commandEncoder = device.createCommandEncoder({
+        label: "Main Command Encoder"
+      });
+      const computePass = commandEncoder.beginComputePass({
+        label: "Pixel Sort Compute Pass"
+      });
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      let dispatchX, dispatchY;
+      if (params.direction === "horizontal") {
+        dispatchY = inputHeight;
+        dispatchX = 1;
+      } else {
+        dispatchX = inputWidth;
+        dispatchY = 1;
+      }
+      computePass.dispatchWorkgroups(dispatchX, dispatchY);
+      computePass.end();
+      commandEncoder.copyTextureToBuffer(
+        { texture: resultTexture },
+        { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
+        [inputWidth, inputHeight]
+      );
+      device.queue.submit([commandEncoder.finish()]);
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const copyArrayBuffer = stagingBuffer.getMappedRange();
+      const resultData = new Uint8Array(copyArrayBuffer.slice(0));
+      stagingBuffer.unmap();
+      const resultImageData = new ImageData(
+        new Uint8ClampedArray(resultData),
+        inputWidth,
+        inputHeight
+      );
+      return await removeWebGPUAlignmentPadding(
+        resultImageData,
+        outputWidth,
+        outputHeight
+      );
+    }
+  }
+});
+
+// src/js/src/live-effects/glitch.ts
+var glitch = definePlugin({
+  id: "glitch-effect-v1",
+  title: "Glitch Effect V1",
+  version: { major: 1, minor: 0 },
+  liveEffect: {
+    styleFilterFlags: {
+      main: 2 /* kPostEffectFilter */,
+      features: []
+    },
+    paramSchema: {
+      intensity: {
+        type: "real",
+        default: 0.5
+      },
+      slices: {
+        type: "int",
+        default: 20
+      },
+      colorShift: {
+        type: "real",
+        default: 0.3
+      },
+      angle: {
+        type: "real",
+        default: 0
+      },
+      bias: {
+        type: "real",
+        default: 0
+      },
+      seed: {
+        type: "int",
+        default: Math.floor(Math.random() * 1e4)
+      }
+    },
+    editLiveEffectParameters: (params) => {
+      params.intensity = Math.max(0, Math.min(1, params.intensity));
+      params.colorShift = Math.max(0, Math.min(1, params.colorShift));
+      params.angle = Math.max(-1, Math.min(1, params.angle));
+      params.bias = Math.max(-1, Math.min(1, params.bias));
+      return params;
+    },
+    liveEffectScaleParameters(params, scaleFactor) {
+      return params;
+    },
+    liveEffectInterpolate: (paramsA, paramsB, t4) => {
+      return {
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t4),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t4),
+        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t4)),
+        angle: lerp(paramsA.angle, paramsB.angle, t4),
+        bias: lerp(paramsA.bias, paramsB.bias, t4),
+        seed: paramsA.seed
+        // シード値は補間しない
+      };
+    },
+    renderUI: (params) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Intensity" }),
+          ui.slider({
+            key: "intensity",
+            label: "Intensity",
+            dataType: "float",
+            min: 0,
+            max: 1,
+            value: params.intensity
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Slices" }),
+          ui.slider({
+            key: "slices",
+            label: "Slices",
+            dataType: "int",
+            min: 1,
+            max: 100,
+            value: params.slices
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Color Shift" }),
+          ui.slider({
+            key: "colorShift",
+            label: "Color Shift",
+            dataType: "float",
+            min: 0,
+            max: 1,
+            value: params.colorShift
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Angle" }),
+          ui.slider({
+            key: "angle",
+            label: "Angle",
+            dataType: "float",
+            min: -1,
+            max: 1,
+            value: params.angle
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Direction Bias" }),
+          ui.slider({
+            key: "bias",
+            label: "Direction Bias",
+            dataType: "float",
+            min: -1,
+            max: 1,
+            value: params.bias
+          })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: "Seed" }),
+          ui.slider({
+            key: "seed",
+            label: "Seed",
+            dataType: "int",
+            min: 0,
+            max: 1e4,
+            value: params.seed
+          })
+        ])
+      ]);
+    },
+    initLiveEffect: async () => {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        throw new Error("WebGPU adapter not available");
+      }
+      const device = await adapter.requestDevice();
+      const shader = device.createShaderModule({
+        code: `
+          struct Params {
+            intensity: f32,
+            colorShift: f32,
+            slices: f32,
+            angle: f32,
+            bias: f32,
+            seed: f32,
+          }
+
+          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+          @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+          @group(0) @binding(2) var textureSampler: sampler;
+          @group(0) @binding(3) var<uniform> params: Params;
+
+          @compute @workgroup_size(16, 16)
+          fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+            let dims = textureDimensions(inputTexture);
+            if (id.x >= dims.x || id.y >= dims.y) {
+              return;
+            }
+
+            let texCoord = vec2f(id.xy) / vec2f(dims);
+            var outColor: vec4f;
+
+            var shiftedCoord = texCoord;
+
+            if (params.intensity > 0.0) {
+              // \u89D2\u5EA6\u306B\u57FA\u3065\u3044\u3066\u659C\u3081\u306E\u30B9\u30E9\u30A4\u30B9\u3092\u8A08\u7B97
+              let angle = params.angle * 3.14159;
+              // x\u3068y\u306E\u5EA7\u6A19\u3092\u89D2\u5EA6\u306B\u57FA\u3065\u3044\u3066\u56DE\u8EE2\u3055\u305B\u305F\u5EA7\u6A19\u3067\u30B9\u30E9\u30A4\u30B9\u3092\u6C7A\u5B9A
+              let sliceCoord = texCoord.x * sin(angle) + texCoord.y * cos(angle);
+              let sliceIndex = floor(sliceCoord * params.slices);
+              // \u30B7\u30FC\u30C9\u5024\u3092\u4F7F\u7528\u3057\u3066\u30E9\u30F3\u30C0\u30E0\u5024\u3092\u8A08\u7B97
+              let seed = params.seed;
+              let random = fract(sin(sliceIndex * 43758.5453 + seed) * 43758.5453);
+
+              if (random < params.intensity) {
+                let shift = (random - 0.5 + params.bias * 0.5) * params.intensity * 0.2;
+
+                // \u30B7\u30D5\u30C8\u65B9\u5411\u3082\u89D2\u5EA6\u306B\u5782\u76F4\u306A\u65B9\u5411\u306B
+                let shiftAngle = angle + 3.14159 * 0.5; // \u5782\u76F4\u65B9\u5411\uFF0890\u5EA6\u56DE\u8EE2\uFF09
+                let xShift = shift * cos(shiftAngle);
+                let yShift = shift * sin(shiftAngle);
+
+                shiftedCoord.x = clamp(texCoord.x + xShift, 0.0, 1.0);
+                shiftedCoord.y = clamp(texCoord.y + yShift, 0.0, 1.0);
+              }
+            }
+
+            let rOffset = params.colorShift * 0.05;
+
+            let rCoord = clamp(vec2f(shiftedCoord.x + rOffset, shiftedCoord.y), vec2f(0.0), vec2f(1.0));
+            let gCoord = shiftedCoord;
+            let bCoord = clamp(vec2f(shiftedCoord.x - rOffset, shiftedCoord.y), vec2f(0.0), vec2f(1.0));
+
+            let rC = textureSampleLevel(inputTexture, textureSampler, rCoord, 0.0);
+            let gC = textureSampleLevel(inputTexture, textureSampler, gCoord, 0.0);
+            let bC = textureSampleLevel(inputTexture, textureSampler, bCoord, 0.0);
+
+            let a = (rC.a + gC.a + bC.a) / 3.0;
+
+            outColor = vec4f(rC.r, gC.g, bC.b, a);
+
+            textureStore(resultTexture, id.xy, outColor);
+          }
+        `
+      });
+      const pipeline = device.createComputePipeline({
+        compute: {
+          module: shader,
+          entryPoint: "computeMain"
+        },
+        layout: "auto"
+      });
+      return { device, pipeline };
+    },
+    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+      imgData = await paddingImageData(imgData, params.colorShift);
+      const outputWidth = imgData.width;
+      const outputHeight = imgData.height;
+      imgData = await addWebGPUAlignmentPadding(imgData);
+      const inputWidth = imgData.width;
+      const inputHeight = imgData.height;
+      const texture = device.createTexture({
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      });
+      const resultTexture = device.createTexture({
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
+      });
+      const sampler = device.createSampler({
+        magFilter: "linear",
+        minFilter: "linear",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge"
+      });
+      const uniformBuffer = device.createBuffer({
+        size: 32,
+        // 5つのf32値 + パディング = 32バイト (WebGPUでは16バイトアライメントが推奨)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      const uniformData = new Float32Array([
+        params.intensity,
+        params.colorShift,
+        Math.max(1, params.slices),
+        params.angle,
+        params.bias,
+        params.seed,
+        0,
+        // パディング
+        0
+        // パディング
+      ]);
+      const bindGroup = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: texture.createView() },
+          { binding: 1, resource: resultTexture.createView() },
+          { binding: 2, resource: sampler },
+          { binding: 3, resource: { buffer: uniformBuffer } }
+        ]
+      });
+      const stagingBuffer = device.createBuffer({
+        size: inputWidth * inputHeight * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeTexture(
+        { texture },
+        imgData.data,
+        { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
+        [inputWidth, inputHeight]
+      );
+      const commandEncoder = device.createCommandEncoder();
+      const computePass = commandEncoder.beginComputePass();
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      const workgroupsX = Math.ceil(inputWidth / 16);
+      const workgroupsY = Math.ceil(inputHeight / 16);
+      computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
+      computePass.end();
+      commandEncoder.copyTextureToBuffer(
+        { texture: resultTexture },
+        { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
+        [inputWidth, inputHeight]
+      );
+      const commandBuffer = commandEncoder.finish();
+      device.queue.submit([commandBuffer]);
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const copyArrayBuffer = stagingBuffer.getMappedRange();
+      const resultData = new Uint8Array(copyArrayBuffer.slice(0));
+      stagingBuffer.unmap();
+      const resultImageData = new ImageData(
+        new Uint8ClampedArray(resultData),
+        inputWidth,
+        inputHeight
+      );
+      const finalImage = await removeWebGPUAlignmentPadding(
+        resultImageData,
+        outputWidth,
+        outputHeight
+      );
+      return finalImage;
+    }
+  }
+});
+
+// src/js/src/logger.ts
+var enableLogger = _AI_DENO_.op_aideno_debug_enabled();
+console.log("[deno_ai(js)] enableLogger", enableLogger);
+var logger = {
+  log: (...args) => {
+    if (!enableLogger) return;
+    console.log("[deno_ai(js)]", ...args);
+  },
+  error: (...args) => {
+    if (!enableLogger) return;
+    console.error("[deno_ai(js)]", ...args);
+  },
+  time: (label) => {
+    if (!enableLogger) return;
+    console.time(label);
+  },
+  timeEnd: (label) => {
+    if (!enableLogger) return;
+    console.timeEnd(label);
+  }
+};
+
 // src/js/src/main.ts
 var EFFECTS_DIR = new URL(toFileUrl2(join2(homedir(), ".ai-deno/effects")));
 var allPlugins = [
   // randomNoiseEffect,
   // blurEffect,
-  glow,
+  glitch,
+  pixelSort,
+  kirakiraGlow,
   dithering,
   chromaticAberration,
   directionalBlur,
@@ -1755,7 +2662,7 @@ await Promise.all(
 );
 async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
-  console.log(
+  logger.log(
     "[deno_ai(js)] loadEffects",
     `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
   );
@@ -1765,14 +2672,15 @@ async function loadEffects() {
       includeDirs: false
     })
   ];
-  console.log("[deno_ai(js)] loadEffects metas", metas);
+  logger.log("[deno_ai(js)] loadEffects metas", metas);
   await Promise.allSettled(
     metas.map((dir) => {
-      console.log("dir", dir);
+      logger.log("dir", dir);
     })
   );
 }
 function getLiveEffects() {
+  logger.log("[deno_ai(js)] allEffectPlugins", allEffectPlugins);
   return Object.values(allEffectPlugins).map((effect) => ({
     id: effect.id,
     title: effect.title,
@@ -1808,7 +2716,7 @@ function getEffectViewNode(id, params) {
     };
     return tree;
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     throw e;
   }
 }
@@ -1820,7 +2728,6 @@ function editLiveEffectParameters(id, params) {
   return ((_b = (_a = effect.liveEffect).editLiveEffectParameters) == null ? void 0 : _b.call(_a, params)) ?? params;
 }
 async function editLiveEffectFireCallback(effectId, event) {
-  var _a;
   const effect = findEffect(effectId);
   const node = nodeState == null ? void 0 : nodeState.nodeMap.get(event.nodeId);
   if (!effect || !node || !nodeState || nodeState.effectId !== effectId) {
@@ -1832,8 +2739,16 @@ async function editLiveEffectFireCallback(effectId, event) {
   switch (event.type) {
     case "click": {
       if ("onClick" in node && typeof node.onClick === "function")
-        await ((_a = node.onClick) == null ? void 0 : _a.call(node, { type: "click" }));
+        await node.onClick({ type: "click" });
       break;
+    }
+    case "change": {
+      if ("onChange" in node && typeof node.onChange === "function") {
+        await node.onChange({
+          type: "change",
+          value: event.value
+        });
+      }
     }
   }
   if (isEqual(current, nodeState.latestParams)) {
@@ -1862,6 +2777,19 @@ function attachNodeIds(node) {
   traverseNode(node, ".root");
   return nodeMap;
 }
+function liveEffectAdjustColors(id, params, adjustCallback) {
+  const effect = findEffect(id);
+  if (!effect) throw new Error(`Effect not found: ${id}`);
+  params = getParams(id, params);
+  const result = effect.liveEffect.liveEffectAdjustColors(
+    params,
+    adjustCallback
+  );
+  return {
+    hasChanged: !isEqual(result, params),
+    params: result
+  };
+}
 function liveEffectScaleParameters(id, params, scaleFactor) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
@@ -1875,12 +2803,12 @@ function liveEffectScaleParameters(id, params, scaleFactor) {
     params: result ?? params
   };
 }
-function liveEffectInterpolate(id, params, params2, t3) {
+function liveEffectInterpolate(id, params, params2, t4) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
   params = getParams(id, params);
   params2 = getParams(id, params2);
-  return effect.liveEffect.liveEffectInterpolate(params, params2, t3);
+  return effect.liveEffect.liveEffectInterpolate(params, params2, t4);
 }
 var doLiveEffect = async (id, state, width, height, data) => {
   const effect = findEffect(id);
@@ -1888,10 +2816,10 @@ var doLiveEffect = async (id, state, width, height, data) => {
   const defaultValues = getDefaultValus(id);
   const init = effectInits.get(effect);
   if (!init) {
-    console.error("Effect not initialized", id);
+    logger.error("Effect not initialized", id);
     return null;
   }
-  console.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
+  logger.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
   try {
     const result = await effect.liveEffect.doLiveEffect(
       init,
@@ -1910,7 +2838,7 @@ var doLiveEffect = async (id, state, width, height, data) => {
     }
     return result;
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     throw e;
   }
 };
@@ -1935,7 +2863,7 @@ var getDefaultValus = (effectId) => {
 };
 function findEffect(id) {
   const effect = allEffectPlugins[id];
-  if (!effect) console.error(`Effect not found: ${id}`);
+  if (!effect) logger.error(`Effect not found: ${id}`);
   return effect;
 }
 async function retry(maxRetries, fn) {
@@ -1958,6 +2886,7 @@ export {
   editLiveEffectParameters,
   getEffectViewNode,
   getLiveEffects,
+  liveEffectAdjustColors,
   liveEffectInterpolate,
   liveEffectScaleParameters,
   loadEffects

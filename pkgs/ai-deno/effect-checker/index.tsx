@@ -3,19 +3,21 @@ import { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { blurEffect } from "~ext/live-effects/blurEffect.ts";
 import { pixelSort } from "~ext/live-effects/pixel-sort.ts";
-import { glow } from "~ext/live-effects/glow.ts";
+import { kirakiraGlow } from "~ext/live-effects/kirakira-glow.ts";
 import { glitch } from "~ext/live-effects/glitch.ts";
 import { dithering } from "~ext/live-effects/dithering.ts";
 import { chromaticAberration } from "~ext/live-effects/chromatic-aberration.ts";
 import { directionalBlur } from "~ext/live-effects/directional-blur.ts";
 import { testBlueFill } from "~ext/live-effects/test-blue-fill.ts";
+import { innerGlow } from "~ext/live-effects/inner-glow.ts";
 
 const plugins = [
   // blurEffect,
+  innerGlow,
   pixelSort,
   glitch,
   testBlueFill,
-  glow,
+  kirakiraGlow,
   dithering,
   chromaticAberration,
   directionalBlur,
@@ -181,7 +183,7 @@ function Controls({
         return (
           <input
             type="text"
-            value={params[node.key]}
+            value={node.value}
             onChange={(e) => onParamChanged(node.key, e.currentTarget.value)}
           />
         );
@@ -203,6 +205,44 @@ function Controls({
             }}
           />
         );
+      case "colorInput": {
+        const iC = params[node.key];
+        const r = ((iC.r * 255) | 0).toString(16).padStart(2, "0");
+        const g = ((iC.g * 255) | 0).toString(16).padStart(2, "0");
+        const b = ((iC.b * 255) | 0).toString(16).padStart(2, "0");
+        const a = ((iC.a * 255) | 0).toString(16).padStart(2, "0");
+
+        return (
+          <>
+            <input
+              type="color"
+              value={`#${r}${g}${b}`}
+              onChange={(e) => {
+                const target = e.currentTarget as HTMLInputElement;
+                const value = target.value;
+                const r = parseInt(value.slice(1, 3), 16) / 255;
+                const g = parseInt(value.slice(3, 5), 16) / 255;
+                const b = parseInt(value.slice(5, 7), 16) / 255;
+
+                onParamChanged(node.key, { r, g, b, a: iC.a });
+              }}
+            />
+            <br />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={iC.a}
+              onChange={(e) => {
+                const target = e.currentTarget as HTMLInputElement;
+                const value = parseFloat(target.value);
+                onParamChanged(node.key, { ...iC, a: value });
+              }}
+            />
+          </>
+        );
+      }
       case "checkbox":
         return (
           <label style={{ display: "flex", alignItems: "center" }}>

@@ -6,7 +6,7 @@ build:
 
 [macos]
 watch:
-    cargo clean -p ai-deno
+    cargo clean -p ai-deno -p deno_core
     just watch-js & cargo watch --clear  -x "build --release"
 
 [macos]

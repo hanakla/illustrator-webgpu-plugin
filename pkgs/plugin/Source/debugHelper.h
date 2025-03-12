@@ -208,12 +208,12 @@ void print_AIDocumentSetup(AIDocumentSetup& setup) {
   csl(oss.str().c_str());
 }
 
-void print_AIRasterRecord(AIRasterRecord& record) {
+void print_AIRasterRecord(AIRasterRecord& record, std::string label = "") {
   if (!AI_DENO_DEBUG) return;
 
   std::ostringstream oss;
 
-  oss << "AIRasterRecord: " << std::endl;
+  oss << "AIRasterRecord (" << label << "): " << std::endl;
   oss << "  colorSpace: " << record.colorSpace << std::endl;
   oss << "  bitsPerPixel: " << record.bitsPerPixel << std::endl;
   oss << "  flags: " << record.flags << std::endl;

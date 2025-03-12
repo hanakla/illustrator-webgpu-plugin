@@ -110,6 +110,10 @@ export async function addWebGPUAlignmentPadding(
     height
   );
 
+  if (newWidth === width && newHeight === height) {
+    return imageDataLike;
+  }
+
   const canvas = await createCanvasImpl(newWidth, newHeight);
   const ctx = canvas.getContext("2d")!;
   const imgData = await createImageDataImpl(imageDataLike.data, width, height);

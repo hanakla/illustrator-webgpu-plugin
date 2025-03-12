@@ -28,6 +28,7 @@
 		A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E02D5F5A7D00BC41CA /* Metal.framework */; };
 		A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */; };
 		A591675F2D660DEE00B4709A /* spectrum-tokens.hpp in Headers */ = {isa = PBXBuildFile; fileRef = A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */; };
+		A59DB5502D81D8A900C7BD59 /* libai_deno.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A59DB54F2D81D8A900C7BD59 /* libai_deno.a */; };
 		A5A0661E2D633B13006BE835 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5A0661D2D633B13006BE835 /* MetalKit.framework */; };
 		A5A068A92D637068006BE835 /* imgui_impl_metal.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5A0678C2D63700D006BE835 /* imgui_impl_metal.mm */; };
 		A5A068AA2D637068006BE835 /* imgui_impl_osx.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5A067932D63700D006BE835 /* imgui_impl_osx.mm */; };
@@ -84,7 +85,7 @@
 		6868C924150BA192003DAAF2 /* AiDenoSuites.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AiDenoSuites.h; path = Source/AiDenoSuites.h; sourceTree = "<group>"; };
 		6868C940150BA219003DAAF2 /* HelloWorld.r */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.rez; name = HelloWorld.r; path = Resources/Mac/HelloWorld.r; sourceTree = "<group>"; };
 		68B2247115063ED00035B025 /* SDKAboutPluginsHelper.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SDKAboutPluginsHelper.cpp; path = ../../sdk/samplecode/common/source/SDKAboutPluginsHelper.cpp; sourceTree = SOURCE_ROOT; };
-		6EE2BA530A40BB2600CC7CE2 /* Illustrator Deno.aip */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Illustrator Deno.aip"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6EE2BA530A40BB2600CC7CE2 /* IllustratorDeno.aip */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IllustratorDeno.aip; sourceTree = BUILT_PRODUCTS_DIR; };
 		9E9C47151423A25E004EA572 /* FlashUIController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = FlashUIController.cpp; path = ../../sdk/samplecode/common/source/FlashUIController.cpp; sourceTree = SOURCE_ROOT; };
 		9E9C47161423A25E004EA572 /* SDKPlugPlug.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SDKPlugPlug.cpp; path = ../../sdk/samplecode/common/source/SDKPlugPlug.cpp; sourceTree = SOURCE_ROOT; };
 		9E9C47591423AD0C004EA572 /* IAIFilePath.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = IAIFilePath.cpp; path = ../../sdk/illustratorapi/illustrator/IAIFilePath.cpp; sourceTree = SOURCE_ROOT; };
@@ -96,6 +97,7 @@
 		A51B65E02D5F5A7D00BC41CA /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = "spectrum-tokens.hpp"; path = "Source/spectrum-tokens.hpp"; sourceTree = "<group>"; };
+		A59DB54F2D81D8A900C7BD59 /* libai_deno.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libai_deno.a; path = "../ai-deno/target/release/libai_deno.a"; sourceTree = "<group>"; };
 		A5A0661D2D633B13006BE835 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		A5A067652D63700D006BE835 /* Format.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Format.h; sourceTree = "<group>"; };
 		A5A067672D63700D006BE835 /* config.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = config.yml; sourceTree = "<group>"; };
@@ -373,6 +375,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A59DB5502D81D8A900C7BD59 /* libai_deno.a in Frameworks */,
 				A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */,
 				A51B63312D5A9A2B00BC41CA /* libai_deno.dylib in Frameworks */,
 				A5F9AB122D637800007EE38C /* GameController.framework in Frameworks */,
@@ -440,7 +443,7 @@
 		508817D509F0C9AD0071BF1A /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				6EE2BA530A40BB2600CC7CE2 /* Illustrator Deno.aip */,
+				6EE2BA530A40BB2600CC7CE2 /* IllustratorDeno.aip */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1232,6 +1235,7 @@
 		C4A3F94D134C5A7F00128D2D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A59DB54F2D81D8A900C7BD59 /* libai_deno.a */,
 				A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */,
 				A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */,
 				A5ACCD812D6F017A00069E63 /* Security.framework */,
@@ -1288,7 +1292,7 @@
 			);
 			name = AiDenoPlugin;
 			productName = HelloWorld;
-			productReference = 6EE2BA530A40BB2600CC7CE2 /* Illustrator Deno.aip */;
+			productReference = 6EE2BA530A40BB2600CC7CE2 /* IllustratorDeno.aip */;
 			productType = "com.apple.product-type.bundle";
 		};
 /* End PBXNativeTarget section */
@@ -1474,7 +1478,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adobe.illustrator.plugins.la.hanak.ai-deno";
-				PRODUCT_NAME = "Illustrator Deno";
+				PRODUCT_NAME = IllustratorDeno;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
 			};
@@ -1486,7 +1490,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adobe.illustrator.plugins.la.hanak.ai-deno";
-				PRODUCT_NAME = "Illustrator Deno";
+				PRODUCT_NAME = IllustratorDeno;
 				SWIFT_VERSION = 6.0;
 			};
 			name = release;

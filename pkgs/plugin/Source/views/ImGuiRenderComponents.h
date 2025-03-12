@@ -27,6 +27,16 @@ namespace {
     ButtonKind kind = ButtonKind::Default;
   };
 
+  class KeyStack {
+   public:
+    std::string getAndIncrement() { return std::to_string(++counter); }
+
+    void reset() { counter = 0; }
+
+   private:
+    int32_t counter = 0;
+  };
+
   class StyleStack {
    public:
     void pushColor(ImGuiCol color, const ImVec4& value) {
@@ -93,6 +103,7 @@ namespace {
 
   namespace ui {
     StyleStack styleStack = StyleStack();
+    KeyStack   keyStack   = KeyStack();
 
     bool Button(const char* label, ButtonProps props) {
       styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);

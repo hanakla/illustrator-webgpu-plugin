@@ -17,7 +17,7 @@
 #include "debugHelper.h"
 #include "super-illustrator.h"
 
-#define kMaxEffects 100
+#define kMaxEffects 1000
 
 using json = nlohmann::json;
 
@@ -33,6 +33,13 @@ struct PluginPreferences {
 Plugin* AllocatePlugin(SPPluginRef pluginRef);
 void    FixupReload(Plugin* plugin);
 
+using AdjustColorCallbackLambda = ai_deno::SafeString* (*)(const ai_deno::SafeString*);
+
+extern "C" {
+  ai_deno::SafeString*
+  ai_deno_trampoline_adjust_color_callback(void* ptr, const ai_deno::SafeString* color);
+}
+
 class HelloWorldPlugin : public Plugin {
  public:
   HelloWorldPlugin(SPPluginRef pluginRef);
@@ -46,7 +53,6 @@ class HelloWorldPlugin : public Plugin {
 
  private:
   bool               pluginStarted = false;
-  AILiveEffectHandle fLiveEffect;
   AILiveEffectHandle fEffects[kMaxEffects];
   ASInt32            fNumEffects;
 
@@ -56,7 +62,7 @@ class HelloWorldPlugin : public Plugin {
   ASErr InitLiveEffect(SPInterfaceMessage*);
   ASErr GoLiveEffect(AILiveEffectGoMessage*);
   ASErr LiveEffectScaleParameters(AILiveEffectScaleParamMessage*);
-  // ASErr LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage*);
+  ASErr LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage*);
   ASErr LiveEffectInterpolate(AILiveEffectInterpParamMessage*);
   ASErr EditLiveEffectParameters(AILiveEffectEditParamMessage*);
 

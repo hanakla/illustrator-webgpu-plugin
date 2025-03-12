@@ -26,6 +26,10 @@ export const testBlueFill = definePlugin({
         type: "bool",
         default: false,
       },
+      color: {
+        type: "color",
+        default: { r: 0, g: 0, b: 1, a: 1 },
+      },
       fillOtherChannels: {
         type: "bool",
         default: false,
@@ -164,6 +168,12 @@ export const testBlueFill = definePlugin({
           label: "Fill other channels",
           key: "fillOtherChannels",
           value: params.fillOtherChannels,
+        }),
+
+        ui.text({ text: "Color" }),
+        ui.colorInput({
+          key: "color",
+          value: params.color,
         }),
 
         ui.text({ text: "Padding" }),

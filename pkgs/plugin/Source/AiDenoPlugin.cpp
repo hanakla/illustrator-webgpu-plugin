@@ -23,8 +23,16 @@ void FixupReload(Plugin* plugin) {
   HelloWorldPlugin::FixupVTable((HelloWorldPlugin*)plugin);
 }
 
+extern "C" {
+  ai_deno::SafeString*
+  ai_deno_trampoline_adjust_color_callback(void* ptr, const ai_deno::SafeString* color) {
+    auto* lambda_ptr = static_cast<AdjustColorCallbackLambda*>(ptr);
+    return (*lambda_ptr)(color);
+  }
+}
+
 HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef)
-    : Plugin(pluginRef), fLiveEffect(nullptr), aiDenoMain(nullptr) {
+    : Plugin(pluginRef), aiDenoMain(nullptr) {
   strncpy(fPluginName, kPluginName, kMaxStringLength);
 }
 
@@ -207,17 +215,13 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     sAIRaster->GetRasterInfo(rasterArt, &info);
     unsigned char bytes = info.bitsPerPixel / 8;
 
-    print_AIRasterRecord(info);
+    print_AIRasterRecord(info, "rasterArt");
 
     AIDocumentSetup docSetup;
     error = sAIDocument->GetDocumentSetup(&docSetup);
     CHKERR();
 
     print_AIDocumentSetup(docSetup);
-    // if (error == kNoErr) {
-    //     AIReal resolution = docSetup.outputResolution;
-    //     // ここで解像度（resolution）を使用できます
-    // }
 
     AIRealRect bbox;
     sAIRaster->GetRasterBoundingBox(rasterArt, &bbox);
@@ -617,6 +621,68 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
   return error;
 }
 
+ASErr HelloWorldPlugin::LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage* message) {
+  std::cout << "ADJUSTING COLORS LIVE!! EFFECT!!!" << std::endl;
+
+  ASErr error = kNoErr;
+
+  // Exposing adjustColorCallback to Deno
+  auto adjustColorCallback = [this, message, &error](const ai_deno::SafeString* color
+                             ) -> ai_deno::SafeString* {
+    // std::string colorStr(color->data, color->len);
+    std::string aa;
+    json        input = json::parse(aa);
+
+    AIColor aiColor;
+    aiColor.kind        = kThreeColor;
+    aiColor.c.rgb.red   = (int)(input["r"].get<float>() * 255.0);
+    aiColor.c.rgb.green = (int)(input["g"].get<float>() * 255.0);
+    aiColor.c.rgb.blue  = (int)(input["b"].get<float>() * 255.0);
+
+    AIBoolean altered = false;
+    message->adjustColorCallback(&aiColor, nullptr, &error, &altered);
+
+    json res({
+        {"r", (double)(aiColor.c.rgb.red / 255.0)},
+        {"g", (double)(aiColor.c.rgb.green / 255.0)},
+        {"b", (double)(aiColor.c.rgb.blue / 255.0)},
+    });
+
+    // auto resStr = res.dump().c_str();
+    // return ai_deno::create_safe_string(resStr, strlen(resStr));
+    return ai_deno::create_safe_string("", 0);
+  };
+
+  PluginParams params;
+  this->getDictionaryValues(
+      message->parameters, &params,
+      PluginParams{
+          .effectName = "__FAILED_TO_GET_EFFECT_NAME__",
+          .params     = json(),
+      }
+  );
+
+  ai_deno::JsonFunctionResult* result = ai_deno::live_effect_adjust_colors(
+      aiDenoMain, params.effectName.c_str(), params.params.dump().c_str(),
+      (void*)&adjustColorCallback
+  );
+
+  if (!result->success) {
+    csl("Failed to adjust colors");
+    return kCantHappenErr;
+  }
+
+  json res = json::parse(result->json);
+  ai_deno::dispose_json_function_result(result);
+
+  if (!res["hasChanged"].get<bool>()) { return error; }
+
+  message->modifiedSomething = true;
+  this->putParamsToDictionaly(message->parameters, params);
+
+  return error;
+}
+
 ASErr HelloWorldPlugin::LiveEffectScaleParameters(AILiveEffectScaleParamMessage* message
 ) {
   std::cout << "SCALING LIVE!! EFFECT!!!" << std::endl;
@@ -666,6 +732,8 @@ ASErr HelloWorldPlugin::LiveEffectScaleParameters(AILiveEffectScaleParamMessage*
 }
 
 ASErr HelloWorldPlugin::LiveEffectInterpolate(AILiveEffectInterpParamMessage* message) {
+  return kNoErr;
+
   csl("INTERPOLATING LIVE!! EFFECT!!!");
 
   double percent = message->percent;

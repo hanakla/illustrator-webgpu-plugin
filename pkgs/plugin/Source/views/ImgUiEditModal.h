@@ -25,8 +25,9 @@ namespace ImGuiModal {
   typedef std::function<void(json)> OnFireEventCallback;
 
   struct EventCallbackPayload {
-    std::string type;
-    std::string nodeId;
+    std::string         type;
+    std::string         nodeId;
+    std::optional<json> value = std::nullopt;
 
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(EventCallbackPayload, type, nodeId)
   };
@@ -34,10 +35,10 @@ namespace ImGuiModal {
   class IModalImpl {
    public:
     virtual ModalStatusCode runModal(
-        const json&         renderTree,
+        const json&           renderTree,
         std::tuple<int, int>* lastPosition,
-        OnChangeCallback    onChange,
-        OnFireEventCallback onFireEventCallback
+        OnChangeCallback      onChange,
+        OnFireEventCallback   onFireEventCallback
     ) = 0;
 
     virtual void updateRenderTree(const json& renderTree) = 0;

@@ -4,14 +4,16 @@ extern crate once_cell;
 
 // use rustyscript::deno_core::v8;
 // use rustyscript::{Module, Runtime, RuntimeOptions};
-use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInitOptions};
+use crate::deno::{Module, ModuleHandle, Runtime, RuntimeInit};
 
 use deno_core::{anyhow, serde_json::json};
+use deno_lib::util::result;
 use deno_runtime::deno_core::v8;
 use deno_runtime::deno_core::PollEventLoopOptions;
 use ext::ai_user_extension;
 use ext::AiExtOptions;
 use homedir::my_home;
+use std::collections::HashSet;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -21,6 +23,9 @@ use std::time::{Duration, Instant};
 mod debug;
 mod deno;
 mod ext;
+
+pub mod safe_chars;
+pub use safe_chars::SafeString;
 
 pub type OpaqueAiMain = *mut c_void;
 pub type OpaqueDenoRuntime = *mut c_void;
@@ -97,10 +102,15 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
     // let alert_fn = move |req: &str| alert_function(req, _ai_alert);
 
     dai_println!("Initializing");
-    let mut runtime = Runtime::new(&mut RuntimeInitOptions {
+
+    let mut allowed_schemas = HashSet::new();
+    allowed_schemas.insert("ai_deno:".to_string());
+
+    let mut runtime = Runtime::new(RuntimeInit {
         extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
             // alert: alert_fn,
         })],
+        allowed_module_schemas: allowed_schemas,
         package_root_dir: package_root_dir(),
         ..Default::default()
     })
@@ -398,6 +408,79 @@ pub extern "C" fn edit_live_effect_fire_event(
     Box::into_raw(boxed)
 }
 
+extern "C" {
+    fn ai_deno_trampoline_adjust_color_callback(
+        ptr: *mut c_void,
+        color: *const SafeString,
+    ) -> *mut SafeString;
+}
+
+#[no_mangle]
+pub extern "C" fn live_effect_adjust_colors(
+    ai_main_ref: OpaqueAiMain,
+    effect_id: *const c_char,
+    params: *const c_char,
+    adjust_color_fn: *mut c_void,
+) -> *mut JsonFunctionResult {
+    let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
+    let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
+    let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
+
+    let result = execute_exported_function(ai_main, "liveEffectAdjustColors", move |scope| {
+        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(scope, effect_id);
+
+        let params = v8::String::new(scope, params.as_str()).unwrap();
+        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::Local::<v8::Object>::try_from(params).unwrap();
+
+        let adjust_color_ptr = adjust_color_fn as *mut c_void;
+        let adjust_color_ext = v8::External::new(scope, adjust_color_ptr);
+
+        let adjust_color = v8::Function::builder(
+            |scope: &mut v8::HandleScope,
+             args: v8::FunctionCallbackArguments,
+             mut ret: v8::ReturnValue| {
+                // args[0]: ColorRGBA to json
+                let color = args.get(0);
+                let color = v8::json::stringify(scope, color).unwrap();
+                let color = color.to_rust_string_lossy(scope);
+
+                // Call adjust_color_fn
+                let adjust_color_fn_ref = v8::Local::<v8::External>::try_from(args.data()).unwrap();
+                let adjust_color_fn_ptr = unsafe { adjust_color_fn_ref.value() as *mut c_void };
+
+                let result_json = unsafe {
+                    ai_deno_trampoline_adjust_color_callback(
+                        adjust_color_fn_ptr,
+                        SafeString::from(color).as_ptr(),
+                    )
+                }
+                .to_owned();
+                let result_json = unsafe { *Box::from_raw(result_json) };
+
+                // Parse json to ColorRGBA
+                let result = v8::String::new(scope, result_json.as_str().unwrap()).unwrap();
+                let result = v8::json::parse(scope, result).unwrap();
+                let result = v8::Local::<v8::Object>::try_from(result).unwrap();
+
+                // Set return value
+                ret.set(result.into());
+            },
+        )
+        .data(adjust_color_ext.into())
+        .build(scope)
+        .unwrap();
+
+        Ok(vec![effect_id.into(), params.into(), adjust_color.into()])
+        // Ok(vec![effect_id.into(), params.into()])
+    });
+
+    let boxed = Box::new(result);
+
+    Box::into_raw(boxed)
+}
+
 #[no_mangle]
 pub extern "C" fn live_effect_scale_parameters(
     ai_main_ref: OpaqueAiMain,
@@ -488,10 +571,6 @@ fn execute_export_function_and_raw_return<'a>(
     // It's required for WebGPU async methods
     let localset = tokio::task::LocalSet::new();
     let result = localset.block_on(&tokio_runtime, async move {
-        // let proc: Pin<
-        //     Box<dyn Future<Output = Result<Box<v8::Global<v8::Value>>, anyhow::Error>> + 'static>,
-        // > = Box::pin(
-
         // It's required for WebGPU async methods
         tokio::task::spawn_local(async move {
             let runtime = &mut ai_main.main_runtime;
@@ -574,29 +653,6 @@ where
         success: false,
         json: CString::new("{}".to_string()).unwrap().into_raw(),
     };
-
-    // let fn_ref = match ai_main
-    //     .main_module
-    //     .get_export_function_by_name(runtime, function_name)
-    // {
-    //     Ok(fn_ref) => fn_ref,
-    //     Err(e) => {
-    //         return failed_res;
-    //     }
-    // };
-
-    // let fn_ref = v8::Local::<v8::Function>::new(scope, fn_ref);
-
-    // let scope = &mut v8::TryCatch::new(scope);
-    // let undefined = v8::undefined(scope);
-    // let args = args_factory(scope).unwrap();
-    // let result = fn_ref.call(scope, undefined.into(), &args);
-
-    // if let Some(err) = scope.exception() {
-    //     let error = JsError::from_v8_exception(scope, err);
-    //     dai_println!("{:?}", error);
-    //     return failed_res;
-    // }
 
     let result = execute_export_function_and_raw_return(ai_main, function_name, args_factory);
 

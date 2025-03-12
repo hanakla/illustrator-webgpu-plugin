@@ -12,6 +12,6 @@ mod transpiler;
 
 pub use module::Module;
 pub use module::ModuleHandle;
-pub use runtime::{Runtime, RuntimeInitOptions};
+pub use runtime::{Runtime, RuntimeInit};
 
 pub use deno_runtime::{deno_core, deno_permissions};

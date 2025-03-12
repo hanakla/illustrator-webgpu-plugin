@@ -5,13 +5,12 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-
-    // println!("cargo:rustc-link-lib=static=libai_dino");
-    // println!("cargo:rustc-link-search=native={}", out_path.display());
-
-    // println!("cargo:rerun-if-changed=src/wrapper.h");
-    // println!("cargo:rerun-if-changed=src/lib.rs");
+    // macOS用の設定
+    #[cfg(target_os = "macos")]
+    {
+        println!("cargo:rustc-cdylib-link-arg=-undefined");
+        println!("cargo:rustc-cdylib-link-arg=dynamic_lookup");
+    }
 
     // cc::Build::new()
     //     .cpp(true)

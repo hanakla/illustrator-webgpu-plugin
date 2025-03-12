@@ -1,22 +1,76 @@
 import { UINode } from "./ui/nodes.ts";
 
 export type ParameterSchema = {
-  [name: string]: {
-    type: "real" | "int" | "bool" | "string";
-    enum?: any[];
-    default: any;
-  };
+  [name: string]:
+    | SchemaRealNode
+    | SchemaIntNode
+    | SchemaBoolNode
+    | SchemaStringNode
+    | SchemaColorNode;
+};
+
+type SchemaRealNode = {
+  type: "real";
+  enum?: number[];
+  default: number;
+};
+
+type SchemaIntNode = {
+  type: "int";
+  enum?: number[];
+  default: number;
+};
+
+type SchemaBoolNode = {
+  type: "bool";
+  enum?: boolean[];
+  default: boolean;
+};
+
+type SchemaStringNode = {
+  type: "string";
+  enum?: string[];
+  default: string;
+};
+
+type SchemaColorNode = {
+  type: "color";
+  enum?: RGBAColor[];
+  default: RGBAColor;
+};
+
+export type RGBAColor = {
+  /** 0 to 1 */
+  r: number;
+  /** 0 to 1 */
+  g: number;
+  /** 0 to 1 */
+  b: number;
+  /** 0 to 1 */
+  a: number;
 };
 
 export type ParameterSchemaToState<T extends ParameterSchema> = {
   [K in keyof T]: T[K]["type"] extends "real"
-    ? number
+    ? T[K]["enum"] extends number[]
+      ? T[K]["enum"][number]
+      : number
     : T[K]["type"] extends "int"
-    ? number
+    ? T[K]["enum"] extends number[]
+      ? T[K]["enum"][number]
+      : number
     : T[K]["type"] extends "bool"
-    ? boolean
+    ? T[K]["enum"] extends boolean[]
+      ? T[K]["enum"][number]
+      : boolean
     : T[K]["type"] extends "string"
-    ? string
+    ? T[K]["enum"] extends string[]
+      ? T[K]["enum"][number]
+      : string
+    : T[K]["type"] extends "color"
+    ? T[K]["enum"] extends RGBAColor[]
+      ? T[K]["enum"][number]
+      : RGBAColor
     : never;
 };
 
@@ -95,6 +149,11 @@ export type AIPlugin<
      * This function must return a normalized parameter object.
      */
     editLiveEffectParameters?: (nextParams: Params) => Params;
+
+    liveEffectAdjustColors: (
+      params: Params,
+      adjustColor: (color: RGBAColor) => RGBAColor
+    ) => Params;
 
     /**
      * Called when the LiveEffectScale callback is triggered.

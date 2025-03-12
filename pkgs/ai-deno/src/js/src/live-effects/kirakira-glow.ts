@@ -8,9 +8,9 @@ import {
   removeWebGPUAlignmentPadding,
 } from "./utils.ts";
 
-export const glow = definePlugin({
-  id: "glow-effect-v1",
-  title: "Glow Effect V1",
+export const kirakiraGlow = definePlugin({
+  id: "kirakira-glow-effect-v1",
+  title: "KiraKira Glow V1",
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {

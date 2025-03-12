@@ -1,7 +1,5 @@
 use deno_error::JsErrorBox;
-use deno_runtime::deno_core::{
-    ascii_str_include, extension, op2, serde_json, Extension, ExtensionFileSource, OpState,
-};
+use deno_runtime::deno_core::{extension, op2, OpState};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
 
@@ -17,18 +15,17 @@ struct AlertRequest {
 
 extension!(
     ai_user_extension,
-    ops = [op_ai_alert],
+    ops = [op_ai_alert, op_aideno_debug_enabled],
+    esm_entry_point = "ext:ai-deno/init",
+    esm = [
+        dir "src/ext",
+        "ext:ai-deno/init" = "js/ai_extension.js",
+    ],
     options = {
         aiExt: AiExtOptions,
     },
     state = |state, options| {
-        // state.put::<AiExtOptions>(options.aiExt);
-    },
-    customizer = |ext: &mut Extension| {
-        ext.esm_files.to_mut().push(ExtensionFileSource::new(
-            "ext:ai_extension.ts",
-            ascii_str_include!("./js/ai_extension.ts"),
-        ));
+        state.put::<AiExtOptions>(options.aiExt);
     },
 );
 
@@ -46,4 +43,13 @@ fn op_ai_alert(state: Rc<RefCell<OpState>>, #[string] message: String) -> Result
     // );
 
     Ok(())
+}
+
+#[op2(fast)]
+fn op_aideno_debug_enabled(state: Rc<RefCell<OpState>>) -> Result<bool, JsErrorBox> {
+    if cfg!(feature = "debug_lib") {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }

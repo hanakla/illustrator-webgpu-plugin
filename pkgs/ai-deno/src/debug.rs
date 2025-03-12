@@ -1,6 +1,7 @@
 #[macro_export]
 macro_rules! dai_println {
     () => {
+        #[cfg(feature = "debug_lib")]
         {
             let path = std::path::Path::new(file!());
             let file_name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -8,6 +9,7 @@ macro_rules! dai_println {
         }
     };
     ($fmt:expr) => {
+        #[cfg(feature = "debug_lib")]
         {
             let path = std::path::Path::new(file!());
             let file_name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -15,6 +17,7 @@ macro_rules! dai_println {
         }
     };
     ($fmt:expr, $($arg:tt)*) => {
+        #[cfg(feature = "debug_lib")]
         {
             let path = std::path::Path::new(file!());
             let file_name = path.file_name().unwrap_or_default().to_string_lossy();
