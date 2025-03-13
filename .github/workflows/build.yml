@@ -3,70 +3,73 @@ name: CI
 on: [push]
 
 jobs:
-  # ステップ1: Rustバインディングを各プラットフォーム用にビルド
+  # ステップ1: macOSホストでRustバインディングをクロスコンパイル
   build_rust_binding:
-    name: Build ai-deno binding for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-        include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: libai_deno.a
-            artifact_path: target/release/libai_deno.a
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: ai_deno.lib
-            artifact_path: target/release/ai_deno.lib
+    name: Build ai-deno bindings (cross-compile)
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          targets: aarch64-apple-darwin, x86_64-pc-windows-msvc
 
-      - name: Build ai-deno binding (macOS)
-        if: matrix.os == 'macos-latest'
+      - name: Install dependencies for cross-compilation
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-pc-windows-msvc
+
+      - name: Build for macOS (aarch64)
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
         run: |
-          # サンプル実装：実際のRustプロジェクトに合わせて調整してください
-          mkdir -p target/release/includes
-          echo "// Placeholder lib" > target/release/libai_deno.a
-          echo "// Placeholder header" > target/release/includes/libai_dino.h
+          cargo build --release --target aarch64-apple-darwin
 
-          # 実際のビルドコード
-          # cargo build --release
-        shell: bash
-
-      - name: Build ai-deno binding (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Build for Windows (x86_64)
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
         run: |
-          # ディレクトリを作成
-          New-Item -Path "target/release" -ItemType Directory -Force
-          New-Item -Path "target/release/includes" -ItemType Directory -Force
+          cargo build --release --target x86_64-pc-windows-msvc
 
-          # ダミーファイル作成
-          Set-Content -Path "target/release/ai_deno.lib" -Value "// Placeholder lib"
-          Set-Content -Path "target/release/includes/libai_dino.h" -Value "// Placeholder header"
+      - name: Create directories for artifacts
+        run: |
+          mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes
+          mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes
 
-          # 実際のビルドコード
-          # cargo build --release
-        shell: pwsh
+          # macOSのバイナリとヘッダーをコピー
+          cp ${{ github.workspace }}/pkgs/ai-deno/target/aarch64-apple-darwin/release/libai_deno.a ${{ github.workspace }}/pkgs/ai-deno/target/macos/
+          # ヘッダーファイルをコピー (実際のパスに合わせて調整)
+          cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes/
 
-      - name: Upload Rust binding artifact
-        uses: actions/upload-artifact@v3
+          # Windowsのバイナリとヘッダーをコピー
+          cp ${{ github.workspace }}/pkgs/ai-deno/target/x86_64-pc-windows-msvc/release/ai_deno.lib ${{ github.workspace }}/pkgs/ai-deno/target/windows/
+          # ヘッダーファイルをコピー (実際のパスに合わせて調整)
+          cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
+
+      - name: Upload macOS binding artifact
+        id: upload-macos-binding
+        uses: actions/upload-artifact@v4
         with:
-          name: ai-deno-${{ matrix.os }}
+          name: ai-deno-macos
           path: |
-            ${{ github.workspace }}/pkgs/ai-deno/target/release/${{ matrix.artifact_name }}
-            ${{ github.workspace }}/pkgs/ai-deno/target/release/includes/
+            ${{ github.workspace }}/pkgs/ai-deno/target/macos/libai_deno.a
+            ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes/
+          retention-days: 1
+          compression-level: 3
+          if-no-files-found: error
+
+      - name: Upload Windows binding artifact
+        id: upload-windows-binding
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-deno-windows
+          path: |
+            ${{ github.workspace }}/pkgs/ai-deno/target/windows/ai_deno.lib
+            ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
+          retention-days: 1
+          compression-level: 3
+          if-no-files-found: error
 
   # ステップ2: macOS版プラグインをビルド
   build_macos_plugin:
@@ -84,9 +87,9 @@ jobs:
           path: illustrator-sdk
 
       - name: Download macOS Rust binding artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: ai-deno-macos-latest
+          name: ai-deno-macos
           path: ${{ github.workspace }}/pkgs/ai-deno/target/release/
 
       - name: Select Xcode version
@@ -97,13 +100,25 @@ jobs:
 
       - name: Build with Xcode
         working-directory: ${{ github.workspace }}/pkgs/plugin
-        run: xcodebuild -configuration Release build
+        run: |
+          # Xcodeでビルド - PIPL生成はXcodeのビルドフェーズで行われる
+          xcodebuild -project AiDenoPlugin.xcodeproj -scheme AiDenoPlugin -configuration Release build
 
       - name: Upload macOS plugin artifact
-        uses: actions/upload-artifact@v3
+        id: upload-macos-artifact
+        uses: actions/upload-artifact@v4
         with:
           name: illustrator-deno-macos
           path: ${{ github.workspace }}/pkgs/plugin/output/mac/release/IllustratorDeno.aip
+          compression-level: 1
+          if-no-files-found: error
+
+      - name: Output artifact info
+        if: success()
+        run: |
+          echo "macOS artifact ID: ${{ steps.upload-macos-artifact.outputs.artifact-id }}"
+          echo "Download URL: ${{ steps.upload-macos-artifact.outputs.artifact-url }}"
+          echo "SHA-256: ${{ steps.upload-macos-artifact.outputs.artifact-digest }}"
 
   # ステップ3: Windows版プラグインをビルド
   build_windows_plugin:
@@ -121,10 +136,15 @@ jobs:
           path: illustrator-sdk
 
       - name: Download Windows Rust binding artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: ai-deno-windows-latest
+          name: ai-deno-windows
           path: ${{ github.workspace }}/pkgs/ai-deno/target/release/
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
 
       - name: Setup Deno
         uses: denoland/setup-deno@v1
@@ -142,13 +162,14 @@ jobs:
         run: |
           # 正しくディレクトリを作成
           New-Item -Path "Source" -ItemType Directory -Force
-          New-Item -Path "deps/imgui/misc/cpp" -ItemType Directory -Force
-          New-Item -Path "Resources/Win" -ItemType Directory -Force
-          New-Item -Path "output/win/release" -ItemType Directory -Force
-          New-Item -Path "build/temp/obj" -ItemType Directory -Force
+          New-Item -Path "deps\imgui\misc\cpp" -ItemType Directory -Force
+          New-Item -Path "Resources\Win" -ItemType Directory -Force
+          New-Item -Path "output\win\release" -ItemType Directory -Force
+          New-Item -Path "build\temp\obj" -ItemType Directory -Force
+          New-Item -Path "output\win\release\IllustratorDeno.aip\Contents\Resources\pipl" -ItemType Directory -Force
 
           # Create minimal resource files if they don't exist
-          if (-Not (Test-Path "Resources/Win/HelloWorld.rc")) {
+          if (-Not (Test-Path "Resources\Win\HelloWorld.rc")) {
             $rcContent = @'
           #include "resource.h"
 
@@ -164,18 +185,18 @@ jobs:
               'ADBE', 'pinm', 0L, 12L, "IllustratorDeno"
           END
           '@
-            Set-Content -Path "Resources/Win/HelloWorld.rc" -Value $rcContent
+            Set-Content -Path "Resources\Win\HelloWorld.rc" -Value $rcContent
           }
 
-          if (-Not (Test-Path "Resources/Win/resource.h")) {
+          if (-Not (Test-Path "Resources\Win\resource.h")) {
             $resourcehContent = @'
           // Resource header file
           '@
-            Set-Content -Path "Resources/Win/resource.h" -Value $resourcehContent
+            Set-Content -Path "Resources\Win\resource.h" -Value $resourcehContent
           }
 
           # Create minimal source files for build testing
-          if (-Not (Test-Path "Source/AiDenoPlugin.cpp")) {
+          if (-Not (Test-Path "Source\AiDenoPlugin.cpp")) {
             $sourceContent = @'
           // Placeholder for AiDenoPlugin.cpp
           #include <stdio.h>
@@ -184,25 +205,76 @@ jobs:
               // Plugin entry point
           }
           '@
-            Set-Content -Path "Source/AiDenoPlugin.cpp" -Value $sourceContent
+            Set-Content -Path "Source\AiDenoPlugin.cpp" -Value $sourceContent
+          }
+
+          # PIPL署名を生成
+          python -c "import sys, json; sys.path.append('..\..\illustrator-sdk\tools\pipl'); from create_pipl import create_pipl; create_pipl('[{\"name\":\"IllustratorDeno\"}, {\"entry_point\":\"PluginMain\"}]')"
+
+          # PIPLファイルが存在しない場合は作成
+          if (-Not (Test-Path "plugin.pipl")) {
+            $piplContent = @'
+          // PIPL
+          {
+              "name": "IllustratorDeno",
+              "entry_point": "PluginMain"
+          }
+          '@
+            Set-Content -Path "plugin.pipl" -Value $piplContent
           }
         shell: pwsh
 
       - name: Build with Deno script
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
-          # パスの調整
-          $buildWinTsContent = Get-Content build-win.ts -Raw
-          $buildWinTsContent = $buildWinTsContent -replace "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community", "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise"
-          $buildWinTsContent = $buildWinTsContent -replace "../../illustrator-sdk", "../illustrator-sdk"
-          Set-Content -Path build-win.ts -Value $buildWinTsContent
+          # 環境変数を使ってVisual Studioのパスを設定
+          $env:VS_PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+          $env:SDK_PATH = "..\illustrator-sdk"
 
-          # ビルド実行
+          # ビルドスクリプトを実行
           deno run --allow-run --allow-read --allow-write --allow-env build-win.ts --release
+
+          # PIPLファイルをリソースディレクトリにコピー
+          Copy-Item -Path "plugin.pipl" -Destination "output\win\release\IllustratorDeno.aip\Contents\Resources\pipl\plugin.pipl" -Force
         shell: pwsh
 
       - name: Upload Windows plugin artifact
-        uses: actions/upload-artifact@v3
+        id: upload-windows-artifact
+        uses: actions/upload-artifact@v4
         with:
           name: illustrator-deno-windows
           path: ${{ github.workspace }}/pkgs/plugin/output/win/release/IllustratorDeno.aip
+          compression-level: 1
+          if-no-files-found: error
+
+      - name: Output artifact info
+        if: success()
+        run: |
+          echo "Windows artifact ID: ${{ steps.upload-windows-artifact.outputs.artifact-id }}"
+          echo "Download URL: ${{ steps.upload-windows-artifact.outputs.artifact-url }}"
+          echo "SHA-256: ${{ steps.upload-windows-artifact.outputs.artifact-digest }}"
+
+  # すべてのビルドが完了した後に通知を送るオプションのジョブ例
+  notify:
+    needs: [build_macos_plugin, build_windows_plugin]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check build status
+        id: check
+        run: |
+          if [ "${{ needs.build_macos_plugin.result }}" == "success" ] && [ "${{ needs.build_windows_plugin.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+
+      # このステップはGitHub Slackアプリなどの外部通知システムで置き換え可能
+      - name: Post build status
+        run: |
+          if [ "${{ steps.check.outputs.status }}" == "success" ]; then
+            echo "✅ All builds completed successfully!"
+          else
+            echo "❌ Some builds failed!"
+          fi
