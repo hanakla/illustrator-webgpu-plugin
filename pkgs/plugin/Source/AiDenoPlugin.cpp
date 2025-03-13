@@ -185,7 +185,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   try {
     AIArtHandle art = message->art;
 
-    csl("%s", suai::art::artToJSON(art).dump(2).c_str());
+    // csl("%s", suai::art::artToJSON(art).dump(2).c_str());
 
     print_AIArt(art, "art");
 

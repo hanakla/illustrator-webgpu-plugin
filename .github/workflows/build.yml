@@ -3,9 +3,9 @@ name: CI
 on: [push]
 
 jobs:
-  # ステップ1: macOSホストでRustバインディングをクロスコンパイル
-  build_rust_binding:
-    name: Build ai-deno bindings (cross-compile)
+  # macOS向けRustバインディングをビルド
+  build_macos_rust_binding:
+    name: Build macOS ai-deno bindings
     runs-on: macos-latest
 
     steps:
@@ -15,37 +15,41 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin, x86_64-pc-windows-msvc
+          targets: aarch64-apple-darwin
 
-      - name: Install dependencies for cross-compilation
+      - name: Install dependencies
         run: |
           rustup target add aarch64-apple-darwin
-          rustup target add x86_64-pc-windows-msvc
+
+      - name: Cache Cargo registry and index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/pkgs/ai-deno/target
+          key: ${{ runner.os }}-macos-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-macos-target-
 
       - name: Build for macOS (aarch64)
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
         run: |
           cargo build --release --target aarch64-apple-darwin
 
-      - name: Build for Windows (x86_64)
-        working-directory: ${{ github.workspace }}/pkgs/ai-deno
-        run: |
-          cargo build --release --target x86_64-pc-windows-msvc
-
       - name: Create directories for artifacts
         run: |
           mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes
-          mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes
 
-          # macOSのバイナリとヘッダーをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/target/aarch64-apple-darwin/release/libai_deno.a ${{ github.workspace }}/pkgs/ai-deno/target/macos/
-          # ヘッダーファイルをコピー (実際のパスに合わせて調整)
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes/
-
-          # Windowsのバイナリとヘッダーをコピー
-          cp ${{ github.workspace }}/pkgs/ai-deno/target/x86_64-pc-windows-msvc/release/ai_deno.lib ${{ github.workspace }}/pkgs/ai-deno/target/windows/
-          # ヘッダーファイルをコピー (実際のパスに合わせて調整)
-          cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
 
       - name: Upload macOS binding artifact
         id: upload-macos-binding
@@ -58,6 +62,48 @@ jobs:
           retention-days: 1
           compression-level: 3
           if-no-files-found: error
+
+  # Windows向けRustバインディングをクロスコンパイル
+  build_windows_rust_binding:
+    name: Build Windows ai-deno bindings
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/pkgs/ai-deno/target
+          key: ${{ runner.os }}-windows-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-windows-target-
+
+      - name: Build for Windows
+        working-directory: ${{ github.workspace }}/pkgs/ai-deno
+        run: |
+          cargo build --release
+
+      - name: Create directories for artifacts
+        run: |
+          mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes
+
+          cp ${{ github.workspace }}/pkgs/ai-deno/target/release/ai_deno.lib ${{ github.workspace }}/pkgs/ai-deno/target/windows/
+          cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
 
       - name: Upload Windows binding artifact
         id: upload-windows-binding
@@ -73,7 +119,7 @@ jobs:
 
   # ステップ2: macOS版プラグインをビルド
   build_macos_plugin:
-    needs: build_rust_binding
+    needs: build_macos_rust_binding
     runs-on: macos-latest
 
     steps:
@@ -101,7 +147,6 @@ jobs:
       - name: Build with Xcode
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
-          # Xcodeでビルド - PIPL生成はXcodeのビルドフェーズで行われる
           xcodebuild -project AiDenoPlugin.xcodeproj -scheme AiDenoPlugin -configuration Release build
 
       - name: Upload macOS plugin artifact
@@ -122,7 +167,7 @@ jobs:
 
   # ステップ3: Windows版プラグインをビルド
   build_windows_plugin:
-    needs: build_rust_binding
+    needs: build_windows_rust_binding
     runs-on: windows-latest
 
     steps:
@@ -160,7 +205,6 @@ jobs:
       - name: Create skeleton structure for build
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
-          # 正しくディレクトリを作成
           New-Item -Path "Source" -ItemType Directory -Force
           New-Item -Path "deps\imgui\misc\cpp" -ItemType Directory -Force
           New-Item -Path "Resources\Win" -ItemType Directory -Force
@@ -253,28 +297,3 @@ jobs:
           echo "Windows artifact ID: ${{ steps.upload-windows-artifact.outputs.artifact-id }}"
           echo "Download URL: ${{ steps.upload-windows-artifact.outputs.artifact-url }}"
           echo "SHA-256: ${{ steps.upload-windows-artifact.outputs.artifact-digest }}"
-
-  # すべてのビルドが完了した後に通知を送るオプションのジョブ例
-  notify:
-    needs: [build_macos_plugin, build_windows_plugin]
-    runs-on: ubuntu-latest
-    if: always()
-
-    steps:
-      - name: Check build status
-        id: check
-        run: |
-          if [ "${{ needs.build_macos_plugin.result }}" == "success" ] && [ "${{ needs.build_windows_plugin.result }}" == "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-          else
-            echo "status=failure" >> $GITHUB_OUTPUT
-          fi
-
-      # このステップはGitHub Slackアプリなどの外部通知システムで置き換え可能
-      - name: Post build status
-        run: |
-          if [ "${{ steps.check.outputs.status }}" == "success" ]; then
-            echo "✅ All builds completed successfully!"
-          else
-            echo "❌ Some builds failed!"
-          fi
