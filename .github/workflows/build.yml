@@ -30,6 +30,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+        if: always()
 
       - name: Cache Rust build artifacts
         uses: actions/cache@v4
@@ -38,6 +39,7 @@ jobs:
           key: ${{ runner.os }}-macos-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
           restore-keys: |
             ${{ runner.os }}-macos-target-
+        if: always()
 
       - name: Build for macOS (aarch64)
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
@@ -48,7 +50,9 @@ jobs:
         run: |
           mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes
 
+          # macOSのバイナリとヘッダーをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/target/aarch64-apple-darwin/release/libai_deno.a ${{ github.workspace }}/pkgs/ai-deno/target/macos/
+          # ヘッダーファイルをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes/
 
       - name: Upload macOS binding artifact
@@ -92,6 +96,7 @@ jobs:
           key: ${{ runner.os }}-windows-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
           restore-keys: |
             ${{ runner.os }}-windows-target-
+        if: always()
 
       - name: Build for Windows
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
@@ -102,7 +107,9 @@ jobs:
         run: |
           mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes
 
+          # Windowsのバイナリとヘッダーをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/target/release/ai_deno.lib ${{ github.workspace }}/pkgs/ai-deno/target/windows/
+          # ヘッダーファイルをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
 
       - name: Upload Windows binding artifact
@@ -147,6 +154,7 @@ jobs:
       - name: Build with Xcode
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
+          # Xcodeでビルド - PIPL生成はXcodeのビルドフェーズで行われる
           xcodebuild -project AiDenoPlugin.xcodeproj -scheme AiDenoPlugin -configuration Release build
 
       - name: Upload macOS plugin artifact
@@ -205,6 +213,7 @@ jobs:
       - name: Create skeleton structure for build
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
+          # 正しくディレクトリを作成
           New-Item -Path "Source" -ItemType Directory -Force
           New-Item -Path "deps\imgui\misc\cpp" -ItemType Directory -Force
           New-Item -Path "Resources\Win" -ItemType Directory -Force
