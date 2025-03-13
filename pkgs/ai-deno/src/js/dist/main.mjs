@@ -702,23 +702,32 @@ var testBlueFill = definePlugin({
           value: params.color
         }),
         ui.text({ text: "Padding" }),
-        ui.slider({
-          label: "Padding",
-          key: "padding",
-          dataType: "int",
-          min: 0,
-          max: 100,
-          value: params.padding
-        }),
+        ui.group({ direction: "row" }, [
+          ui.slider({
+            key: "padding",
+            dataType: "int",
+            min: 0,
+            max: 100,
+            value: params.padding
+          }),
+          ui.numberInput({
+            dataType: "int",
+            key: "padding",
+            value: params.padding,
+            min: 0,
+            max: 100,
+            step: 1
+          })
+        ]),
         ui.text({ text: "Opacity" }),
         ui.slider({
-          label: "Opacity",
           key: "opacity",
           dataType: "float",
           min: 0,
           max: 100,
           value: params.opacity
-        })
+        }),
+        ui.textInput({ value: "Hello" })
       ]);
     }
   }
@@ -2727,7 +2736,7 @@ function editLiveEffectParameters(id, params) {
   params = getParams(id, params);
   return ((_b = (_a = effect.liveEffect).editLiveEffectParameters) == null ? void 0 : _b.call(_a, params)) ?? params;
 }
-async function editLiveEffectFireCallback(effectId, event) {
+async function editLiveEffectFireCallback(effectId, event, params) {
   const effect = findEffect(effectId);
   const node = nodeState == null ? void 0 : nodeState.nodeMap.get(event.nodeId);
   if (!effect || !node || !nodeState || nodeState.effectId !== effectId) {
@@ -2735,7 +2744,9 @@ async function editLiveEffectFireCallback(effectId, event) {
       updated: false
     };
   }
-  const current = nodeState.latestParams;
+  console.log(params);
+  nodeState.latestParams = structuredClone(params);
+  const current = params;
   switch (event.type) {
     case "click": {
       if ("onClick" in node && typeof node.onClick === "function")
@@ -2758,7 +2769,8 @@ async function editLiveEffectFireCallback(effectId, event) {
   }
   return {
     updated: true,
-    params: nodeState.latestParams
+    params: nodeState.latestParams,
+    tree: getEffectViewNode(effectId, nodeState.latestParams)
   };
 }
 function attachNodeIds(node) {

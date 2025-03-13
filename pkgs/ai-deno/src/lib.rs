@@ -386,10 +386,12 @@ pub extern "C" fn edit_live_effect_fire_event(
     ai_main_ref: OpaqueAiMain,
     effect_id: *const c_char,
     event_payload: *const c_char,
+    params: *const c_char,
 ) -> *mut JsonFunctionResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy().to_string() };
     let event_payload = unsafe { CStr::from_ptr(event_payload).to_string_lossy().to_string() };
+    let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
 
     let result = execute_exported_function(ai_main, "editLiveEffectFireCallback", move |scope| {
         let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
@@ -399,7 +401,12 @@ pub extern "C" fn edit_live_effect_fire_event(
         let event_payload = v8::json::parse(scope, event_payload).unwrap();
         let event_payload = v8::Local::<v8::Object>::try_from(event_payload).unwrap();
 
-        let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), event_payload.into()];
+        let params = v8::String::new(scope, params.as_str()).unwrap();
+        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::Local::<v8::Object>::try_from(params).unwrap();
+
+        let args: Vec<v8::Local<v8::Value>> =
+            vec![effect_id.into(), event_payload.into(), params.into()];
         Ok(args)
     });
 

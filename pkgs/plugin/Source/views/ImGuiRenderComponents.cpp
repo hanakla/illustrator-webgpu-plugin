@@ -1,7 +1,9 @@
 #pragma once
 
+#include <climits>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "../../deps/imgui/imgui.h"
@@ -13,6 +15,17 @@ using json = nlohmann::json;
 #include "ImgUiEditModal.h"
 
 #include "./ImGuiRenderComponents.h"
+
+template <typename T>
+std::optional<T> getOptional(json& j) {
+  std::optional<T> result;
+
+  if (j.is_null()) {
+    return std::nullopt;
+  } else {
+    return result.emplace(j.template get<T>());
+  }
+}
 
 ModalStatusCode AiDenoImGuiRenderComponents(
     json&                           renderTree,
@@ -26,17 +39,19 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   std::function<void(json)> renderNode = [&](json node) -> void {
     if (!node.contains("type")) return;
 
-    std::string type = node["type"].get<std::string>();
-    const char* id   = (std::string("##") + node["nodeId"].get<std::string>()).c_str();
+    std::string type   = node["type"];
+    std::string nodeId = node["nodeId"];
+    std::string idStr  = "##" + nodeId;
+    const char* id     = idStr.c_str();
 
-    std::optional<std::string> key = node["key"];
+    std::optional<std::string> key = getOptional<std::string>(node["key"]);
 
     if (type == "group") {
       std::string direction = node["direction"].get<std::string>();
 
       ImGui::BeginGroup();
-      for (json& xx : node["children"]) {
-        renderNode(xx);
+      for (json& child : node["children"]) {
+        renderNode(child);
         if (direction == "row") ImGui::SameLine();
       }
       ImGui::EndGroup();
@@ -51,10 +66,14 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
       ui::styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
       ui::styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
-      if (ImGui::Button(label.c_str())) {
+      if (ui::Button(
+              label.c_str(),
+              ButtonProps{.kind = ButtonKind::Default, .size = ButtonSize::Sm}
+          )) {
+        std::cout << "fireeeeeeee" << std::endl;
         onFireEventCallback(ImGuiModal::EventCallbackPayload{
             .type   = "click",
-            .nodeId = node["nodeId"],
+            .nodeId = nodeId,
         });
       }
       ui::styleStack.clear();
@@ -63,53 +82,91 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       std::string value = node["value"].get<std::string>();
 
       if (ImGui::InputText(id, &value, ImGuiInputTextFlags_None)) {
+        std::cout << "value: " << value << std::endl;
         if (key) { onChangeCallback(json::object({{key, value}})); }
 
         onFireEventCallback(ImGuiModal::EventCallbackPayload{
             .type   = "change",
-            .nodeId = node["nodeId"],
+            .nodeId = nodeId,
             .value  = value,
         });
       }
 
     } else if (type == "numberInput") {
-      std::string dataType = node["dataType"];
+      std::string          dataType = node["dataType"];
+      std::optional<float> min      = getOptional<float>(node["min"]);
+      std::optional<float> max      = getOptional<float>(node["max"]);
+      float                step = node["step"].is_null() ? 1 : node["step"].get<float>();
+      float                valueCommon = node["value"];
+      float                original    = valueCommon;
+      bool                 onChanged   = false;
 
       if (dataType == "int") {
-        std::optional<int> min   = node["min"];
-        std::optional<int> max   = node["max"];
-        int                step  = node["step"].is_null() ? 1 : node["step"].get<int>();
-        int                value = node["value"].get<int>();
+        int value = (int)valueCommon;
 
-        if (ImGui::InputInt(id, &value, step, 10, ImGuiInputTextFlags_CharsNoBlank)) {
-          if (min.has_value() && value < min.value()) value = min.value();
-          if (max.has_value() && value > max.value()) value = max.value();
-          if (key) { onChangeCallback(json::object({{key, value}})); }
+        onChanged = ImGui::InputInt(id, &value, step, 10);
+        if (onChanged) {
+          std::cout << "original: " << original << ", next value: " << value << std::endl;
+          valueCommon = std::clamp(
+              static_cast<float>(value), min.value_or(INT_MIN), max.value_or(INT_MAX)
+          );
+
+          if (key) { onChangeCallback(json::object({{key, static_cast<int>(value)}})); }
           onFireEventCallback(ImGuiModal::EventCallbackPayload{
               .type   = "change",
-              .nodeId = node["nodeId"],
+              .nodeId = nodeId,
               .value  = value,
           });
         }
       } else if (dataType == "float") {
-        std::optional<float> min = node["min"];
-        std::optional<float> max = node["max"];
-        float step  = node["step"].is_null() ? 0.1f : node["step"].get<float>();
-        float value = node["value"].get<float>();
+        float value = valueCommon;
 
-        if (ImGui::InputFloat(
-                id, &value, step, 1.0f, "%.2f", ImGuiInputTextFlags_CharsNoBlank
-            )) {
-          if (min.has_value() && value < min.value()) value = min.value();
-          if (max.has_value() && value > max.value()) value = max.value();
+        onChanged = ImGui::InputFloat(id, &value, step, 1.0f, "%.2f");
+        if (onChanged) {
+          valueCommon = std::clamp(value, min.value_or(INT_MIN), max.value_or(INT_MAX));
+
           if (key) { onChangeCallback(json::object({{key, value}})); }
           onFireEventCallback(ImGuiModal::EventCallbackPayload{
               .type   = "change",
-              .nodeId = node["nodeId"],
+              .nodeId = nodeId,
               .value  = value,
           });
         }
       }
+
+      if (!onChanged && ImGui::IsItemActive() && ImGui::IsItemFocused()) {
+        std::cout << "active" << std::endl;
+        ImGui::SetItemKeyOwner(ImGuiKey_UpArrow);
+        ImGui::SetItemKeyOwner(ImGuiKey_DownArrow);
+
+        bool isUpArrow   = ImGui::IsKeyPressed(ImGuiKey_UpArrow);
+        bool isDownArrow = ImGui::IsKeyPressed(ImGuiKey_DownArrow);
+
+        if (isUpArrow) {
+          valueCommon += step;
+        } else if (isDownArrow) {
+          valueCommon -= step;
+        }
+
+        valueCommon =
+            std::clamp(valueCommon, min.value_or(INT_MIN), max.value_or(INT_MAX));
+        valueCommon = dataType == "int" ? std::floor(valueCommon) : valueCommon;
+
+        std::cout << "isUpArrow: " << isUpArrow << ", isDownArrow: " << isDownArrow
+                  << std::endl;
+        std::cout << "original: " << original << ", valueCommon: " << valueCommon
+                  << ", step: " << step << std::endl;
+
+        if (isUpArrow || isDownArrow) {
+          if (key) { onChangeCallback(json::object({{key, valueCommon}})); }
+          onFireEventCallback(ImGuiModal::EventCallbackPayload{
+              .type   = "change",
+              .nodeId = nodeId,
+              .value  = valueCommon,
+          });
+        }
+      }
+
     } else if (type == "colorInput") {
       std::string popupId  = std::string(id) + "-color_picker_popup";
       json        rawValue = node["value"];
@@ -145,7 +202,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
           onFireEventCallback(ImGuiModal::EventCallbackPayload{
               .type   = "change",
-              .nodeId = node["nodeId"],
+              .nodeId = nodeId,
               .value  = jsonValue,
           });
         }
@@ -162,37 +219,35 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
         onFireEventCallback(ImGuiModal::EventCallbackPayload{
             .type   = "change",
-            .nodeId = node["nodeId"],
+            .nodeId = nodeId,
             .value  = value,
         });
       }
 
     } else if (type == "slider") {
       std::string dataType = node["dataType"].get<std::string>();
+      float       min      = node["min"].get<float>();
+      float       max      = node["max"].get<float>();
 
       if (dataType == "int") {
-        int min   = node["min"];
-        int max   = node["max"];
         int value = node["value"];
 
-        if (ImGui::SliderInt(id, &value, min, max)) {
+        if (ImGui::SliderInt(id, &value, (int)min, (int)max)) {
           if (key) { onChangeCallback(json({{key, value}})); }
           onFireEventCallback(ImGuiModal::EventCallbackPayload{
               .type   = "change",
-              .nodeId = node["nodeId"],
+              .nodeId = nodeId,
               .value  = value,
           });
         }
       } else if (dataType == "float") {
-        float min   = node["min"];
-        float max   = node["max"];
         float value = node["value"];
 
         if (ImGui::SliderFloat(id, &value, min, max)) {
           if (key) { onChangeCallback(json({{key, value}})); }
           onFireEventCallback(ImGuiModal::EventCallbackPayload{
               .type   = "change",
-              .nodeId = node["nodeId"],
+              .nodeId = nodeId,
               .value  = value,
           });
         }
@@ -202,17 +257,22 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       int selectedIndex            = node["selectedIndex"].get<int>();
       auto [labels, values, count] = parseSelectOptions(node["options"]);
 
+      ui::styleStack.pushColor(ImGuiCol_FrameBg, currentTheme.gray50);
+      ui::styleStack.pushColor(ImGuiCol_FrameBgHovered, currentTheme.gray200);
+      ui::styleStack.pushColor(ImGuiCol_FrameBgActive, currentTheme.gray100);
       if (ImGui::Combo(id, &selectedIndex, labels, count, -1)) {
         if (key) { onChangeCallback(json({{key, values[selectedIndex]}})); }
 
         onFireEventCallback(ImGuiModal::EventCallbackPayload{
             .type   = "change",
-            .nodeId = node["nodeId"],
+            .nodeId = nodeId,
             .value  = values[selectedIndex],
         });
       }
+      ui::styleStack.clear();
 
       freeSelectOptions(labels, count);
+
     } else if (type == "separator") {
       ImGui::Separator();
     }
@@ -247,6 +307,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   }
 
   ui::keyStack.reset();
+
   ImGui::End();
 
   return resultStatus;

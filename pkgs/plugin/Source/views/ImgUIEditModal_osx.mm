@@ -141,7 +141,9 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   ImGuiIO& io = ImGui::GetIO();
   io.IniFilename = nullptr; // Disable .ini file
 
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable
+  io.ConfigInputTextCursorBlink = true;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.ConfigMacOSXBehaviors  = true;
   // io.Fonts->AddFontDefault();
   ImGuiSetSpectrumTheme();
 
@@ -311,10 +313,10 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
     | ImGuiWindowFlags_NoCollapse
     | ImGuiWindowFlags_NoBackground
     | ImGuiWindowFlags_NoBringToFrontOnFocus
-    | ImGuiWindowFlags_NoNav
+    // | ImGuiWindowFlags_NoNav
     | ImGuiWindowFlags_NoSavedSettings
-    | ImGuiWindowFlags_AlwaysAutoResize
-    | ImGuiWindowFlags_NoFocusOnAppearing;
+    | ImGuiWindowFlags_AlwaysAutoResize;
+    // | ImGuiWindowFlags_NoFocusOnAppearing;
 
     self->isFirstSized = false;
 
@@ -361,8 +363,9 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   ImGui::NewFrame();
 
   ImVec2 windowSize;
+  json toRenderTree = self->currentRenderTree;
   resultStatus = AiDenoImGuiRenderComponents(
-    self->currentRenderTree,
+    toRenderTree,
     windowFlags,
     onChangeCallback,
     onFireEventCallback,

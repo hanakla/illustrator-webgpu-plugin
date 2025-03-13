@@ -22,8 +22,14 @@ namespace {
     // Danger,
   };
 
+  enum class ButtonSize {
+    Normal,
+    Sm,
+  };
+
   struct ButtonProps {
-    ImVec2     size = ImVec2(0, 0);
+    // ImVec2     size = ImVec2(0, 0);
+    ButtonSize size = ButtonSize::Normal;
     ButtonKind kind = ButtonKind::Default;
   };
 
@@ -107,21 +113,26 @@ namespace {
 
     bool Button(const char* label, ButtonProps props) {
       styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
-      styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
+
+      if (props.size == ButtonSize::Sm) {
+        styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
+      } else if (props.size == ButtonSize::Normal) {
+        styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
+      }
 
       if (props.kind == ButtonKind::Primary) {
         styleStack.pushColor(ImGuiCol_Button, currentTheme.accentColor500);
         styleStack.pushColor(ImGuiCol_ButtonHovered, currentTheme.accentColor600);
         styleStack.pushColor(ImGuiCol_ButtonActive, currentTheme.accentColor700);
       } else if (props.kind == ButtonKind::Default) {
-        styleStack.pushVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
+        styleStack.pushVar(ImGuiStyleVar_FrameBorderSize, .5f);
         styleStack.pushColor(ImGuiCol_Border, currentTheme.gray600);
         styleStack.pushColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         styleStack.pushColor(ImGuiCol_ButtonHovered, currentTheme.gray500);
         styleStack.pushColor(ImGuiCol_ButtonActive, currentTheme.gray600);
       }
 
-      bool result = ImGui::Button(label, props.size);
+      bool result = ImGui::Button(label);
       styleStack.clear();
 
       return result;

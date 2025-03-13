@@ -19,7 +19,8 @@
     "jsr:@std/path@0.217": "0.217.0",
     "jsr:@std/path@0.217.0": "0.217.0",
     "jsr:@std/path@1.0.8": "1.0.8",
-    "jsr:@std/path@^1.0.8": "1.0.8"
+    "jsr:@std/path@^1.0.8": "1.0.8",
+    "jsr:@webview/webview@*": "0.9.0"
   },
   "jsr": {
     "@denosaurs/plug@1.0.5": {
@@ -96,7 +97,34 @@
     },
     "@std/path@1.0.8": {
       "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
+    },
+    "@webview/webview@0.9.0": {
+      "integrity": "a7c4d787aafa43258ff287f71a16679d5ca3d9b65e5d232c60c3985f9ab3e0ce",
+      "dependencies": [
+        "jsr:@denosaurs/plug@1"
+      ]
     }
+  },
+  "redirects": {
+    "https://esm.sh/@types/react-reconciler@~0.31.0/constants.d.ts": "https://esm.sh/@types/react-reconciler@0.31.0/constants.d.ts",
+    "https://esm.sh/@types/react-reconciler@~0.31.0/index.d.ts": "https://esm.sh/@types/react-reconciler@0.31.0/index.d.ts",
+    "https://esm.sh/@types/react@~18.2.79/index.d.ts": "https://esm.sh/@types/react@18.2.79/index.d.ts",
+    "https://esm.sh/@types/react@~18.3.18/index.d.ts": "https://esm.sh/@types/react@18.3.18/index.d.ts",
+    "https://esm.sh/@types/scheduler@~0.23.0/index.d.ts": "https://esm.sh/@types/scheduler@0.23.0/index.d.ts",
+    "https://esm.sh/react@^18.2.0?target=denonext": "https://esm.sh/react@18.3.1?target=denonext",
+    "https://esm.sh/scheduler@^0.23.0?target=denonext": "https://esm.sh/scheduler@0.23.2?target=denonext"
+  },
+  "remote": {
+    "https://esm.sh/react-reconciler@0.29.0": "0ee27ee3c7784637c8ca86e416ee878b1023325c386065e208e7d2a5739b63f7",
+    "https://esm.sh/react-reconciler@0.29.0/constants": "b055390a99b4ef69d321be9810066830d91dc39f72d06aa4922484dbb89742c8",
+    "https://esm.sh/react-reconciler@0.29.0/denonext/constants.mjs": "0b63fbe9aa8c6d37f8c59f9648bba6d57a89425bcb5842b06fcbfa49e20e35e7",
+    "https://esm.sh/react-reconciler@0.29.0/denonext/react-reconciler.mjs": "fde76e9dfd791f72eb9f34d7f933c7f9f5095f7a0ff46d435b2177e6e9691c02",
+    "https://esm.sh/react@18.2.0": "fed8aeb7d240bb42a2167c9c7c6e842e128c7630cbcb08c4d61c9c1926f89c75",
+    "https://esm.sh/react@18.2.0/denonext/react.mjs": "a986c2876dc2f73879f395e677dc34cb751f260e69db16364810655f884df173",
+    "https://esm.sh/react@18.3.1/denonext/react.mjs": "fec8d5ab4ffa55c8b563abc31060c3dc0205699aff20beec4aba0311efdcc1a0",
+    "https://esm.sh/react@18.3.1?target=denonext": "336090fd1f03fdb9530dce4ac761717b5e1e1a630c775bac184ec4ee0809cf89",
+    "https://esm.sh/scheduler@0.23.2/denonext/scheduler.mjs": "8a1a8a363eb417fc8d40f6b15132e8964320782d7169e68fc6ac98b8b8c201eb",
+    "https://esm.sh/scheduler@0.23.2?target=denonext": "5f446c6d28a83c4c3905e964a311ac654bf1b1993bb6647ee731a592068d5a1a"
   },
   "workspace": {
     "packageJson": {

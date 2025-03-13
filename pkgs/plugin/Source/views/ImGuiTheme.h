@@ -10,13 +10,19 @@ void ImGuiSetSpectrumTheme() {
   ImGuiStyle&    style  = ImGui::GetStyle();
   ImVec4*        colors = style.Colors;
 
+  style.WindowPadding           = ImVec2(kMyDialogPadding, kMyDialogPadding);
   colors[ImGuiCol_Text]         = tokens.gray900;
   colors[ImGuiCol_TextDisabled] = tokens.gray600;
-  // colors[ImGuiCol_WindowBg]             = tokens.backgroundBaseColor;
+  colors[ImGuiCol_WindowBg]     = tokens.backgroundBaseColor;
+
+  style.PopupBorderSize    = 1.0f;
+  colors[ImGuiCol_PopupBg] = tokens.backgroundLayer1Color;
+
   // colors[ImGuiCol_ChildBg]              = tokens.backgroundLayer1Color;
-  // colors[ImGuiCol_PopupBg]              = tokens.backgroundLayer2Color;
+
   // colors[ImGuiCol_Border]               = tokens.colorAreaBorderColor;
   // colors[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  style.FramePadding              = ImVec2(5, 5);
   colors[ImGuiCol_FrameBg]        = tokens.gray50;
   colors[ImGuiCol_FrameBgHovered] = tokens.gray50;
   colors[ImGuiCol_FrameBgActive]  = tokens.gray50;
@@ -41,15 +47,11 @@ void ImGuiSetSpectrumTheme() {
   // colors[ImGuiCol_SliderGrabActive]     = tokens.accentColor700;
   // colors[ImGuiCol_TextSelectedBg]       = tokens.accentColor600;
 
-  // 他のカスタム設定（サイズなど）
-  style.WindowPadding =
-      ImVec2(kMyDialogPadding, kMyDialogPadding);  // ウィンドウのパディング
-  style.FramePadding   = ImVec2(5, 5);             // フレームのパディング
-  style.ItemSpacing    = ImVec2(12, 8);            // アイテム間のスペース
-  style.ScrollbarSize  = 12.0f;                    // スクロールバーのサイズ
-  style.GrabMinSize    = 10.0f;                    // グラブサイズ
-  style.WindowRounding = 4.0f;                     // ウィンドウの角丸
-  style.FrameRounding  = 4.0f;                     // フレームの角丸
-  style.GrabRounding   = 4.0f;                     // グラブの角丸
-  style.PopupRounding  = 4.0f;                     // ポップアップの角丸
+  style.ItemSpacing    = ImVec2(12, 8);  // アイテム間のスペース
+  style.ScrollbarSize  = 12.0f;          // スクロールバーのサイズ
+  style.GrabMinSize    = 10.0f;          // グラブサイズ
+  style.WindowRounding = 4.0f;           // ウィンドウの角丸
+  style.FrameRounding  = 4.0f;           // フレームの角丸
+  style.GrabRounding   = 4.0f;           // グラブの角丸
+  style.PopupRounding  = 4.0f;           // ポップアップの角丸
 }

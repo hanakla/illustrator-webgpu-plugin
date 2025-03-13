@@ -155,8 +155,9 @@ export async function editLiveEffectFireCallback(
     type: "click" | "change";
     nodeId: string;
     value: any;
-  }
-): Promise<{ updated: false } | { updated: true; params: any }> {
+  },
+  params: any
+): Promise<{ updated: false } | { updated: true; params: any; tree: UINode }> {
   const effect = findEffect(effectId);
   const node = nodeState?.nodeMap.get(event.nodeId);
 
@@ -166,7 +167,10 @@ export async function editLiveEffectFireCallback(
     };
   }
 
-  const current = nodeState.latestParams;
+  console.log(params);
+
+  nodeState.latestParams = structuredClone(params);
+  const current = params;
   switch (event.type) {
     case "click": {
       if ("onClick" in node && typeof node.onClick === "function")
@@ -192,6 +196,7 @@ export async function editLiveEffectFireCallback(
   return {
     updated: true,
     params: nodeState.latestParams,
+    tree: getEffectViewNode(effectId, nodeState.latestParams),
   };
 }
 

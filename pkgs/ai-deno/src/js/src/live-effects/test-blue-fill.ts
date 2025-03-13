@@ -126,7 +126,7 @@ export const testBlueFill = definePlugin({
             text: "Save input as PNG",
             onClick: async () => {
               if (!global.lastInput) {
-                alert("No input data");
+                console.log("No input data");
                 return;
               }
 
@@ -177,24 +177,34 @@ export const testBlueFill = definePlugin({
         }),
 
         ui.text({ text: "Padding" }),
-        ui.slider({
-          label: "Padding",
-          key: "padding",
-          dataType: "int",
-          min: 0,
-          max: 100,
-          value: params.padding,
-        }),
+        ui.group({ direction: "row" }, [
+          ui.slider({
+            key: "padding",
+            dataType: "int",
+            min: 0,
+            max: 100,
+            value: params.padding,
+          }),
+          ui.numberInput({
+            dataType: "int",
+            key: "padding",
+            value: params.padding,
+            min: 0,
+            max: 100,
+            step: 1,
+          }),
+        ]),
 
         ui.text({ text: "Opacity" }),
         ui.slider({
-          label: "Opacity",
           key: "opacity",
           dataType: "float",
           min: 0,
           max: 100,
           value: params.opacity,
         }),
+
+        ui.textInput({ value: "Hello" }),
       ]);
     },
   },

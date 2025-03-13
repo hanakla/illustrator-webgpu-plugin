@@ -25,7 +25,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "508817D309F0C9AD0071BF1A"
-               BuildableName = "Illustrator Deno.aip"
+               BuildableName = "IllustratorDeno.aip"
                BlueprintName = "AiDenoPlugin"
                ReferencedContainer = "container:AiDenoPlugin.xcodeproj">
             </BuildableReference>
@@ -51,6 +51,7 @@
       allowLocationSimulation = "YES">
       <PathRunnable
          runnableDebuggingMode = "0"
+         BundleIdentifier = "com.adobe.illustrator"
          FilePath = "/Applications/Adobe Illustrator 2025/Adobe Illustrator.app">
       </PathRunnable>
    </LaunchAction>
@@ -64,7 +65,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "508817D309F0C9AD0071BF1A"
-            BuildableName = "Illustrator Deno.aip"
+            BuildableName = "IllustratorDeno.aip"
             BlueprintName = "AiDenoPlugin"
             ReferencedContainer = "container:AiDenoPlugin.xcodeproj">
          </BuildableReference>

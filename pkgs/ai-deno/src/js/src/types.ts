@@ -1,3 +1,4 @@
+import { z } from "npm:zod@3.24.2";
 import { UINode } from "./ui/nodes.ts";
 
 export type ParameterSchema = {

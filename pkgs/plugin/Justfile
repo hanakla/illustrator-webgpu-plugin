@@ -6,3 +6,9 @@ run-ai:
 [macos]
 watch:
     sudo deno run -A ./watch-sync.ts
+
+cpp-sandbox:
+    clear
+    clang++ -std=c++23 ./Sandbox/main.cpp -o /tmp/sandbox_bin
+    /tmp/sandbox_bin
+    rm /tmp/sandbox_bin

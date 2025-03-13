@@ -185,6 +185,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   try {
     AIArtHandle art = message->art;
 
+    csl("%s", suai::art::artToJSON(art).dump(2).c_str());
+
     print_AIArt(art, "art");
 
     suai::ArtSet* artSet = new suai::ArtSet();
@@ -466,10 +468,12 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     ImGuiModal::OnFireEventCallback modalOnFireEventCallback =
         [this, &pluginParams, &currentParams, &error, &message, &nodeTree,
          &modal](json event) {
-          csl("onFireEvent: %s", event.dump().c_str());
+          csl("onFireEvent: %s state: %s", event.dump().c_str(),
+              currentParams.dump().c_str());
 
           ai_deno::JsonFunctionResult* result = ai_deno::edit_live_effect_fire_event(
-              this->aiDenoMain, pluginParams.effectName.c_str(), event.dump().c_str()
+              this->aiDenoMain, pluginParams.effectName.c_str(), event.dump().c_str(),
+              currentParams.dump().c_str()
           );
 
           if (!result->success) {
@@ -480,39 +484,29 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
 
           {
             json res     = json::parse(result->json);
-            bool updated = res["updated"].get<bool>();
+            bool updated = res["updated"];
             csl("Result: %s", res.dump().c_str());
             ai_deno::dispose_json_function_result(result);
 
             if (!updated) return;
 
-            csl("Updated");
-
             currentParams       = res["params"];
             pluginParams.params = currentParams;
 
-            csl("Updated params: %s", currentParams.dump().c_str());
+            csl("eventCallbackResult: %s", res.dump(2).c_str());
+
+            nodeTree = res["tree"];
+            modal->updateRenderTree(nodeTree);
+
+            csl("updated");
 
             // Rerender preview
             error = this->putParamsToDictionaly(message->parameters, pluginParams);
             CHKERR();
             error = sAILiveEffect->UpdateParameters(message->context);
             CHKERR();
-          }
 
-          // rerender tree
-          {
-            ai_deno::JsonFunctionResult* result = ai_deno::get_live_effect_view_tree(
-                this->aiDenoMain, pluginParams.effectName.c_str(),
-                currentParams.dump().c_str()
-            );
-
-            if (!result->success) {
-              std::cerr << "Failed to get live effect view tree" << std::endl;
-            } else {
-              nodeTree = json::parse(result->json);
-              modal->updateRenderTree(nodeTree);
-            }
+            csl("paramssss");
           }
         };
 
@@ -520,7 +514,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
         [&pluginParams, &isModalOpened, &isPreviewed, &error, &message, &currentParams,
          &nodeTree, &modal, this](json patch) {
           if (isModalOpened) isPreviewed = true;
-          csl("onChange: {}", patch.dump().c_str());
+          csl("onChange:", patch.dump().c_str());
 
           currentParams.merge_patch(patch);
           pluginParams.params = currentParams;
