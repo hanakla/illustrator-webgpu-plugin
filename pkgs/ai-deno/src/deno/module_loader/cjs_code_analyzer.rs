@@ -1,12 +1,11 @@
 // Copyright 2025 AI Deno authors. MIT license.
 // Copyright (c) 2022 Richard Carson
 
-use deno_ast::{MediaType, ModuleExportsAndReExports, ModuleSpecifier, ParsedSource};
+use deno_ast::{MediaType, ModuleSpecifier, ParsedSource};
 use deno_error::JsErrorBox;
 use deno_graph::{CapturingEsParser, DefaultEsParser, EsParser, ParseOptions, ParsedSourceStore};
 use deno_resolver::{cjs::CjsTracker, npm::DenoInNpmPackageChecker};
 use deno_runtime::deno_fs;
-use node_resolver::analyze::EsmAnalysisMode;
 use node_resolver::analyze::{CjsAnalysis, CjsAnalysisExports};
 use serde::Deserialize;
 use serde::Serialize;
@@ -50,23 +49,13 @@ impl AiDenoCjsCodeAnalyzer {
         println!("analyze_cjs: {:?}", analysis);
 
         match analysis {
-            CliCjsAnalysis::Esm => Ok(CjsAnalysis::<'b>::Esm(source, None)),
-            CliCjsAnalysis::EsmAnalysis(ex) => Ok(CjsAnalysis::Esm(
-                source,
-                Some(CjsAnalysisExports {
-                    exports: ex.exports,
-                    reexports: ex.reexports,
-                }),
-            )),
-            CliCjsAnalysis::Cjs(ex) => {
+            CliCjsAnalysis::Esm => Ok(CjsAnalysis::<'b>::Esm(source)),
+            CliCjsAnalysis::Cjs { exports, reexports } => {
                 println!(
                     "cjs analysis: exports: {:?}, reexports: {:?}",
-                    ex.exports, ex.reexports
+                    exports, reexports
                 );
-                Ok(CjsAnalysis::Cjs(CjsAnalysisExports {
-                    exports: ex.exports,
-                    reexports: ex.reexports,
-                }))
+                Ok(CjsAnalysis::Cjs(CjsAnalysisExports { exports, reexports }))
             }
         }
     }
@@ -86,10 +75,10 @@ impl AiDenoCjsCodeAnalyzer {
 
         let media_type = MediaType::from_specifier(specifier);
         if media_type == MediaType::Json {
-            return Ok(CliCjsAnalysis::Cjs(ModuleExportsAndReExports {
+            return Ok(CliCjsAnalysis::Cjs {
                 exports: vec![],
                 reexports: vec![],
-            }));
+            });
         }
 
         let cjs_tracker = self.cjs_tracker.clone();
@@ -125,10 +114,10 @@ impl AiDenoCjsCodeAnalyzer {
             if is_cjs {
                 let analysis = source.analyze_cjs();
 
-                CliCjsAnalysis::Cjs(ModuleExportsAndReExports {
+                CliCjsAnalysis::Cjs {
                     exports: analysis.exports,
                     reexports: analysis.reexports,
-                })
+                }
             } else {
                 CliCjsAnalysis::Esm
             }
@@ -149,7 +138,6 @@ impl node_resolver::analyze::CjsCodeAnalyzer for AiDenoCjsCodeAnalyzer {
         &self,
         specifier: &ModuleSpecifier,
         source: Option<Cow<'b, str>>,
-        esm_analysis_mode: EsmAnalysisMode,
     ) -> Result<CjsAnalysis<'b>, JsErrorBox> {
         let source = match source {
             Some(source) => source,
@@ -182,11 +170,11 @@ impl node_resolver::analyze::CjsCodeAnalyzer for AiDenoCjsCodeAnalyzer {
 pub enum CliCjsAnalysis {
     /// The module was found to be an ES module.
     Esm,
-    /// The module was found to be an ES module and
-    /// it was analyzed for imports and exports.
-    EsmAnalysis(ModuleExportsAndReExports),
     /// The module was CJS.
-    Cjs(ModuleExportsAndReExports),
+    Cjs {
+        exports: Vec<String>,
+        reexports: Vec<String>,
+    },
 }
 
 #[derive(Clone)]
