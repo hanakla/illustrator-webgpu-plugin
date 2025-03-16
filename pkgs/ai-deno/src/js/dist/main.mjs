@@ -287,32 +287,25 @@ async function createGPUDevice(options = {}, initializer) {
   let inits = null;
   const init = async () => {
     var _a2;
-    const adapter = await navigator.gpu.requestAdapter(options.adapter);
-    if (!adapter) {
+    const adapter2 = await navigator.gpu.requestAdapter(options.adapter);
+    if (!adapter2) {
       throw new Error("No adapter found");
     }
-    const device = await adapter.requestDevice({
+    const device2 = await adapter2.requestDevice({
       ...options.device,
       requiredLimits: {
         ...(_a2 = options.device) == null ? void 0 : _a2.requiredLimits,
-        maxTextureDimension2D: adapter.limits.maxTextureDimension2D
+        maxTextureDimension2D: adapter2.limits.maxTextureDimension2D
       }
     });
-    device.addEventListener("uncapturederror", (e) => {
+    device2.addEventListener("uncapturederror", (e) => {
       console.error(e.error);
     });
-    console.log({
-      device,
-      deviceProto: Object.getOwnPropertyDescriptor(
-        Object.getPrototypeOf(device)
-      ),
-      lost: device.lost
-    });
-    device.lost.then(async () => {
+    device2.lost.then(async () => {
       deviceRef = await init();
     });
-    inits = await initializer(device);
-    return device;
+    inits = await initializer(device2);
+    return device2;
   };
   deviceRef = await init();
   logger.info("Create GPU Device: ", ((_a = options.device) == null ? void 0 : _a.label) ?? "<<unnamed>>");
@@ -446,7 +439,7 @@ var chromaticAberration = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, async (device) => {
+      return await createGPUDevice({}, async (device2) => {
         const code = `
           struct Params {
             dpi: f32,
@@ -587,18 +580,18 @@ var chromaticAberration = definePlugin({
               textureStore(resultTexture, id.xy, finalColor);
           }
       `;
-        const shader = device.createShaderModule({
+        const shader = device2.createShaderModule({
           label: "Chromatic Aberration Shader",
           code
         });
         const defs = makeShaderDataDefinitions(code);
-        device.addEventListener("lost", (e) => {
+        device2.addEventListener("lost", (e) => {
           console.error(e);
         });
-        device.addEventListener("uncapturederror", (e) => {
+        device2.addEventListener("uncapturederror", (e) => {
           console.error(e.error);
         });
-        const pipeline = device.createComputePipeline({
+        const pipeline = device2.createComputePipeline({
           label: "Chromatic Aberration Pipeline",
           layout: "auto",
           compute: {
@@ -606,10 +599,10 @@ var chromaticAberration = definePlugin({
             entryPoint: "computeMain"
           }
         });
-        return { device, pipeline, defs };
+        return { device: device2, pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
+    doLiveEffect: async ({ device: device2, pipeline, defs }, params, imgData, env) => {
       console.log("Chromatic Aberration V1", params);
       const dpiScale = env.dpi / env.baseDpi;
       imgData = await paddingImageData(
@@ -621,25 +614,25 @@ var chromaticAberration = definePlugin({
       imgData = await addWebGPUAlignmentPadding(imgData);
       const width = imgData.width;
       const height = imgData.height;
-      const texture = device.createTexture({
+      const texture = device2.createTexture({
         label: "Input Texture",
         size: [width, height],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         label: "Result Texture",
         size: [width, height],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
       const uniformValues = makeStructuredView(defs.uniforms.params);
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -653,7 +646,7 @@ var chromaticAberration = definePlugin({
         opacity: params.opacity / 100,
         blendMode: params.blendMode === "over" ? 0 : 1
       });
-      const bindGroup = device.createBindGroup({
+      const bindGroup = device2.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -675,19 +668,19 @@ var chromaticAberration = definePlugin({
           }
         ]
       });
-      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-      const stagingBuffer = device.createBuffer({
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const stagingBuffer = device2.createBuffer({
         label: "Staging Buffer",
         size: width * height * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
-      device.queue.writeTexture(
+      device2.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: width * 4, rowsPerImage: height },
         [width, height]
       );
-      const commandEncoder = device.createCommandEncoder({
+      const commandEncoder = device2.createCommandEncoder({
         label: "Main Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -705,7 +698,7 @@ var chromaticAberration = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: width * 4 },
         [width, height]
       );
-      device.queue.submit([commandEncoder.finish()]);
+      device2.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -1050,7 +1043,7 @@ var directionalBlur = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, (device) => {
+      return await createGPUDevice({}, (device2) => {
         const code = `
           struct Params {
             strength: f32,
@@ -1186,21 +1179,21 @@ var directionalBlur = definePlugin({
             textureStore(resultTexture, id.xy, finalColor);
           }
         `;
-        const shader = device.createShaderModule({
+        const shader = device2.createShaderModule({
           code
         });
         const defs = makeShaderDataDefinitions2(code);
-        const pipeline = device.createComputePipeline({
+        const pipeline = device2.createComputePipeline({
           layout: "auto",
           compute: {
             module: shader,
             entryPoint: "computeMain"
           }
         });
-        return { device, pipeline, defs };
+        return { device: device2, pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device, pipeline, defs }, params, imgData) => {
+    doLiveEffect: async ({ device: device2, pipeline, defs }, params, imgData) => {
       try {
         imgData = await paddingImageData(imgData, Math.ceil(params.strength));
         const outputWidth = imgData.width;
@@ -1208,17 +1201,17 @@ var directionalBlur = definePlugin({
         imgData = await addWebGPUAlignmentPadding(imgData);
         const inputWidth = imgData.width;
         const inputHeight = imgData.height;
-        const texture = device.createTexture({
+        const texture = device2.createTexture({
           size: [inputWidth, inputHeight],
           format: "rgba8unorm",
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
         });
-        const resultTexture = device.createTexture({
+        const resultTexture = device2.createTexture({
           size: [inputWidth, inputHeight],
           format: "rgba8unorm",
           usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
         });
-        const sampler = device.createSampler({
+        const sampler = device2.createSampler({
           magFilter: "linear",
           minFilter: "linear",
           addressModeU: "clamp-to-edge",
@@ -1231,7 +1224,7 @@ var directionalBlur = definePlugin({
           blurModeValue = 2;
         }
         const uniformValues = makeStructuredView2(defs.uniforms.params);
-        const uniformBuffer = device.createBuffer({
+        const uniformBuffer = device2.createBuffer({
           size: uniformValues.arrayBuffer.byteLength,
           // 6 * 4 bytes
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -1244,8 +1237,8 @@ var directionalBlur = definePlugin({
           fadeOut: params.fadeOut || 0,
           fadeDirection: params.fadeDirection || 0
         });
-        device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-        const bindGroup = device.createBindGroup({
+        device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+        const bindGroup = device2.createBindGroup({
           layout: pipeline.getBindGroupLayout(0),
           entries: [
             {
@@ -1266,13 +1259,13 @@ var directionalBlur = definePlugin({
             }
           ]
         });
-        device.queue.writeTexture(
+        device2.queue.writeTexture(
           { texture },
           imgData.data,
           { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
           [inputWidth, inputHeight]
         );
-        const commandEncoder = device.createCommandEncoder();
+        const commandEncoder = device2.createCommandEncoder();
         const computePass = commandEncoder.beginComputePass();
         computePass.setPipeline(pipeline);
         computePass.setBindGroup(0, bindGroup);
@@ -1281,7 +1274,7 @@ var directionalBlur = definePlugin({
           Math.ceil(inputHeight / 16)
         );
         computePass.end();
-        const stagingBuffer = device.createBuffer({
+        const stagingBuffer = device2.createBuffer({
           size: inputWidth * inputHeight * 4,
           usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
         });
@@ -1295,7 +1288,7 @@ var directionalBlur = definePlugin({
           [inputWidth, inputHeight]
         );
         const commandBuffer = commandEncoder.finish();
-        device.queue.submit([commandBuffer]);
+        device2.queue.submit([commandBuffer]);
         await stagingBuffer.mapAsync(GPUMapMode.READ);
         const copyArrayBuffer = stagingBuffer.getMappedRange();
         const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -1413,8 +1406,8 @@ var kirakiraGlow = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, async (device) => {
-        const shader = device.createShaderModule({
+      return await createGPUDevice({}, async (device2) => {
+        const shader = device2.createShaderModule({
           label: "Optimized Glow Effect Shader",
           code: `
           struct Params {
@@ -1558,7 +1551,7 @@ var kirakiraGlow = definePlugin({
           }
           `
         });
-        const downsamplePipeline = device.createComputePipeline({
+        const downsamplePipeline = device2.createComputePipeline({
           label: "Downsample Pipeline",
           layout: "auto",
           compute: {
@@ -1566,7 +1559,7 @@ var kirakiraGlow = definePlugin({
             entryPoint: "computeDownsample"
           }
         });
-        const horizontalBlurPipeline = device.createComputePipeline({
+        const horizontalBlurPipeline = device2.createComputePipeline({
           label: "Horizontal Blur Pipeline",
           layout: "auto",
           compute: {
@@ -1574,7 +1567,7 @@ var kirakiraGlow = definePlugin({
             entryPoint: "computeHorizontalBlur"
           }
         });
-        const verticalBlurPipeline = device.createComputePipeline({
+        const verticalBlurPipeline = device2.createComputePipeline({
           label: "Vertical Blur Pipeline",
           layout: "auto",
           compute: {
@@ -1582,7 +1575,7 @@ var kirakiraGlow = definePlugin({
             entryPoint: "computeVerticalBlur"
           }
         });
-        const compositePipeline = device.createComputePipeline({
+        const compositePipeline = device2.createComputePipeline({
           label: "Composite Pipeline",
           layout: "auto",
           compute: {
@@ -1599,7 +1592,7 @@ var kirakiraGlow = definePlugin({
       });
     },
     doLiveEffect: async ({
-      device,
+      device: device2,
       downsamplePipeline,
       horizontalBlurPipeline,
       verticalBlurPipeline,
@@ -1622,30 +1615,30 @@ var kirakiraGlow = definePlugin({
       }
       const smallWidth = Math.ceil(inputWidth / downscaleFactor);
       const smallHeight = Math.ceil(inputHeight / downscaleFactor);
-      const inputTexture = device.createTexture({
+      const inputTexture = device2.createTexture({
         label: "KiraKiraGlow_InputTexture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
       });
-      const tempTexture = device.createTexture({
+      const tempTexture = device2.createTexture({
         label: "KiraKiraGlow_TempTexture",
         size: [smallWidth, smallHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         label: "KiraKiraGlow_ResultTexture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         label: "KiraKiraGlow_Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         label: "KiraKiraGlow_UniformBuffer",
         size: 24,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -1658,14 +1651,14 @@ var kirakiraGlow = definePlugin({
       uniformView.setUint32(12, inputWidth, true);
       uniformView.setUint32(16, inputHeight, true);
       uniformView.setUint32(20, downscaleFactor, true);
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device.queue.writeTexture(
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device2.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const downsampleBindGroup = device.createBindGroup({
+      const downsampleBindGroup = device2.createBindGroup({
         label: "KiraKiraGlow_DownsampleBindGroup",
         layout: downsamplePipeline.getBindGroupLayout(0),
         entries: [
@@ -1674,7 +1667,7 @@ var kirakiraGlow = definePlugin({
           { binding: 3, resource: sampler }
         ]
       });
-      const horizontalBlurBindGroup = device.createBindGroup({
+      const horizontalBlurBindGroup = device2.createBindGroup({
         label: "KiraKiraGlow_HorizontalBlurBindGroup",
         layout: horizontalBlurPipeline.getBindGroupLayout(0),
         entries: [
@@ -1684,12 +1677,12 @@ var kirakiraGlow = definePlugin({
           { binding: 4, resource: { buffer: uniformBuffer } }
         ]
       });
-      const horizontalBlurReadGroup = device.createBindGroup({
+      const horizontalBlurReadGroup = device2.createBindGroup({
         label: "KiraKiraGlow_HorizontalBlurReadGroup",
         layout: horizontalBlurPipeline.getBindGroupLayout(1),
         entries: [{ binding: 0, resource: tempTexture.createView() }]
       });
-      const verticalBlurBindGroup = device.createBindGroup({
+      const verticalBlurBindGroup = device2.createBindGroup({
         label: "KiraKiraGlow_VerticalBlurBindGroup",
         layout: verticalBlurPipeline.getBindGroupLayout(0),
         entries: [
@@ -1699,12 +1692,12 @@ var kirakiraGlow = definePlugin({
           { binding: 4, resource: { buffer: uniformBuffer } }
         ]
       });
-      const verticalBlurReadGroup = device.createBindGroup({
+      const verticalBlurReadGroup = device2.createBindGroup({
         label: "KiraKiraGlow_VerticalBlurReadGroup",
         layout: verticalBlurPipeline.getBindGroupLayout(1),
         entries: [{ binding: 1, resource: resultTexture.createView() }]
       });
-      const compositeBindGroup = device.createBindGroup({
+      const compositeBindGroup = device2.createBindGroup({
         label: "KiraKiraGlow_CompositeBindGroup",
         layout: compositePipeline.getBindGroupLayout(0),
         entries: [
@@ -1715,12 +1708,12 @@ var kirakiraGlow = definePlugin({
           { binding: 4, resource: { buffer: uniformBuffer } }
         ]
       });
-      const compositeReadGroup = device.createBindGroup({
+      const compositeReadGroup = device2.createBindGroup({
         label: "KiraKiraGlow_CompositeReadGroup",
         layout: compositePipeline.getBindGroupLayout(1),
         entries: [{ binding: 0, resource: tempTexture.createView() }]
       });
-      const commandEncoder = device.createCommandEncoder({
+      const commandEncoder = device2.createCommandEncoder({
         label: "KiraKiraGlow_CommandEncoder"
       });
       {
@@ -1774,7 +1767,7 @@ var kirakiraGlow = definePlugin({
         );
         computePass.end();
       }
-      const stagingBuffer = device.createBuffer({
+      const stagingBuffer = device2.createBuffer({
         label: "KiraKiraGlow_StagingBuffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -1784,7 +1777,7 @@ var kirakiraGlow = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device.queue.submit([commandEncoder.finish()]);
+      device2.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -1876,15 +1869,15 @@ var dithering = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device = await navigator.gpu.requestAdapter().then(
-        (adapter) => adapter.requestDevice({
+      const device2 = await navigator.gpu.requestAdapter().then(
+        (adapter2) => adapter2.requestDevice({
           label: "WebGPU(Dithering Effect)"
         })
       );
-      if (!device) {
+      if (!device2) {
         throw new Error("Failed to create WebGPU device");
       }
-      const shader = device.createShaderModule({
+      const shader = device2.createShaderModule({
         label: "Dithering Effect Shader",
         code: `
           struct Params {
@@ -1975,13 +1968,13 @@ var dithering = definePlugin({
           }
       `
       });
-      device.addEventListener("lost", (e) => {
+      device2.addEventListener("lost", (e) => {
         console.error(e);
       });
-      device.addEventListener("uncapturederror", (e) => {
+      device2.addEventListener("uncapturederror", (e) => {
         console.error(e.error);
       });
-      const pipeline = device.createComputePipeline({
+      const pipeline = device2.createComputePipeline({
         label: "Dithering Effect Pipeline",
         layout: "auto",
         compute: {
@@ -1989,37 +1982,37 @@ var dithering = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      return { device, pipeline };
+      return { device: device2, pipeline };
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+    doLiveEffect: async ({ device: device2, pipeline }, params, imgData) => {
       console.log("Dithering Effect V1", params);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const texture = device.createTexture({
+      const texture = device2.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         label: "Params Buffer",
         size: 16,
         // 4 * float32
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const bindGroup = device.createBindGroup({
+      const bindGroup = device2.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -2041,7 +2034,7 @@ var dithering = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device.createBuffer({
+      const stagingBuffer = device2.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -2057,14 +2050,14 @@ var dithering = definePlugin({
       uniformView.setUint32(8, patternTypeValue, true);
       let colorModeValue = params.colorMode === "monochrome" ? 0 : 1;
       uniformView.setUint32(12, colorModeValue, true);
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device.queue.writeTexture(
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device2.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device.createCommandEncoder({
+      const commandEncoder = device2.createCommandEncoder({
         label: "Main Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -2082,7 +2075,7 @@ var dithering = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device.queue.submit([commandEncoder.finish()]);
+      device2.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -2234,7 +2227,7 @@ var glitch = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, (device) => {
+      return await createGPUDevice({}, (device2) => {
         const code = `
           struct Params {
             intensity: f32,
@@ -2305,11 +2298,11 @@ var glitch = definePlugin({
             textureStore(resultTexture, id.xy, outColor);
           }
         `;
-        const shader = device.createShaderModule({
+        const shader = device2.createShaderModule({
           code
         });
         const defs = makeShaderDataDefinitions3(code);
-        const pipeline = device.createComputePipeline({
+        const pipeline = device2.createComputePipeline({
           compute: {
             module: shader,
             entryPoint: "computeMain"
@@ -2319,7 +2312,7 @@ var glitch = definePlugin({
         return { pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
+    doLiveEffect: async ({ device: device2, pipeline, defs }, params, imgData, env) => {
       imgData = await paddingImageData(
         imgData,
         params.colorShift + params.bias
@@ -2330,23 +2323,23 @@ var glitch = definePlugin({
       const inputWidth = imgData.width;
       const inputHeight = imgData.height;
       const uniformValues = makeStructuredView3(defs.uniforms.params);
-      const texture = device.createTexture({
+      const texture = device2.createTexture({
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         magFilter: "linear",
         minFilter: "linear",
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge"
       });
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
@@ -2360,7 +2353,7 @@ var glitch = definePlugin({
         dpi: env.dpi,
         baseDpi: env.baseDpi
       });
-      const bindGroup = device.createBindGroup({
+      const bindGroup = device2.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: texture.createView() },
@@ -2369,18 +2362,18 @@ var glitch = definePlugin({
           { binding: 3, resource: { buffer: uniformBuffer } }
         ]
       });
-      const stagingBuffer = device.createBuffer({
+      const stagingBuffer = device2.createBuffer({
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
-      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-      device.queue.writeTexture(
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      device2.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device.createCommandEncoder();
+      const commandEncoder = device2.createCommandEncoder();
       const computePass = commandEncoder.beginComputePass();
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
@@ -2394,7 +2387,7 @@ var glitch = definePlugin({
         [inputWidth, inputHeight]
       );
       const commandBuffer = commandEncoder.finish();
-      device.queue.submit([commandBuffer]);
+      device2.queue.submit([commandBuffer]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -2496,15 +2489,15 @@ var outlineEffect = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device = await navigator.gpu.requestAdapter().then(
-        (adapter) => adapter.requestDevice({
+      const device2 = await navigator.gpu.requestAdapter().then(
+        (adapter2) => adapter2.requestDevice({
           label: "WebGPU(Outline Effect Morphology)"
         })
       );
-      if (!device) {
+      if (!device2) {
         throw new Error("Failed to create WebGPU device");
       }
-      const boundaryShader = device.createShaderModule({
+      const boundaryShader = device2.createShaderModule({
         label: "Outline Boundary Detection Shader",
         code: `
           struct Params {
@@ -2607,7 +2600,7 @@ var outlineEffect = definePlugin({
           }
         `
       });
-      const morphologyShader = device.createShaderModule({
+      const morphologyShader = device2.createShaderModule({
         label: "Outline Morphology Shader",
         code: `
           struct Params {
@@ -2754,13 +2747,13 @@ var outlineEffect = definePlugin({
           }
         `
       });
-      device.addEventListener("lost", (e) => {
+      device2.addEventListener("lost", (e) => {
         console.error(e);
       });
-      device.addEventListener("uncapturederror", (e) => {
+      device2.addEventListener("uncapturederror", (e) => {
         console.error(e.error);
       });
-      const boundaryPipeline = device.createComputePipeline({
+      const boundaryPipeline = device2.createComputePipeline({
         label: "Outline Boundary Pipeline",
         layout: "auto",
         compute: {
@@ -2768,7 +2761,7 @@ var outlineEffect = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      const morphologyPipeline = device.createComputePipeline({
+      const morphologyPipeline = device2.createComputePipeline({
         label: "Outline Morphology Pipeline",
         layout: "auto",
         compute: {
@@ -2776,45 +2769,45 @@ var outlineEffect = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      return { device, boundaryPipeline, morphologyPipeline };
+      return { device: device2, boundaryPipeline, morphologyPipeline };
     },
-    doLiveEffect: async ({ device, boundaryPipeline, morphologyPipeline }, params, imgData, env) => {
+    doLiveEffect: async ({ device: device2, boundaryPipeline, morphologyPipeline }, params, imgData, env) => {
       console.log("Outline Effect Morphology V1", params);
       const padding = Math.ceil(params.size);
       imgData = await paddingImageData(imgData, padding);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const inputTexture = device.createTexture({
+      const inputTexture = device2.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const intermediateTexture = device.createTexture({
+      const intermediateTexture = device2.createTexture({
         label: "Intermediate Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         label: "Params Buffer",
         size: 96,
         // 必要なサイズ (フロート4個 + vec4 + パディング)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const boundaryBindGroup = device.createBindGroup({
+      const boundaryBindGroup = device2.createBindGroup({
         label: "Boundary Detection Bind Group",
         layout: boundaryPipeline.getBindGroupLayout(0),
         entries: [
@@ -2836,7 +2829,7 @@ var outlineEffect = definePlugin({
           }
         ]
       });
-      const morphologyBindGroup = device.createBindGroup({
+      const morphologyBindGroup = device2.createBindGroup({
         label: "Morphology Bind Group",
         layout: morphologyPipeline.getBindGroupLayout(0),
         entries: [
@@ -2862,7 +2855,7 @@ var outlineEffect = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device.createBuffer({
+      const stagingBuffer = device2.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -2876,14 +2869,14 @@ var outlineEffect = definePlugin({
       uniformView.setFloat32(28, params.color.a, true);
       uniformView.setFloat32(32, env.dpi, true);
       uniformView.setFloat32(36, env.baseDpi, true);
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device.queue.writeTexture(
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device2.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device.createCommandEncoder({
+      const commandEncoder = device2.createCommandEncoder({
         label: "Morphology Outline Command Encoder"
       });
       const boundaryPass = commandEncoder.beginComputePass({
@@ -2911,7 +2904,7 @@ var outlineEffect = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device.queue.submit([commandEncoder.finish()]);
+      device2.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -3084,15 +3077,15 @@ var halftone = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device = await navigator.gpu.requestAdapter().then(
-        (adapter) => adapter.requestDevice({
+      const device2 = await navigator.gpu.requestAdapter().then(
+        (adapter2) => adapter2.requestDevice({
           label: "WebGPU(Halftone Effect)"
         })
       );
-      if (!device) {
+      if (!device2) {
         throw new Error("Failed to create WebGPU device");
       }
-      const shader = device.createShaderModule({
+      const shader = device2.createShaderModule({
         label: "Halftone Effect Shader",
         code: `
           struct Params {
@@ -3205,13 +3198,13 @@ var halftone = definePlugin({
           }
         `
       });
-      device.addEventListener("lost", (e) => {
+      device2.addEventListener("lost", (e) => {
         console.error(e);
       });
-      device.addEventListener("uncapturederror", (e) => {
+      device2.addEventListener("uncapturederror", (e) => {
         console.error(e.error);
       });
-      const pipeline = device.createComputePipeline({
+      const pipeline = device2.createComputePipeline({
         label: "Halftone Effect Pipeline",
         layout: "auto",
         compute: {
@@ -3219,36 +3212,36 @@ var halftone = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      return { device, pipeline };
+      return { device: device2, pipeline };
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData, env) => {
+    doLiveEffect: async ({ device: device2, pipeline }, params, imgData, env) => {
       console.log("Halftone Effect", params);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const inputTexture = device.createTexture({
+      const inputTexture = device2.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         label: "Params Buffer",
         size: 48,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const bindGroup = device.createBindGroup({
+      const bindGroup = device2.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -3270,7 +3263,7 @@ var halftone = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device.createBuffer({
+      const stagingBuffer = device2.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -3287,14 +3280,14 @@ var halftone = definePlugin({
       view.setFloat32(36, params.color.g, true);
       view.setFloat32(40, params.color.b, true);
       view.setFloat32(44, params.color.a, true);
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device.queue.writeTexture(
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device2.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device.createCommandEncoder({
+      const commandEncoder = device2.createCommandEncoder({
         label: "Halftone Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -3312,7 +3305,7 @@ var halftone = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device.queue.submit([commandEncoder.finish()]);
+      device2.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -3534,7 +3527,7 @@ var fluidDistortion = definePlugin({
         {
           device: { label: "WebGPU(Fluid Distortion)" }
         },
-        (device) => {
+        (device2) => {
           const code = `
             struct Params {
               inputDpi: i32,
@@ -3717,18 +3710,18 @@ var fluidDistortion = definePlugin({
                 textureStore(resultTexture, id.xy, finalColor);
             }
           `;
-          const shader = device.createShaderModule({
+          const shader = device2.createShaderModule({
             label: "Fluid Distortion Shader",
             code
           });
           const pipelineDef = makeShaderDataDefinitions4(code);
-          device.addEventListener("lost", (e) => {
+          device2.addEventListener("lost", (e) => {
             console.error(e);
           });
-          device.addEventListener("uncapturederror", (e) => {
+          device2.addEventListener("uncapturederror", (e) => {
             console.error(e.error);
           });
-          const pipeline = device.createComputePipeline({
+          const pipeline = device2.createComputePipeline({
             label: "Fluid Distortion Pipeline",
             layout: "auto",
             compute: {
@@ -3736,11 +3729,11 @@ var fluidDistortion = definePlugin({
               entryPoint: "computeMain"
             }
           });
-          return { device, pipeline, pipelineDef };
+          return { device: device2, pipeline, pipelineDef };
         }
       );
     },
-    doLiveEffect: async ({ device, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
+    doLiveEffect: async ({ device: device2, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
       console.log("Fluid Distortion V1", params);
       const dpiRatio = baseDpi / dpi;
       const inverseDpiRatio = dpi / baseDpi;
@@ -3765,19 +3758,19 @@ var fluidDistortion = definePlugin({
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const texture = device.createTexture({
+      const texture = device2.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device.createTexture({
+      const resultTexture = device2.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device.createSampler({
+      const sampler = device2.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear",
@@ -3785,7 +3778,7 @@ var fluidDistortion = definePlugin({
         addressModeV: "repeat"
       });
       const uniformValues = makeStructuredView4(pipelineDef.uniforms.params);
-      const uniformBuffer = device.createBuffer({
+      const uniformBuffer = device2.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -3800,8 +3793,8 @@ var fluidDistortion = definePlugin({
         colorShift: params.colorShift * dpiRatio,
         timeSeed: params.timeSeed
       });
-      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-      const bindGroup = device.createBindGroup({
+      device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const bindGroup = device2.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -3823,20 +3816,20 @@ var fluidDistortion = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device.createBuffer({
+      const stagingBuffer = device2.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
       console.time("writeTexture");
-      device.queue.writeTexture(
+      device2.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
       console.timeEnd("writeTexture");
-      const commandEncoder = device.createCommandEncoder({
+      const commandEncoder = device2.createCommandEncoder({
         label: "Main Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -3855,7 +3848,7 @@ var fluidDistortion = definePlugin({
         [inputWidth, inputHeight]
       );
       console.time("execute");
-      device.queue.submit([commandEncoder.finish()]);
+      device2.queue.submit([commandEncoder.finish()]);
       console.timeEnd("execute");
       console.time("mapAsync");
       await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -3902,6 +3895,9 @@ var effectInits = /* @__PURE__ */ new Map();
 var allEffectPlugins = Object.fromEntries(
   allPlugins.filter((p) => !!p.liveEffect).map((p) => [p.id, p])
 );
+var adapter = await navigator.gpu.requestAdapter();
+var device = await adapter.requestDevice();
+console.log("device", device, device.lost);
 try {
   await Promise.all(
     Object.values(allEffectPlugins).map(

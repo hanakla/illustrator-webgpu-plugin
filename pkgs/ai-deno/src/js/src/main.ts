@@ -48,6 +48,11 @@ const allEffectPlugins: Record<
     .map((p) => [p.id, p])
 );
 
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter!.requestDevice();
+
+console.log("device", device, device.lost);
+
 // Initialize effects at Startup of Illustrator
 try {
   await Promise.all(

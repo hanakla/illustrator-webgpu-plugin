@@ -34,14 +34,6 @@ export async function createGPUDevice<
       console.error(e.error);
     });
 
-    console.log({
-      device,
-      deviceProto: Object.getOwnPropertyDescriptor(
-        Object.getPrototypeOf(device)
-      ),
-      lost: device.lost,
-    });
-
     device.lost.then(async () => {
       deviceRef = await init();
     });
