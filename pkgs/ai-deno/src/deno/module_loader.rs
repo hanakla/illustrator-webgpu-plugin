@@ -30,7 +30,7 @@ use sys_traits::{impls::RealSys, FsRead};
 
 mod cache_provider;
 
-use crate::{dai_println, deno_println};
+use crate::deno_println;
 
 use super::transpiler::transpile;
 
@@ -208,7 +208,7 @@ impl AiDenoModuleLoader {
                 .iter()
                 .any(|s| specifier.as_str().starts_with(s));
 
-            dai_println!("extension_transpiler: {}, {}", specifier, allowed);
+            deno_println!("extension_transpiler: {}, {}", specifier, allowed);
             if allowed {
                 Ok((source, None))
             } else {

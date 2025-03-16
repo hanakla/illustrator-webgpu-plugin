@@ -6,7 +6,7 @@ import {
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./utils.ts";
+} from "./_utils.ts";
 
 export const dithering = definePlugin({
   id: "dithering-effect-v1",
@@ -37,11 +37,11 @@ export const dithering = definePlugin({
         default: 100,
       },
     },
-    editLiveEffectParameters: (params) => {
+    onEditParameters: (params) => {
       // Normalize parameters if needed
       return params;
     },
-    liveEffectScaleParameters(params, scaleFactor) {
+    onScaleParams(params, scaleFactor) {
       // Scale parameters
       return {
         threshold: params.threshold,
@@ -50,7 +50,7 @@ export const dithering = definePlugin({
         colorMode: params.colorMode,
       };
     },
-    liveEffectInterpolate: (paramsA, paramsB, t) => {
+    onInterpolate: (paramsA, paramsB, t) => {
       // Interpolate parameters
       return {
         threshold: lerp(paramsA.threshold, paramsB.threshold, t),

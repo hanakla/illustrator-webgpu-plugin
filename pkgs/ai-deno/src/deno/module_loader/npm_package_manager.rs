@@ -13,7 +13,7 @@ use deno_npm_cache::{NpmCache, NpmCacheSetting, RegistryInfoProvider};
 use deno_package_json::{NodeModuleKind, PackageJson};
 use deno_runtime::deno_core::serde_json;
 use deno_semver::package::PackageNv;
-use deno_semver::{StackString, Version};
+use deno_semver::{StackString, Version, VersionReq};
 use flate2::read::GzDecoder;
 use futures::TryFutureExt;
 use node_resolver::errors::{
@@ -363,6 +363,7 @@ impl NpmPackageManager {
             subpath
         );
 
+        // Resolve version from closest package.json if not specified
         if version.is_none() {
             if let Some(referrer) = referrer {
                 let referrer = referrer.path().unwrap();
@@ -407,9 +408,16 @@ impl NpmPackageManager {
                     deno_println!("all_deps: {:?}", all_deps);
 
                     for (dep_name, dep_version) in all_deps {
-                        let dep_ver = Version::parse_from_npm(dep_version.as_str()).unwrap();
+                        let dep_ver = VersionReq::parse_from_npm(dep_version.as_str()).unwrap();
                         if dep_name.clone() == name {
-                            version = Some(dep_ver.to_string());
+                            // TODO: Resolve semver matched version
+                            let regex = regex::Regex::new(r"[\^~]").unwrap();
+                            version = Some(
+                                regex
+                                    .replace_all(dep_ver.to_string().as_str(), "")
+                                    .to_string(),
+                            );
+                            version = Some(version.unwrap());
                             break;
                         }
                     }
@@ -417,6 +425,7 @@ impl NpmPackageManager {
             }
         }
 
+        // If dependency is not resolved, try to fetch latest version from npm registry
         if version.is_none() {
             deno_println!("version is none: name: {}", name);
             let pkg_info = self

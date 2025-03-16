@@ -1,7 +1,13 @@
+use deno_core::FastString;
 use deno_error::JsErrorBox;
 use deno_runtime::deno_core::{extension, op2, OpState};
 use serde::{Deserialize, Serialize};
+use std::ffi::{CStr, CString};
+use std::string;
 use std::{cell::RefCell, rc::Rc};
+
+use crate::ai_deno_get_user_locale;
+use crate::{ai_deno_alert, dai_println};
 
 pub struct AiExtOptions {
     // pub alert: fn(&str),
@@ -15,7 +21,7 @@ struct AlertRequest {
 
 extension!(
     ai_user_extension,
-    ops = [op_ai_alert, op_aideno_debug_enabled],
+    ops = [op_ai_alert, op_ai_deno_get_user_locale, op_aideno_debug_enabled],
     esm_entry_point = "ext:ai-deno/init",
     esm = [
         dir "src/ext",
@@ -33,16 +39,25 @@ extension!(
 fn op_ai_alert(state: Rc<RefCell<OpState>>, #[string] message: String) -> Result<(), JsErrorBox> {
     // let request = state.borrow_mut().take::<AiExtOptions>();
 
-    // (request.alert)(
-    //     serde_json::to_string(&AlertRequest {
-    //         kind: "alert".to_string(),
-    //         message,
-    //     })
-    //     .unwrap()
-    //     .as_str(),
-    // );
+    dai_println!("op_ai_alert: {}", message);
+
+    unsafe {
+        ai_deno_alert(CString::new(message).unwrap().as_ptr());
+    }
 
     Ok(())
+}
+
+#[op2]
+#[string]
+fn op_ai_deno_get_user_locale(state: Rc<RefCell<OpState>>) -> String {
+    let locale = unsafe {
+        CStr::from_ptr(ai_deno_get_user_locale())
+            .to_string_lossy()
+            .to_string()
+    };
+
+    locale.to_string()
 }
 
 #[op2(fast)]

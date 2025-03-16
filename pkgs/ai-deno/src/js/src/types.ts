@@ -36,11 +36,11 @@ type SchemaStringNode = {
 
 type SchemaColorNode = {
   type: "color";
-  enum?: RGBAColor[];
-  default: RGBAColor;
+  enum?: ColorRGBA[];
+  default: ColorRGBA;
 };
 
-export type RGBAColor = {
+export type ColorRGBA = {
   /** 0 to 1 */
   r: number;
   /** 0 to 1 */
@@ -69,9 +69,9 @@ export type ParameterSchemaToState<T extends ParameterSchema> = {
       ? T[K]["enum"][number]
       : string
     : T[K]["type"] extends "color"
-    ? T[K]["enum"] extends RGBAColor[]
+    ? T[K]["enum"] extends ColorRGBA[]
       ? T[K]["enum"][number]
-      : RGBAColor
+      : ColorRGBA
     : never;
 };
 
@@ -115,6 +115,11 @@ export type DoLiveEffectPayload = {
   data: Uint8ClampedArray;
 };
 
+export type LiveEffectEnv = {
+  baseDpi: number;
+  dpi: number;
+};
+
 export type AIPlugin<
   T extends ParameterSchema,
   TInit,
@@ -142,18 +147,19 @@ export type AIPlugin<
     doLiveEffect: (
       init: NoInfer<TInit>,
       params: Params,
-      input: DoLiveEffectPayload
+      input: DoLiveEffectPayload,
+      env: LiveEffectEnv
     ) => Promise<DoLiveEffectPayload>;
 
     /**
      * Called when the EditLiveEffect callback is triggered.
      * This function must return a normalized parameter object.
      */
-    editLiveEffectParameters?: (nextParams: Params) => Params;
+    onEditParameters?: (nextParams: Params) => Params;
 
-    liveEffectAdjustColors: (
+    onAdjustColors: (
       params: Params,
-      adjustColor: (color: RGBAColor) => RGBAColor
+      adjustColor: (color: ColorRGBA) => ColorRGBA
     ) => Params;
 
     /**
@@ -167,10 +173,7 @@ export type AIPlugin<
      * @param scaleFactor The scale factor (0.0 to 1.0).
      * @returns The scaled parameters or null if the parameters are not scaled.
      */
-    liveEffectScaleParameters: (
-      params: Params,
-      scaleFactor: number
-    ) => Params | null;
+    onScaleParams: (params: Params, scaleFactor: number) => Params | null;
 
     // liveEffectAdjustColors(params: T, colorAdjustment: any): T
 
@@ -184,7 +187,7 @@ export type AIPlugin<
      * @param paramsB The second set of parameters.
      * @param percent The interpolation percent (0.0 to 1.0).
      */
-    liveEffectInterpolate: (
+    onInterpolate: (
       paramsA: Params,
       paramsB: Params,
       percent: number

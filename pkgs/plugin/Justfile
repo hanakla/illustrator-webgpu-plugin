@@ -1,7 +1,7 @@
 [macos]
 run-ai:
     echo '' > illustrator.log
-    RUST_BACKTRACE=1 /Applications/Adobe\ Illustrator\ 2025/Adobe\ Illustrator.app/Contents/MacOS/Adobe\ Illustrator 2>&1 | tee -a illustrator.log
+    RUST_BACKTRACE=full /Applications/Adobe\ Illustrator\ 2025/Adobe\ Illustrator.app/Contents/MacOS/Adobe\ Illustrator 2>&1 | tee -a illustrator.log
 
 [macos]
 watch:

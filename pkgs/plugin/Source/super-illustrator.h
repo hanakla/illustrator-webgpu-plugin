@@ -32,12 +32,15 @@ extern "C" AIPreferenceSuite* sAIPref;
 #endif
 
 namespace suai {
+  // Headers
   template <typename KeyType, typename ValueType>
   static ValueType mapValue(
       const KeyType&                                key,
       const ValueType&                              defaultValue,
       const std::unordered_map<KeyType, ValueType>& valueMap
   );
+
+  std::string getErrorName(ASErr& err);
 
   namespace str {
     char* strdup(const std::string& str) {
@@ -498,6 +501,12 @@ namespace suai {
       return attr;
     }
 
+    std::string
+    preinsertionFlightCheck(AIArtHandle art, AIPaintOrder paintOrder, AIArtHandle prep) {
+      AIErr error = sAIArt->PreinsertionFlightCheck(art, paintOrder, prep);
+      return suai::getErrorName(error);
+    }
+
     json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth);
 
     json __boundingBoxToJson(const AIRealRect& bounds) {
@@ -755,8 +764,8 @@ namespace suai {
       const char* _p = str::strdup(prefix.c_str());
       const char* _s = str::strdup(suffix.c_str());
 
-        auto point = AIPoint{-1234, -12345};
-        sAIPref->GetPointPreference(_p, _s, &point);
+      auto point = AIPoint{-1234, -12345};
+      sAIPref->GetPointPreference(_p, _s, &point);
 
       if (point.h == -1234 && point.v == -12345) { return defaultValue; }
 

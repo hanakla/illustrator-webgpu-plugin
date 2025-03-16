@@ -21,8 +21,9 @@ jobs:
         run: |
           rustup target add aarch64-apple-darwin
 
-      - name: Cache Cargo registry and index
-        uses: actions/cache@v4
+      - name: Restore Cargo cache
+        id: cargo-cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
@@ -30,16 +31,15 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-        if: always()
 
-      - name: Cache Rust build artifacts
-        uses: actions/cache@v4
+      - name: Restore build artifacts cache
+        id: build-cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/pkgs/ai-deno/target
           key: ${{ runner.os }}-macos-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
           restore-keys: |
             ${{ runner.os }}-macos-target-
-        if: always()
 
       - name: Build for macOS (aarch64)
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
@@ -55,6 +55,24 @@ jobs:
           # ヘッダーファイルをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes/
 
+      # ビルドが失敗してもCargoキャッシュを保存
+      - name: Save Cargo cache
+        if: always() && steps.cargo-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-cache-restore.outputs.cache-primary-key || runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # ビルドが成功した場合のみビルド成果物をキャッシュ
+      - name: Save build artifacts cache
+        if: success() && steps.build-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/pkgs/ai-deno/target
+          key: ${{ steps.build-cache-restore.outputs.cache-primary-key || runner.os }}-macos-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
+
       - name: Upload macOS binding artifact
         id: upload-macos-binding
         uses: actions/upload-artifact@v4
@@ -67,7 +85,7 @@ jobs:
           compression-level: 3
           if-no-files-found: error
 
-  # Windows向けRustバインディングをクロスコンパイル
+  # Windows向けRustバインディングをビルド
   build_windows_rust_binding:
     name: Build Windows ai-deno bindings
     runs-on: windows-latest
@@ -79,8 +97,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo registry and index
-        uses: actions/cache@v4
+      - name: Restore Cargo cache
+        id: cargo-cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
@@ -89,14 +108,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Cache Rust build artifacts
-        uses: actions/cache@v4
+      - name: Restore build artifacts cache
+        id: build-cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/pkgs/ai-deno/target
           key: ${{ runner.os }}-windows-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
           restore-keys: |
             ${{ runner.os }}-windows-target-
-        if: always()
 
       - name: Build for Windows
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
@@ -111,6 +130,24 @@ jobs:
           cp ${{ github.workspace }}/pkgs/ai-deno/target/release/ai_deno.lib ${{ github.workspace }}/pkgs/ai-deno/target/windows/
           # ヘッダーファイルをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
+
+      # ビルドが失敗してもCargoキャッシュを保存
+      - name: Save Cargo cache
+        if: always() && steps.cargo-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-cache-restore.outputs.cache-primary-key || runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # ビルドが成功した場合のみビルド成果物をキャッシュ
+      - name: Save build artifacts cache
+        if: success() && steps.build-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/pkgs/ai-deno/target
+          key: ${{ steps.build-cache-restore.outputs.cache-primary-key || runner.os }}-windows-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
 
       - name: Upload Windows binding artifact
         id: upload-windows-binding

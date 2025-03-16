@@ -142,7 +142,8 @@
         "npm:@types/react@19",
         "npm:react-dom@19",
         "npm:react@19",
-        "npm:vite@^6.1.1"
+        "npm:vite@^6.1.1",
+        "npm:webgpu-utils@^1.10.0"
       ]
     }
   }

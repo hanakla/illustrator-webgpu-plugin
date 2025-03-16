@@ -4,17 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
-    <script src="./index.tsx" type="module"></script>
+    <script src="./src/index.tsx" type="module"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      }
+    </style>
   </head>
   <body>
-    <div style="display: flex">
+    <div style="display: flex; padding: 8px">
       <div id="controls" style="flex: none"></div>
-      <canvas
-        id="canvas"
-        width="800"
-        height="600"
-        style="background-color: #aaa"
-      ></canvas>
+      <div>
+        <span
+          id="size-label"
+          style="
+            display: flex;
+            font-size: 12px;
+            margin-top: calc((1em - 1lh) / 2);
+            margin-bottom: 4px;
+          "
+        ></span>
+        <canvas
+          id="canvas"
+          width="800"
+          height="600"
+          style="max-width: 600px; max-height: 600px; object-fit: contain"
+        ></canvas>
+      </div>
     </div>
   </body>
 </html>

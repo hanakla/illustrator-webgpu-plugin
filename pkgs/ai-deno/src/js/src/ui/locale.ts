@@ -25,7 +25,7 @@ export type TransFn<T extends Localized<any>> = {
   //   : string;
 };
 
-export function useTranslator<T extends Localized<any>>(texts: T) {
+export function createTranslator<T extends Localized<any>>(texts: T) {
   const locale = getLocale(Object.keys(texts), "en");
 
   return <K extends keyof T["en"]>(

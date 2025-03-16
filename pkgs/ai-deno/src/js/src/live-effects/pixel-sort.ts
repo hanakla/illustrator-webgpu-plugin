@@ -1,51 +1,44 @@
 import { StyleFilterFlag } from "../types.ts";
-import { definePlugin } from "../types.ts";
-import { useTranslator } from "../ui/locale.ts";
+import { definePlugin, ColorRGBA } from "../types.ts";
+import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./utils.ts";
+  parseColorCode,
+  toColorCode,
+} from "./_utils.ts";
 
-const t = useTranslator({
+// 翻訳テキスト
+const t = createTranslator({
   en: {
-    title: "Pixel Sort V1",
-    algorithm: "Algorithm",
-    methodBitonic: "Bitonic Sort",
-    sortAmount: "Sort Amount",
+    title: "Bitonic Pixel Sort",
     direction: "Direction",
-    horizontal: "Horizontal",
     vertical: "Vertical",
+    horizontal: "Horizontal",
+    strength: "Sort Strength",
     startPoint: "Start Point",
-    thresholdMin: "Threshold Min",
-    thresholdMax: "Threshold Max",
-    sliceLeft: "Slice Left",
-    sliceRight: "Slice Right",
-    sliceTop: "Slice Top",
-    sliceBottom: "Slice Bottom",
+    iterations: "Iterations",
+    completeSort: "Complete Sort",
+    invertLight: "Invert Light",
   },
   ja: {
-    title: "ピクセルソート V1",
-    algorithm: "アルゴリズム",
-    methodBitonic: "バイトニックソート",
-    sortAmount: "ソート量",
+    title: "バイトニックピクセルソート",
     direction: "方向",
-    horizontal: "横",
     vertical: "縦",
-    startPoint: "始点",
-    thresholdMin: "輝度のしきい値(最小)",
-    thresholdMax: "輝度のしきい値(最大)",
-    sliceLeft: "左スライス",
-    sliceRight: "右スライス",
-    sliceTop: "上スライス",
-    sliceBottom: "下スライス",
+    horizontal: "横",
+    strength: "ソート量",
+    startPoint: "スタート地点",
+    iterations: "反復回数",
+    completeSort: "完全ソート",
+    invertLight: "明暗反転",
   },
 });
 
 export const pixelSort = definePlugin({
-  id: "pixel-sort-v1",
+  id: "bitonic-pixel-sort",
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
@@ -54,190 +47,137 @@ export const pixelSort = definePlugin({
       features: [],
     },
     paramSchema: {
-      sortAmount: {
-        type: "real",
-        default: 50.0,
-      },
       direction: {
         type: "string",
         enum: ["horizontal", "vertical"],
         default: "horizontal",
       },
+      strength: {
+        type: "real",
+        default: 0.5,
+      },
       startPoint: {
         type: "real",
         default: 0.0,
       },
-      thresholdMin: {
-        type: "real",
-        default: 0.0,
+      iterations: {
+        type: "int",
+        default: 1,
+        min: 1,
+        max: 10,
       },
-      thresholdMax: {
-        type: "real",
-        default: 100.0,
+      completeSort: {
+        type: "bool",
+        default: false,
       },
-      algorithm: {
-        type: "string",
-        enum: ["bitonic"],
-        default: "bitonic",
-      },
-      sliceLeft: {
-        type: "real",
-        default: 0.0,
-      },
-      sliceRight: {
-        type: "real",
-        default: 100.0,
-      },
-      sliceTop: {
-        type: "real",
-        default: 0.0,
-      },
-      sliceBottom: {
-        type: "real",
-        default: 100.0,
+      invertLight: {
+        type: "bool",
+        default: false,
       },
     },
-    editLiveEffectParameters: (params) => {
+    onEditParameters: (params) => {
+      // パラメータの正規化
       return {
-        sortAmount: Math.max(0, Math.min(100, params.sortAmount)),
-        direction: params.direction,
-        startPoint: Math.max(0, Math.min(100, params.startPoint)),
-        thresholdMin: Math.max(0, Math.min(100, params.thresholdMin)),
-        thresholdMax: Math.max(0, Math.min(100, params.thresholdMax)),
-        algorithm: params.algorithm,
-        sliceLeft: Math.max(0, Math.min(100, params.sliceLeft)),
-        sliceRight: Math.max(0, Math.min(100, params.sliceRight)),
-        sliceTop: Math.max(0, Math.min(100, params.sliceTop)),
-        sliceBottom: Math.max(0, Math.min(100, params.sliceBottom)),
+        ...params,
+        strength: Math.max(0, Math.min(1, params.strength)),
+        startPoint: Math.max(0, Math.min(1, params.startPoint)),
+        iterations: Math.max(1, Math.min(10, Math.floor(params.iterations))),
       };
     },
-    liveEffectScaleParameters(params, scaleFactor) {
+    onAdjustColors: (params, adjustColor) => {
       return params;
     },
-    liveEffectInterpolate: (paramsA, paramsB, t) => {
+    onScaleParams(params, scaleFactor) {
+      return params;
+    },
+    onInterpolate: (paramsA, paramsB, t) => {
+      // パラメータ補間
       return {
-        sortAmount: lerp(paramsA.sortAmount, paramsB.sortAmount, t),
         direction: t < 0.5 ? paramsA.direction : paramsB.direction,
+        strength: lerp(paramsA.strength, paramsB.strength, t),
         startPoint: lerp(paramsA.startPoint, paramsB.startPoint, t),
-        thresholdMin: lerp(paramsA.thresholdMin, paramsB.thresholdMin, t),
-        thresholdMax: lerp(paramsA.thresholdMax, paramsB.thresholdMax, t),
-        algorithm: "bitonic",
-        sliceLeft: lerp(paramsA.sliceLeft, paramsB.sliceLeft, t),
-        sliceRight: lerp(paramsA.sliceRight, paramsB.sliceRight, t),
-        sliceTop: lerp(paramsA.sliceTop, paramsB.sliceTop, t),
-        sliceBottom: lerp(paramsA.sliceBottom, paramsB.sliceBottom, t),
+        iterations: t < 0.5 ? paramsA.iterations : paramsB.iterations,
+        completeSort: t < 0.5 ? paramsA.completeSort : paramsB.completeSort,
+        invertLight: t < 0.5 ? paramsA.invertLight : paramsB.invertLight,
       };
     },
 
-    renderUI: (params) => {
+    renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("algorithm") }),
-          ui.select({
-            key: "algorithm",
-            label: t("algorithm"),
-            value: params.algorithm,
-            options: [{ value: "bitonic", label: t("methodBitonic") }],
-          }),
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("sortAmount") }),
-          ui.slider({
-            key: "sortAmount",
-            label: t("sortAmount"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.sortAmount,
-          }),
-        ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("direction") }),
           ui.select({
             key: "direction",
-            label: t("direction"),
             value: params.direction,
             options: [
-              { value: "horizontal", label: t("horizontal") },
-              { value: "vertical", label: t("vertical") },
+              { label: t("horizontal"), value: "horizontal" },
+              { label: t("vertical"), value: "vertical" },
             ],
           }),
         ]),
         ui.group({ direction: "col" }, [
+          ui.text({ text: t("strength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "strength",
+              dataType: "float",
+              min: 0,
+              max: 1,
+              value: params.strength,
+            }),
+            ui.numberInput({
+              key: "strength",
+              dataType: "float",
+              value: params.strength,
+            }),
+          ]),
+        ]),
+        ui.group({ direction: "col" }, [
           ui.text({ text: t("startPoint") }),
-          ui.slider({
-            key: "startPoint",
-            label: t("startPoint"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.startPoint,
-          }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "startPoint",
+              dataType: "float",
+              min: 0,
+              max: 1,
+              value: params.startPoint,
+            }),
+            ui.numberInput({
+              key: "startPoint",
+              dataType: "float",
+              value: params.startPoint,
+            }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t("thresholdMin") }),
-          ui.slider({
-            key: "thresholdMin",
-            label: t("thresholdMin"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.thresholdMin,
+          ui.text({ text: "Iterations" }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "iterations",
+              dataType: "int",
+              min: 1,
+              max: 10,
+              value: params.iterations,
+            }),
+            ui.numberInput({
+              key: "iterations",
+              dataType: "int",
+              value: params.iterations,
+            }),
+          ]),
+        ]),
+        ui.group({ direction: "row" }, [
+          ui.checkbox({
+            key: "completeSort",
+            label: "Complete Sort",
+            value: params.completeSort,
           }),
         ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("thresholdMax") }),
-          ui.slider({
-            key: "thresholdMax",
-            label: t("thresholdMax"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.thresholdMax,
-          }),
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("sliceLeft") }),
-          ui.slider({
-            key: "sliceLeft",
-            label: t("sliceLeft"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.sliceLeft,
-          }),
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("sliceRight") }),
-          ui.slider({
-            key: "sliceRight",
-            label: t("sliceRight"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.sliceRight,
-          }),
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("sliceTop") }),
-          ui.slider({
-            key: "sliceTop",
-            label: t("sliceTop"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.sliceTop,
-          }),
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("sliceBottom") }),
-          ui.slider({
-            key: "sliceBottom",
-            label: t("sliceBottom"),
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.sliceBottom,
+        ui.group({ direction: "row" }, [
+          ui.checkbox({
+            key: "invertLight",
+            label: "Invert Light",
+            value: params.invertLight,
           }),
         ]),
       ]);
@@ -245,7 +185,7 @@ export const pixelSort = definePlugin({
     initLiveEffect: async () => {
       const device = await navigator.gpu.requestAdapter().then((adapter) =>
         adapter!.requestDevice({
-          label: "WebGPU(Pixel Sort)",
+          label: "WebGPU(Bitonic Pixel Sort)",
         })
       );
 
@@ -254,201 +194,116 @@ export const pixelSort = definePlugin({
       }
 
       const shader = device.createShaderModule({
-        label: "Pixel Sort Shader",
+        label: "Bitonic Pixel Sort Shader",
         code: `
           struct Params {
-            sortAmount: f32,
-            direction: u32,
+            inputDpi: i32,
+            baseDpi: i32,
+            strength: f32,
             startPoint: f32,
-            thresholdMin: f32,
-            thresholdMax: f32,
-            algorithm: u32,
-            sliceLeft: f32,
-            sliceRight: f32,
-            sliceTop: f32,
-            sliceBottom: f32,
-            padding: u32,
+            direction: u32,  // 0: horizontal, 1: vertical
+            blockStep: u32,  // For bitonic sort
+            subBlockStep: u32, // For bitonic sort
+            invertLight: u32, // 0: normal, 1: inverted
           }
 
-          @group(0) @binding(0) var inputTexture: texture_storage_2d<rgba8unorm, read>;
+          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
           @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+          @group(0) @binding(2) var textureSampler: sampler;
           @group(0) @binding(3) var<uniform> params: Params;
 
-          // 共有メモリ - ワークグループ内でピクセルデータを共有
-          var<workgroup> groupCache: array<vec4f, 2048>;
-
-          // 輝度計算（アルファを考慮しない）
-          fn getLuminance(color: vec4f) -> f32 {
-            return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+          // Luminance calculation function with alpha
+          fn getLuminance(color: vec4<f32>, invert: u32) -> f32 {
+            // Standard luminance calculation with alpha
+            let lum = dot(color.rgb, vec3<f32>(0.299, 0.587, 0.114)) * color.a;
+            return select(lum, 1.0 - lum, invert == 1u);
           }
 
-          // 輝度の閾値判定
-          fn isInThresholdRange(color: vec4f, minThreshold: f32, maxThreshold: f32) -> bool {
-            let lum = getLuminance(color);
-            return lum >= minThreshold && lum <= maxThreshold;
-          }
+          @compute @workgroup_size(16, 16)
+          fn computeMain(@builtin(global_invocation_id) id: vec3<u32>) {
+              let dims = vec2<f32>(textureDimensions(inputTexture));
+              let texCoord = vec2<f32>(id.xy) / dims;
 
-          // 2つのピクセルを比較して入れ替え
-          fn compareAndSwap(a: u32, b: u32, ascending: bool) {
-            let col_a = groupCache[a];
-            let col_b = groupCache[b];
+              // Get original color
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
 
-            let lum_a = getLuminance(col_a);
-            let lum_b = getLuminance(col_b);
+              // Determine direction
+              let isHorizontal = params.direction == 0u;
 
-            let shouldSwap = (lum_a > lum_b) == ascending;
+              // Get current line position and size
+              let linePosition = select(id.y, id.x, isHorizontal);
+              let lineSize = select(u32(dims.y), u32(dims.x), isHorizontal);
+              let startPos = u32(f32(lineSize) * params.startPoint);
 
-            if (shouldSwap) {
-              groupCache[a] = col_b;
-              groupCache[b] = col_a;
-            }
-          }
-
-          @compute @workgroup_size(256, 1, 1)
-          fn computeMain(@builtin(global_invocation_id) globalId: vec3u,
-                          @builtin(local_invocation_id) localId: vec3u,
-                          @builtin(workgroup_id) workgroupId: vec3u) {
-            let dims = textureDimensions(inputTexture);
-
-            // 方向に応じた処理対象の長さとインデックス計算
-            let lineLength = select(dims.y, dims.x, params.direction == 0u);
-            let lineId = select(workgroupId.y, workgroupId.x, params.direction == 0u);
-
-            // 処理の範囲設定
-            let startPoint = f32(params.startPoint / 100.0 * f32(lineLength));
-            let thresholdMin = params.thresholdMin / 100.0;
-            let thresholdMax = params.thresholdMax / 100.0;
-            let sliceLeft = params.sliceLeft / 100.0;
-            let sliceRight = params.sliceRight / 100.0;
-            let sliceTop = params.sliceTop / 100.0;
-            let sliceBottom = params.sliceBottom / 100.0;
-
-            // ソートする範囲を制限する
-            let sortSize = i32(params.sortAmount / 100.0 * f32(lineLength - startPoint));
-            if (sortSize <= 1) {
-              return; // ソートサイズが小さすぎる場合は処理しない
-            }
-
-            // 最大ソート要素数 (2のべき乗に切り上げ)
-            var maxSortSize = 1;
-            while (maxSortSize < sortSize) {
-              maxSortSize *= 2;
-            }
-
-            // 各スレッドがロードするピクセルインデックス
-            for (var i = i32(localId.x); i < maxSortSize; i += 256) {
-              // スライス範囲や開始ポイントの判定を考慮
-              let pixelIdx = startPoint + i;
-              if (pixelIdx >= lineLength) {
-                // 範囲外は処理しない、デフォルト値で埋める
-                groupCache[i] = vec4f(0.0, 0.0, 0.0, 0.0);
-                continue;
+              // Skip processing if before start point
+              if (linePosition < startPos) {
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
               }
 
-              // テクスチャ座標の計算
-              var pos: vec2i;
-              if (params.direction == 0u) { // 水平方向
-                pos = vec2i(pixelIdx, lineId);
-              } else { // 垂直方向
-                pos = vec2i(lineId, pixelIdx);
+              // Calculate sort range
+              let maxSortRange = lineSize - startPos;
+              let sortRange = u32(f32(maxSortRange) * params.strength);
+
+              // Skip processing if outside sort range
+              if (linePosition >= startPos + sortRange) {
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
               }
 
-              // スライス範囲チェック
-              let texCoord = vec2f(pos) / vec2f(dims);
-              if (texCoord.x < sliceLeft || texCoord.x > sliceRight ||
-                  texCoord.y < sliceTop || texCoord.y > sliceBottom) {
-                // 範囲外は処理しない、デフォルト値で埋める
-                groupCache[i] = vec4f(0.0, 0.0, 0.0, 0.0);
-                continue;
+              // Calculate relative position within sort range
+              let relativePos = linePosition - startPos;
+
+              // Bitonic sort algorithm parameters
+              let blockSize = 1u << params.blockStep;     // Block size for this pass
+              let compareDistance = 1u << params.subBlockStep;  // Distance between compared elements
+
+              // Calculate block index to determine direction (ascending/descending)
+              let blockIndex = relativePos / blockSize;
+              let isAscending = (blockIndex % 2u) == 0u;  // Even blocks sort ascending, odd descending
+
+              // Calculate compare position using XOR operation
+              let comparePos = relativePos ^ compareDistance;
+
+              // Skip if compare position is out of range
+              if (comparePos >= sortRange) {
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
               }
 
-              // ピクセルを読み取り
-              let color = textureLoad(inputTexture, pos);
+              // Get compare position color
+              var targetCoord = texCoord;
+              let targetPos = comparePos + startPos;
 
-              // 閾値判定
-              if (isInThresholdRange(color, thresholdMin, thresholdMax)) {
-                groupCache[i] = color;
+              if (isHorizontal) {
+                targetCoord.x = f32(targetPos) / dims.x;
               } else {
-                // 輝度が範囲外のピクセルは処理しないためにマーク
-                groupCache[i] = vec4f(color.rgb, 0.0); // アルファを0にする
-              }
-            }
-
-            // バリアで同期 - 全スレッドがデータをロードし終わるまで待機
-            workgroupBarrier();
-
-            // バイトニックソートの実装
-            let maxLevel = 31 - firstLeadingBit(u32(maxSortSize));
-
-            // 各フェーズでのソート
-            for (var phase = 0; phase < maxLevel; phase++) {
-              // 比較サイズの計算
-              for (var compSize = 1 << phase; compSize > 0; compSize >>= 1) {
-                // バリアで同期
-                workgroupBarrier();
-
-                // 各スレッドが処理するピクセルペアのインデックス計算
-                for (var idx = i32(localId.x); idx < maxSortSize / 2; idx += 256) {
-                  // 対応するペアを取得
-                  let a = idx * 2;
-                  let halfBlock = compSize;
-                  let blockStart = (a / (halfBlock * 2)) * (halfBlock * 2);
-                  let blockOffset = a % (halfBlock * 2);
-
-                  let b = blockStart + select(blockOffset < halfBlock
-                              , blockOffset + halfBlock
-                              , blockOffset - halfBlock);
-
-                  // 昇順/降順を決定
-                  let blockId = a / (compSize * 2);
-                  let ascending = (blockId % 2) == 0;
-
-                  // ペアの比較とスワップ
-                  compareAndSwap(u32(a), u32(b), ascending);
-                }
-              }
-            }
-
-            // バリアで同期 - ソート完了まで待機
-            workgroupBarrier();
-
-            // 結果を書き戻す
-            for (var i = i32(localId.x); i < maxSortSize; i += 256) {
-              let pixelIdx = startPoint + i;
-              if (pixelIdx >= lineLength) {
-                continue; // 範囲外は処理しない
+                targetCoord.y = f32(targetPos) / dims.y;
               }
 
-              // テクスチャ座標の計算
-              var pos: vec2i;
-              if (params.direction == 0u) { // 水平方向
-                pos = vec2i(pixelIdx, lineId);
-              } else { // 垂直方向
-                pos = vec2i(lineId, pixelIdx);
-              }
+              let targetColor = textureSampleLevel(inputTexture, textureSampler, targetCoord, 0.0);
 
-              // 元のピクセルを読み取り
-              let originalColor = textureLoad(inputTexture, pos);
+              // Get luminance values
+              let v0 = getLuminance(originalColor, params.invertLight);
+              let v1 = getLuminance(targetColor, params.invertLight);
 
-              // スライス範囲チェック
-              let texCoord = vec2f(pos) / vec2f(dims);
-              if (texCoord.x < sliceLeft || texCoord.x > sliceRight ||
-                  texCoord.y < sliceTop || texCoord.y > sliceBottom) {
-                textureStore(resultTexture, pos, originalColor);
-                continue;
-              }
+              // This is critical: we only store a result when we need to swap AND
+              // we're the smaller index of the pair. This prevents double-swapping.
+              if (relativePos < comparePos) {
+                // Determine if swap is needed
+                let shouldSwap = (v0 > v1) == isAscending;
 
-              // ソート後のピクセル
-              let sortedColor = groupCache[i];
-
-              // アルファ値が0のピクセルは処理対象外だったピクセル
-              if (sortedColor.a > 0.0) {
-                textureStore(resultTexture, pos, sortedColor);
+                // Select the appropriate color
+                let finalColor = select(originalColor, targetColor, shouldSwap);
+                textureStore(resultTexture, id.xy, finalColor);
               } else {
-                // 処理対象外のピクセルは元の値を保持
-                textureStore(resultTexture, pos, originalColor);
+                // We're the higher index in the pair
+                let shouldSwap = (v1 > v0) == isAscending;
+
+                // Select the appropriate color
+                let finalColor = select(originalColor, targetColor, shouldSwap);
+                textureStore(resultTexture, id.xy, finalColor);
               }
-            }
           }
         `,
       });
@@ -462,7 +317,7 @@ export const pixelSort = definePlugin({
       });
 
       const pipeline = device.createComputePipeline({
-        label: "Pixel Sort Pipeline",
+        label: "Bitonic Pixel Sort Pipeline",
         layout: "auto",
         compute: {
           module: shader,
@@ -472,20 +327,32 @@ export const pixelSort = definePlugin({
 
       return { device, pipeline };
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+    doLiveEffect: async (
+      { device, pipeline },
+      params,
+      imgData,
+      { dpi, baseDpi }
+    ) => {
+      console.log("Bitonic Pixel Sort", params);
+
       const outputWidth = imgData.width,
         outputHeight = imgData.height;
 
+      // WebGPUのアラインメントに合わせてパディング
       imgData = await addWebGPUAlignmentPadding(imgData);
 
       const inputWidth = imgData.width,
         inputHeight = imgData.height;
 
+      // テクスチャを作成
       const texture = device.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.STORAGE_BINDING,
       });
 
       const resultTexture = device.createTexture({
@@ -495,9 +362,16 @@ export const pixelSort = definePlugin({
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
+      const sampler = device.createSampler({
+        label: "Texture Sampler",
+        magFilter: "linear",
+        minFilter: "linear",
+      });
+
+      // ユニフォームバッファを作成
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
-        size: 48,
+        size: 32, // 8つのパラメータ（inputDpi, baseDpi, strength, startPoint, direction, blockStep, subBlockStep, invertLight）
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
@@ -514,6 +388,10 @@ export const pixelSort = definePlugin({
             resource: resultTexture.createView(),
           },
           {
+            binding: 2,
+            resource: sampler,
+          },
+          {
             binding: 3,
             resource: { buffer: uniformBuffer },
           },
@@ -526,22 +404,27 @@ export const pixelSort = definePlugin({
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
 
-      const uniformData = new ArrayBuffer(48);
-      const view = new DataView(uniformData);
-      view.setFloat32(0, params.sortAmount, true);
-      view.setUint32(4, params.direction === "horizontal" ? 0 : 1, true);
-      view.setFloat32(8, params.startPoint, true);
-      view.setFloat32(12, params.thresholdMin, true);
-      view.setFloat32(16, params.thresholdMax, true);
-      view.setUint32(20, params.algorithm === "bitonic" ? 1 : 0, true);
-      view.setFloat32(24, params.sliceLeft, true);
-      view.setFloat32(28, params.sliceRight, true);
-      view.setFloat32(32, params.sliceTop, true);
-      view.setFloat32(36, params.sliceBottom, true);
-      view.setUint32(40, 0, true); // padding
+      // ユニフォームデータを更新
+      const uniformData = new ArrayBuffer(32);
+      const uniformView = new DataView(uniformData);
+
+      // Params構造体にデータをセット
+      uniformView.setInt32(0, dpi, true); // inputDpi
+      uniformView.setInt32(4, baseDpi, true); // baseDpi
+      uniformView.setFloat32(8, params.strength, true); // strength
+      uniformView.setFloat32(12, params.startPoint, true); // startPoint
+      uniformView.setUint32(
+        16,
+        params.direction === "horizontal" ? 0 : 1,
+        true
+      ); // direction (0:horizontal, 1:vertical)
+      uniformView.setUint32(20, 0, true); // blockStep (デフォルト値0)
+      uniformView.setUint32(24, 0, true); // subBlockStep (デフォルト値0)
+      uniformView.setUint32(28, params.invertLight ? 1 : 0, true); // invertLight
 
       device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
+      // ソーステクスチャを更新
       device.queue.writeTexture(
         { texture },
         imgData.data,
@@ -549,28 +432,20 @@ export const pixelSort = definePlugin({
         [inputWidth, inputHeight]
       );
 
+      // コンピュートシェーダを実行
       const commandEncoder = device.createCommandEncoder({
         label: "Main Command Encoder",
       });
 
       const computePass = commandEncoder.beginComputePass({
-        label: "Pixel Sort Compute Pass",
+        label: "Bitonic Pixel Sort Compute Pass",
       });
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
-
-      // 新しいワークグループサイズに合わせて、ディスパッチサイズを調整
-      // 1行/列ごとに1つのワークグループを割り当て
-      let dispatchX, dispatchY;
-      if (params.direction === "horizontal") {
-        dispatchY = inputHeight; // 各行に1ワークグループ
-        dispatchX = 1;
-      } else {
-        dispatchX = inputWidth; // 各列に1ワークグループ
-        dispatchY = 1;
-      }
-
-      computePass.dispatchWorkgroups(dispatchX, dispatchY);
+      computePass.dispatchWorkgroups(
+        Math.ceil(inputWidth / 16),
+        Math.ceil(inputHeight / 16)
+      );
       computePass.end();
 
       commandEncoder.copyTextureToBuffer(
@@ -581,6 +456,7 @@ export const pixelSort = definePlugin({
 
       device.queue.submit([commandEncoder.finish()]);
 
+      // 結果を読み戻して表示
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));

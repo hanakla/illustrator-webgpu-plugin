@@ -559,6 +559,7 @@ __metadata:
     react: "npm:^19.0.0"
     react-dom: "npm:^19.0.0"
     vite: "npm:^6.1.1"
+    webgpu-utils: "npm:^1.10.0"
   languageName: unknown
   linkType: soft
 
@@ -1421,6 +1422,13 @@ __metadata:
   bin:
     vite: bin/vite.js
   checksum: 10c0/4ec5ddc9436951a68b213cd59c2a157663ef423658c387400774582ea33da40dcae18e55f3adb3b629173e2183b10d49db8370bc51a0aa89797e4ca5a34702a0
+  languageName: node
+  linkType: hard
+
+"webgpu-utils@npm:^1.10.0":
+  version: 1.10.0
+  resolution: "webgpu-utils@npm:1.10.0"
+  checksum: 10c0/fdf7993ae2cc01e69af31914313ffed59ec6ddca21ff4c051124031c5f7d0ca6c331a36aca2ffa7bf828bd08bf4486b7f9b3a484df55103859ff87985ca5ce1f
   languageName: node
   linkType: hard
 

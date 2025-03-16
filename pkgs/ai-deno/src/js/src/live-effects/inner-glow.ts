@@ -1,16 +1,37 @@
+import { logger } from "../logger.ts";
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
+import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./utils.ts";
+} from "./_utils.ts";
+
+const t = createTranslator({
+  en: {
+    title: "Inner Glow Effect V1",
+    glowType: "Glow Type",
+    glowTypeInner: "Inner",
+    glowTypeOuter: "Outer",
+    weight: "Size",
+    glowColor: "Glow Color",
+  },
+  ja: {
+    title: "光彩 V1",
+    glowType: "方向",
+    glowTypeInner: "内側",
+    glowTypeOuter: "外側",
+    weight: "大きさ",
+    glowColor: "色",
+  },
+});
 
 export const innerGlow = definePlugin({
-  id: "glow-effect-v1",
-  title: "Glow Effect V1",
+  id: "inner-glow-effect-v1",
+  title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -32,15 +53,15 @@ export const innerGlow = definePlugin({
         default: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
       },
     },
-    editLiveEffectParameters: (params) => {
+    onEditParameters: (params) => {
       return params;
     },
-    liveEffectScaleParameters(params, scaleFactor) {
+    onScaleParams(params, scaleFactor) {
       return {
         weight: params.weight * scaleFactor,
       };
     },
-    liveEffectInterpolate: (paramsA, paramsB, t) => {
+    onInterpolate: (paramsA, paramsB, t) => {
       return {
         glowType: t < 0.5 ? paramsA.glowType : paramsB.glowType,
         weight: lerp(paramsA.weight, paramsB.weight, t),
@@ -70,13 +91,13 @@ export const innerGlow = definePlugin({
             key: "glowType",
             value: params.glowType,
             options: [
-              { label: "内側", value: 'inner'},
-              { label: "外側", value: 'outer'}
+              { label: t('glowTypeInner'), value: 'inner'},
+              { label: t('glowTypeOuter'), value: 'outer'},
             ]
           }),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Weight" }),
+          ui.text({ text: t('weight') }),
 
           ui.group({ direction: "row" }, [
             ui.slider({ key: "weight", dataType: 'float', min: 0, max: 10, value: params.weight }),
@@ -84,7 +105,7 @@ export const innerGlow = definePlugin({
           ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Glow Color" }),
+          ui.text({ text: t('glowColor') }),
 
           ui.group({ direction: "row" }, [
             ui.colorInput({ key: "glowColor", value: params.glowColor }),
@@ -188,9 +209,6 @@ export const innerGlow = definePlugin({
 
               textureStore(resultTexture, id.xy, finalColor);
           }
-
-              textureStore(resultTexture, id.xy, finalColor);
-          }
       `,
       });
 
@@ -199,7 +217,7 @@ export const innerGlow = definePlugin({
       });
 
       device.addEventListener("uncapturederror", (e) => {
-        console.error(e.error);
+        logger.error(e.error);
       });
 
       const pipeline = device.createComputePipeline({
@@ -214,7 +232,9 @@ export const innerGlow = definePlugin({
       return { device, pipeline };
     },
     doLiveEffect: async ({ device, pipeline }, params, imgData) => {
-      console.log("Glow Effect V1", params);
+      logger.log("Glow Effect V1", params);
+
+      imgData = await paddingImageData(imgData, params.weight);
 
       const outputWidth = imgData.width,
         outputHeight = imgData.height;

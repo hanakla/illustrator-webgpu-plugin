@@ -24,9 +24,6 @@ mod debug;
 mod deno;
 mod ext;
 
-pub mod safe_chars;
-pub use safe_chars::SafeString;
-
 pub type OpaqueAiMain = *mut c_void;
 pub type OpaqueDenoRuntime = *mut c_void;
 pub type OpaqueDenoModule = *mut c_void;
@@ -194,12 +191,14 @@ extern "C" fn do_live_effect(
     ai_main_ref: OpaqueAiMain,
     effect_id: *const c_char,
     params: *const c_char,
+    env_json: *const c_char,
     image_data: *mut ImageDataPayload,
 ) -> *mut DoLiveEffectResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
 
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy() };
     let params = unsafe { CStr::from_ptr(params).to_string_lossy() }.clone();
+    let env_json = unsafe { CStr::from_ptr(env_json).to_string_lossy() };
     let image_data = unsafe { &mut *image_data };
     let source_buffer_ptr = (*image_data).data_ptr;
 
@@ -213,6 +212,10 @@ extern "C" fn do_live_effect(
         let params = v8::String::new(scope, params.to_string().as_str()).unwrap();
         let params = v8::json::parse(scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
+
+        let env_json = v8::String::new(scope, env_json.to_string().as_str()).unwrap();
+        let env_json = v8::json::parse(scope, env_json).unwrap();
+        let env_json = v8::Local::<v8::Object>::try_from(env_json).unwrap();
 
         let width = v8::Number::new(scope, image_data.width as f64);
         let height = v8::Number::new(scope, image_data.height as f64);
@@ -237,6 +240,7 @@ extern "C" fn do_live_effect(
         let args: Vec<v8::Local<v8::Value>> = vec![
             effect_id.into(),
             params.into(),
+            env_json.into(),
             width.into(),
             height.into(),
             buffer.into(),
@@ -418,8 +422,11 @@ pub extern "C" fn edit_live_effect_fire_event(
 extern "C" {
     fn ai_deno_trampoline_adjust_color_callback(
         ptr: *mut c_void,
-        color: *const SafeString,
-    ) -> *mut SafeString;
+        color: *const c_char,
+    ) -> *const c_char;
+
+    fn ai_deno_alert(message: *const c_char);
+    fn ai_deno_get_user_locale() -> *const c_char;
 }
 
 #[no_mangle]
@@ -460,14 +467,14 @@ pub extern "C" fn live_effect_adjust_colors(
                 let result_json = unsafe {
                     ai_deno_trampoline_adjust_color_callback(
                         adjust_color_fn_ptr,
-                        SafeString::from(color).as_ptr(),
+                        CString::new(color).unwrap().as_ptr(),
                     )
                 }
                 .to_owned();
-                let result_json = unsafe { *Box::from_raw(result_json) };
+                let result_json = unsafe { CStr::from_ptr(result_json).to_string_lossy() };
 
                 // Parse json to ColorRGBA
-                let result = v8::String::new(scope, result_json.as_str().unwrap()).unwrap();
+                let result = v8::String::new(scope, result_json.to_string().as_str()).unwrap();
                 let result = v8::json::parse(scope, result).unwrap();
                 let result = v8::Local::<v8::Object>::try_from(result).unwrap();
 
@@ -573,7 +580,10 @@ fn execute_export_function_and_raw_return<'a>(
 
     let fn_name_arc = Arc::new(function_name.to_string());
 
-    dai_println!("Starting execute_export_function_and_raw_return");
+    dai_println!(
+        "Starting execute_export_function_and_raw_return: {}",
+        function_name
+    );
 
     // It's required for WebGPU async methods
     let localset = tokio::task::LocalSet::new();
@@ -684,6 +694,6 @@ where
     }
 }
 
-fn c_char_to_string(c_char: *mut c_char) -> String {
+pub fn c_char_to_string(c_char: *mut c_char) -> String {
     unsafe { CStr::from_ptr(c_char).to_string_lossy().into_owned() }
 }

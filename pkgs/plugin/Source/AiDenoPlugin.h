@@ -33,11 +33,13 @@ struct PluginPreferences {
 Plugin* AllocatePlugin(SPPluginRef pluginRef);
 void    FixupReload(Plugin* plugin);
 
-using AdjustColorCallbackLambda = ai_deno::SafeString* (*)(const ai_deno::SafeString*);
+using AdjustColorCallbackLambda = const char* (*)(const char*);
 
 extern "C" {
-  ai_deno::SafeString*
-  ai_deno_trampoline_adjust_color_callback(void* ptr, const ai_deno::SafeString* color);
+  const char* ai_deno_trampoline_adjust_color_callback(void* ptr, const char* color);
+
+  void                 ai_deno_alert(const char* message);
+  const char* ai_deno_get_user_locale();
 }
 
 class HelloWorldPlugin : public Plugin {

@@ -1,15 +1,20 @@
+import {
+  makeShaderDataDefinitions,
+  makeStructuredView,
+} from "npm:webgpu-utils";
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
-import { useTranslator } from "../ui/locale.ts";
+import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./utils.ts";
+} from "./_utils.ts";
+import { createGPUDevice } from "./_shared.ts";
 
-const t = useTranslator({
+const t = createTranslator({
   en: {
     title: "Directional Blur",
     strength: "Size (px)",
@@ -72,8 +77,8 @@ export const directionalBlur = definePlugin({
         default: 0.0,
       },
     },
-    editLiveEffectParameters: (params) => params,
-    liveEffectInterpolate: (a, b, progress) => {
+    onEditParameters: (params) => params,
+    onInterpolate: (a, b, progress) => {
       return {
         strength: lerp(a.strength, b.strength, progress),
         angle: lerp(a.angle, b.angle, progress),
@@ -83,7 +88,7 @@ export const directionalBlur = definePlugin({
         fadeDirection: lerp(a.fadeDirection, b.fadeDirection, progress),
       };
     },
-    liveEffectScaleParameters: (params, scale) => {
+    onScaleParams: (params, scale) => {
       return {
         strength: params.strength * scale,
         angle: params.angle,
@@ -100,7 +105,6 @@ export const directionalBlur = definePlugin({
           ui.text({ text: t("strength") }),
           ui.slider({
             key: "strength",
-            label: t("strength"),
             dataType: "float",
             min: 0,
             max: 500,
@@ -111,7 +115,6 @@ export const directionalBlur = definePlugin({
           ui.text({ text: t("direction") }),
           ui.slider({
             key: "angle",
-            label: t("direction"),
             dataType: "float",
             min: 0,
             max: 360,
@@ -122,7 +125,6 @@ export const directionalBlur = definePlugin({
           ui.text({ text: "Opacity" }),
           ui.slider({
             key: "opacity",
-            label: t("direction"),
             dataType: "float",
             min: 0,
             max: 100,
@@ -133,7 +135,6 @@ export const directionalBlur = definePlugin({
           ui.text({ text: t("blurMode") }),
           ui.select({
             key: "blurMode",
-            label: t("blurMode"),
             value: params.blurMode,
             options: [
               { value: "both", label: t("both") },
@@ -146,7 +147,6 @@ export const directionalBlur = definePlugin({
           ui.text({ text: t("fadeScale") }),
           ui.slider({
             key: "fadeOut",
-            label: t("fadeScale"),
             dataType: "float",
             min: 0.0,
             max: 1.0,
@@ -157,7 +157,6 @@ export const directionalBlur = definePlugin({
           ui.text({ text: t("fadeDirection") }),
           ui.slider({
             key: "fadeDirection",
-            label: t("fadeDirection"),
             dataType: "float",
             min: -1.0,
             max: 1.0,
@@ -167,26 +166,15 @@ export const directionalBlur = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      try {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) {
-          throw new Error("No GPU adapter found");
-        }
-
-        const device = await adapter.requestDevice();
-        if (!device) {
-          throw new Error("Failed to create WebGPU device");
-        }
-
-        const shader = device.createShaderModule({
-          code: `
+      return await createGPUDevice({}, (device) => {
+        const code = `
           struct Params {
-              strength: f32,
-              angle: f32,
-              opacity: f32,
-              blurMode: u32,
-              fadeOut: f32,     // 縮小率：サンプル番号が増えるほど図像が小さくなる
-              fadeDirection: f32, // 縮小方向：上寄り/下寄り
+            strength: f32,
+            angle: f32,
+            opacity: f32,
+            blurMode: u32,
+            fadeOut: f32,     // 縮小率：サンプル番号が増えるほど図像が小さくなる
+            fadeDirection: f32, // 縮小方向：上寄り/下寄り
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -195,126 +183,131 @@ export const directionalBlur = definePlugin({
           @group(0) @binding(3) var<uniform> params: Params;
 
           fn getOffset(angle: f32) -> vec2f {
-              let radians = angle * 3.14159 / 180.0;
-              return vec2f(cos(radians), sin(radians));
+            let radians = angle * 3.14159 / 180.0;
+            return vec2f(cos(radians), sin(radians));
           }
 
           fn gaussianWeight(distance: f32, sigma: f32) -> f32 {
-              let normalized = distance / sigma;
-              return exp(-(normalized * normalized) / 2.0);
+            let normalized = distance / sigma;
+            return exp(-(normalized * normalized) / 2.0);
           }
 
           @compute @workgroup_size(16, 16)
           fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let dims = vec2f(textureDimensions(inputTexture));
-              let texCoord = vec2f(id.xy) / dims;
+            let dims = vec2f(textureDimensions(inputTexture));
+            let texCoord = vec2f(id.xy) / dims;
 
-              // 元の画像を取得
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+            // 元の画像を取得
+            let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
 
-              // strength = 0 または opacity = 0 なら元の画像をそのまま返す
-              if (params.strength <= 0.0 || params.opacity <= 0.0) {
-                  textureStore(resultTexture, id.xy, originalColor);
-                  return;
-              }
+            // strength = 0 または opacity = 0 なら元の画像をそのまま返す
+            if (params.strength <= 0.0 || params.opacity <= 0.0) {
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
+            }
 
-              // 方向ベクトルの計算
-              let pixelOffset = getOffset(params.angle) * params.strength;
-              let texOffset = pixelOffset / dims;
+            // 方向ベクトルの計算
+            let pixelOffset = getOffset(params.angle) * params.strength;
+            let texOffset = pixelOffset / dims;
 
-              // strengthに応じたサンプル数の自動計算
-              // より多くのサンプルを使用してブラーを滑らかに
-              let numSamples = max(i32(params.strength), 5);
+            // strengthに応じたサンプル数の自動計算
+            // より多くのサンプルを使用してブラーを滑らかに
+            let numSamples = max(i32(params.strength), 5);
 
-              // ブラー処理
-              var blurredColor = vec4f(0.0);
-              var totalWeight = 0.0;
+            // ブラー処理
+            var blurredColor = vec4f(0.0);
+            var totalWeight = 0.0;
 
-              // ブラーモードに応じてサンプリング範囲を調整
-              var startSample = -numSamples;
-              var endSample = numSamples;
+            // ブラーモードに応じてサンプリング範囲を調整
+            var startSample = -numSamples;
+            var endSample = numSamples;
 
-              // blurMode: 0=both, 1=behind, 2=front
-              if (params.blurMode == 1u) { // behind
-                  startSample = 0;
-                  endSample = numSamples;  // 正の方向にブラー（元の画像の背後）
-              } else if (params.blurMode == 2u) { // front
-                  startSample = -numSamples;
-                  endSample = 0;  // 負の方向にブラー（元の画像の前方）
-              }
+            // blurMode: 0=both, 1=behind, 2=front
+            if (params.blurMode == 1u) { // behind
+                startSample = 0;
+                endSample = numSamples;  // 正の方向にブラー（元の画像の背後）
+            } else if (params.blurMode == 2u) { // front
+                startSample = -numSamples;
+                endSample = 0;  // 負の方向にブラー（元の画像の前方）
+            }
 
-              // 中央と両方向にサンプリング
-              for (var i = startSample; i <= endSample; i++) {
-                  // 中央のサンプル（i = 0）は元の画像をそのまま使用
-                  if (i == 0) {
-                      blurredColor += originalColor;
-                      totalWeight += 1.0;
-                      continue;
-                  }
+            // 中央と両方向にサンプリング
+            for (var i = startSample; i <= endSample; i++) {
+                // 中央のサンプル（i = 0）は元の画像をそのまま使用
+                if (i == 0) {
+                    blurredColor += originalColor;
+                    totalWeight += 1.0;
+                    continue;
+                }
 
-                  // サンプリング位置の計算
-                  let blurIntensity = 1.5; // ブラーの強度を上げるための係数
-                  let sampleOffset = f32(i) / f32(numSamples) * blurIntensity;
+                // サンプリング位置の計算
+                let blurIntensity = 1.5; // ブラーの強度を上げるための係数
+                let sampleOffset = f32(i) / f32(numSamples) * blurIntensity;
 
-                  // サンプル距離（0.0～1.0に正規化）
-                  let normalizedDistance = f32(abs(i)) / f32(numSamples);
+                // サンプル距離（0.0～1.0に正規化）
+                let normalizedDistance = f32(abs(i)) / f32(numSamples);
 
-                  // 基本的なサンプリング座標（ブラー方向）
-                  let baseCoord = texCoord + texOffset * sampleOffset;
+                // 基本的なサンプリング座標（ブラー方向）
+                let baseCoord = texCoord + texOffset * sampleOffset;
 
-                  // 縮小効果の適用
-                  var sampleCoord = baseCoord;
-                  if (params.fadeOut > 0.0) {
-                      // 縮小率の計算（0.0～1.0）
-                      let scale = max(1.0 - (normalizedDistance * params.fadeOut), 0.01);
+                // 縮小効果の適用
+                var sampleCoord = baseCoord;
+                if (params.fadeOut > 0.0) {
+                    // 縮小率の計算（0.0～1.0）
+                    let scale = max(1.0 - (normalizedDistance * params.fadeOut), 0.01);
 
-                      // 画像中心を原点として拡大縮小
-                      let center = vec2f(0.5, 0.5);
-                      sampleCoord = center + (baseCoord - center) / scale;
+                    // 画像中心を原点として拡大縮小
+                    let center = vec2f(0.5, 0.5);
+                    sampleCoord = center + (baseCoord - center) / scale;
 
-                      // 縮小方向の適用（上下方向のシフト）
-                      if (params.fadeDirection != 0.0) {
-                          // 正の値：下方向、負の値：上方向
-                          let shift = (1.0 - scale) * 0.5 * params.fadeDirection;
-                          sampleCoord.y += shift;
-                      }
-                  }
+                    // 縮小方向の適用（上下方向のシフト）
+                    if (params.fadeDirection != 0.0) {
+                        // 正の値：下方向、負の値：上方向
+                        let shift = (1.0 - scale) * 0.5 * params.fadeDirection;
+                        sampleCoord.y += shift;
+                    }
+                }
 
-                  // サンプリング座標を0.0～1.0の範囲にクランプ
-                  sampleCoord = clamp(sampleCoord, vec2f(0.0), vec2f(1.0));
+                // サンプリング座標を0.0～1.0の範囲にクランプ
+                sampleCoord = clamp(sampleCoord, vec2f(0.0), vec2f(1.0));
 
-                  // サンプリング
-                  let sampleColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord, 0.0);
+                // サンプリング
+                let sampleColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord, 0.0);
 
-                  // 重み計算
-                  let sigma = 0.5; // 固定値を大きくしてぼかし効果を強化（元は0.3）
-                  let weight = gaussianWeight(normalizedDistance, sigma);
+                // 重み計算
+                let sigma = 0.5; // 固定値を大きくしてぼかし効果を強化（元は0.3）
+                let weight = gaussianWeight(normalizedDistance, sigma);
 
-                  // 合計に加算
-                  blurredColor += sampleColor * weight;
-                  totalWeight += weight;
-              }
+                // 合計に加算
+                blurredColor += sampleColor * weight;
+                totalWeight += weight;
+            }
 
-              // 正規化
-              var finalColor = originalColor;
-              if (totalWeight > 0.0) {
-                  blurredColor = blurredColor / totalWeight;
+            // 正規化
+            var finalColor = originalColor;
+            if (totalWeight > 0.0) {
+                blurredColor = blurredColor / totalWeight;
 
-                  // behindモードの場合は元の画像を強調
-                  if (params.blurMode == 1u) { // behind
-                      // behindモードでは、元の画像が優先される単純なブレンド
-                      let behindOpacity = min(params.opacity * 0.7, 70.0) / 100.0; // 上限を引き上げ
-                      finalColor = mix(originalColor, blurredColor, behindOpacity);
-                  } else {
-                      // 通常のブレンド
-                      finalColor = mix(originalColor, blurredColor, params.opacity / 100.0);
-                  }
-              }
+                // behindモードの場合は元の画像を強調
+                if (params.blurMode == 1u) { // behind
+                    // behindモードでは、元の画像が優先される単純なブレンド
+                    let behindOpacity = min(params.opacity * 0.7, 70.0) / 100.0; // 上限を引き上げ
+                    finalColor = mix(originalColor, blurredColor, behindOpacity);
+                } else {
+                    // 通常のブレンド
+                    finalColor = mix(originalColor, blurredColor, params.opacity / 100.0);
+                }
+            }
 
-              textureStore(resultTexture, id.xy, finalColor);
+            textureStore(resultTexture, id.xy, finalColor);
           }
-        `,
+        `;
+
+        const shader = device.createShaderModule({
+          code,
         });
+
+        const defs = makeShaderDataDefinitions(code);
 
         const pipeline = device.createComputePipeline({
           layout: "auto",
@@ -324,16 +317,13 @@ export const directionalBlur = definePlugin({
           },
         });
 
-        return { device, pipeline };
-      } catch (err) {
-        console.error("WebGPU initialization error:", err);
-        throw err;
-      }
+        return { device, pipeline, defs };
+      });
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+    doLiveEffect: async ({ device, pipeline, defs }, params, imgData) => {
       try {
         // Make padding for blur overflow
-        imgData = await paddingImageData(imgData, params.strength);
+        imgData = await paddingImageData(imgData, Math.ceil(params.strength));
         const outputWidth = imgData.width;
         const outputHeight = imgData.height;
 
@@ -370,28 +360,22 @@ export const directionalBlur = definePlugin({
         }
 
         // ユニフォームバッファ
+        const uniformValues = makeStructuredView(defs.uniforms.params);
         const uniformBuffer = device.createBuffer({
-          size: 24, // 6 * 4 bytes
+          size: uniformValues.arrayBuffer.byteLength, // 6 * 4 bytes
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
-        // バッファデータを設定
-        const uniformData = new ArrayBuffer(24);
-        const dataView = new DataView(uniformData);
+        uniformValues.set({
+          strength: params.strength,
+          angle: params.angle,
+          opacity: params.opacity,
+          blurMode: blurModeValue,
+          fadeOut: params.fadeOut || 0.0,
+          fadeDirection: params.fadeDirection || 0.0,
+        });
 
-        // 値を0で初期化
-        const zeroArray = new Uint8Array(uniformData);
-        zeroArray.fill(0);
-
-        // パラメータをセット
-        dataView.setFloat32(0, params.strength, true);
-        dataView.setFloat32(4, params.angle, true);
-        dataView.setFloat32(8, params.opacity, true);
-        dataView.setUint32(12, blurModeValue, true);
-        dataView.setFloat32(16, params.fadeOut || 0.0, true);
-        dataView.setFloat32(20, params.fadeDirection || 0.0, true);
-
-        device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+        device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
 
         // バインドグループの作成
         const bindGroup = device.createBindGroup({

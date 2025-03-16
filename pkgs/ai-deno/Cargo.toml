@@ -8,7 +8,7 @@ name = "ai_deno"
 crate-type = ["staticlib", "rlib"]
 
 [features]
-default = ["debug_deno", "debug_lib"]
+default = ["debug_lib"]
 debug_lib = []
 debug_deno = []
 

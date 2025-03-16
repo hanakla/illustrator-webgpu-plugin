@@ -1,105 +1,85 @@
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::ptr;
 
 #[repr(C)]
 pub struct SafeString {
-    data: *const c_char,
-    len: usize,
+    inner: CString,
 }
 
-impl From<&str> for SafeString {
-    fn from(s: &str) -> Self {
-        let cstring = CString::new(s).unwrap_or_default();
-        let len = cstring.as_bytes().len();
+impl SafeString {
+    pub fn new(s: &str) -> Result<Self, std::ffi::NulError> {
+        let cstring = CString::new(s)?;
+        Ok(SafeString { inner: cstring })
+    }
 
-        let boxed_data = Box::new(cstring);
-        let data_ptr = Box::into_raw(boxed_data) as *const c_char;
-
-        SafeString {
-            data: data_ptr,
-            len,
+    pub unsafe fn from_ptr(ptr: *const c_char) -> Option<Self> {
+        if ptr.is_null() {
+            return None;
         }
+
+        match CStr::from_ptr(ptr).to_owned() {
+            inner => Some(SafeString { inner }),
+        }
+    }
+
+    pub fn as_ptr(self) -> *const SafeString {
+        Box::into_raw(Box::new(self))
+    }
+
+    pub fn to_string(&self) -> String {
+        self.inner.to_string_lossy().into_owned()
+    }
+}
+
+impl From<SafeString> for String {
+    fn from(safe_str: SafeString) -> Self {
+        safe_str.to_string()
     }
 }
 
 impl From<String> for SafeString {
     fn from(s: String) -> Self {
-        Self::from(s.as_str())
-    }
-}
-
-impl From<&SafeString> for Option<String> {
-    fn from(safe_string: &SafeString) -> Self {
-        safe_string.to_string()
-    }
-}
-
-impl Drop for SafeString {
-    fn drop(&mut self) {
-        if !self.data.is_null() {
-            unsafe {
-                let _ = Box::from_raw(self.data as *mut CString);
-            }
-        }
+        SafeString::new(&s).unwrap()
     }
 }
 
 #[no_mangle]
-pub extern "C" fn create_safe_string(c_str: *const c_char, size: usize) -> *mut SafeString {
+pub unsafe extern "C" fn create_safe_string(c_str: *const c_char, len: usize) -> *mut SafeString {
     if c_str.is_null() {
         return ptr::null_mut();
     }
 
-    let safe_string = SafeString::build(c_str);
-
-    Box::into_raw(Box::new(safe_string))
+    let slice = std::slice::from_raw_parts(c_str as *const u8, len);
+    match std::str::from_utf8(slice) {
+        Ok(s) => match SafeString::new(s) {
+            Ok(safe_str) => Box::into_raw(Box::new(safe_str)),
+            Err(_) => ptr::null_mut(),
+        },
+        Err(_) => ptr::null_mut(),
+    }
 }
+
+// #[no_mangle]
+// pub extern "C" fn create_safe_string_from_str(s: &str) -> *mut SafeString {
+//     match SafeString::new(s) {
+//         Ok(safe_str) => Box::into_raw(Box::new(safe_str)),
+//         Err(_) => ptr::null_mut(),
+//     }
+// }
+
+// #[no_mangle]
+// pub unsafe extern "C" fn safe_string_as_ptr(safe_str: *const SafeString) -> *const c_char {
+//     if safe_str.is_null() {
+//         return ptr::null();
+//     }
+
+//     (*safe_str).as_ptr()
+// }
 
 #[no_mangle]
-pub extern "C" fn free_safe_string(this: *mut SafeString) {
-    if !this.is_null() {
-        unsafe {
-            let _ = Box::from_raw(this);
-        }
-    }
-}
-
-impl SafeString {
-    fn build(c_str: *const c_char) -> Self {
-        let rust_cstr = unsafe { CStr::from_ptr(c_str) };
-
-        let owned_cstring = CString::new(rust_cstr.to_bytes()).unwrap();
-        //  {
-        //     Ok(s) => s,
-        //     Err(_) => return ptr::null_mut(),
-        // };
-
-        let len = owned_cstring.as_bytes().len();
-
-        let boxed_data = Box::new(owned_cstring);
-        let data_ptr = Box::into_raw(boxed_data) as *const c_char;
-
-        SafeString {
-            data: data_ptr,
-            len,
-        }
-    }
-
-    pub fn as_str(&self) -> Option<&str> {
-        if self.data.is_null() {
-            return None;
-        }
-
-        let cstring = unsafe { &*(self.data as *const CString) };
-        std::str::from_utf8(cstring.as_bytes()).ok()
-    }
-
-    pub fn as_ptr(&self) -> *const SafeString {
-        self
-    }
-
-    pub fn to_string(&self) -> Option<String> {
-        self.as_str().map(String::from)
+pub unsafe extern "C" fn free_safe_string(safe_str: *mut SafeString) {
+    if !safe_str.is_null() {
+        drop(Box::from_raw(safe_str));
     }
 }

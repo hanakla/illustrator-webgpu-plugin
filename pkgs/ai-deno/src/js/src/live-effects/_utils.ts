@@ -1,4 +1,5 @@
 import { decodeBase64 } from "jsr:@std/encoding@1.0.7";
+import { ColorRGBA } from "../types.ts";
 
 const createCanvasImpl: (
   width: number,
@@ -143,6 +144,14 @@ export async function resizeImageData(
   width: number,
   height: number
 ): Promise<ImageDataLike> {
+  console.log("resizeImageData", data.width, data.height, width, height);
+  width = Math.round(width);
+  height = Math.round(height);
+
+  if (data.width === width && data.height === height) {
+    return data;
+  }
+
   const canvas = await createCanvasImpl(data.width, data.height);
   const ctx = canvas.getContext("2d")!;
   const imgData = await createImageDataImpl(
@@ -166,6 +175,8 @@ export async function paddingImageData(
   data: ImageDataLike,
   padding: number
 ): Promise<ImageDataLike> {
+  padding = Math.ceil(padding);
+
   const width = data.width + padding * 2;
   const height = data.height + padding * 2;
 
@@ -199,4 +210,96 @@ export async function toPng(imgData: ImageDataLike) {
 
 export function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+/**
+ * Parsing `#RRGGBBAA`(or `RRGGBBAA`) color code to ColorRGBA,
+ * Also support `#RGB`, `#RGBA`, `#RRGGBB` (or without #) color code.
+ * @param color
+ * @returns
+ */
+export function parseColorCode(color: string): ColorRGBA | null {
+  const hex = (color.startsWith("#") ? color.slice(1) : color).toUpperCase();
+
+  // Check if valid hex format (3, 4, 6, 8 characters)
+  if (!/^[0-9A-F]{3}$|^[0-9A-F]{4}$|^[0-9A-F]{6}$|^[0-9A-F]{8}$/.test(hex)) {
+    return null;
+  }
+
+  // Parse 3-digit hex (RGB)
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16) / 255;
+    const g = parseInt(hex[1] + hex[1], 16) / 255;
+    const b = parseInt(hex[2] + hex[2], 16) / 255;
+
+    return { r, g, b, a: 1 };
+  }
+
+  // Parse 4-digit hex (RGBA)
+  if (hex.length === 4) {
+    const r = parseInt(hex[0] + hex[0], 16) / 255;
+    const g = parseInt(hex[1] + hex[1], 16) / 255;
+    const b = parseInt(hex[2] + hex[2], 16) / 255;
+    const a = parseInt(hex[3] + hex[3], 16) / 255;
+
+    return { r, g, b, a };
+  }
+
+  // Parse 6-digit hex (RRGGBB)
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+    return { r, g, b, a: 1 };
+  }
+
+  // Parse 8-digit hex (RRGGBBAA)
+  if (hex.length === 8) {
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+    const a = parseInt(hex.substring(6, 8), 16) / 255;
+
+    return { r, g, b, a };
+  }
+
+  return null;
+}
+
+/**
+ * Convert ColorRGBA to hex color code
+ * Returns `RRGGBB` format if alpha is 1, otherwise `RRGGBBAA`
+ * @param color ColorRGBA object with values in 0-1 range
+ * @param includeHash Whether to include "#" prefix (default: false)
+ * @returns Hex color code string
+ */
+export function toColorCode(
+  color: ColorRGBA,
+  includeHash: boolean = false
+): string {
+  // Convert 0-1 range to 0-255 and then to hex
+  const r = Math.round(color.r * 255)
+    .toString(16)
+    .padStart(2, "0");
+  const g = Math.round(color.g * 255)
+    .toString(16)
+    .padStart(2, "0");
+  const b = Math.round(color.b * 255)
+    .toString(16)
+    .padStart(2, "0");
+
+  // Prepare the prefix based on includeHash parameter
+  const prefix = includeHash ? "#" : "";
+
+  // If alpha is 1, return without alpha component
+  if (color.a === 1) {
+    return `${prefix}${r}${g}${b}`.toLowerCase();
+  }
+
+  // Otherwise include alpha
+  const a = Math.round(color.a * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `${prefix}${r}${g}${b}${a}`.toLowerCase();
 }

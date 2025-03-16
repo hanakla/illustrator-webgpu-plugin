@@ -1,8 +1,8 @@
 import { toFileUrl, join } from "jsr:@std/path@1.0.8";
 import { definePlugin, StyleFilterFlag } from "../types.ts";
 import { ui } from "../ui/nodes.ts";
-import { toPng } from "./utils.ts";
-import { paddingImageData } from "./utils.ts";
+import { toPng } from "./_utils.ts";
+import { paddingImageData } from "./_utils.ts";
 
 const global: {
   lastInput: {
@@ -51,9 +51,9 @@ export const testBlueFill = definePlugin({
       main: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
-    editLiveEffectParameters: (params) => params,
-    liveEffectScaleParameters: (params, scaleFactor) => params,
-    liveEffectInterpolate: (paramsA, paramsB, t) => paramsA,
+    onEditParameters: (params) => params,
+    onScaleParams: (params, scaleFactor) => params,
+    onInterpolate: (paramsA, paramsB, t) => paramsA,
     doLiveEffect: async (init, params, input) => {
       let width = input.width;
       let height = input.height;

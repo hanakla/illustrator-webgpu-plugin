@@ -60,10 +60,10 @@ class dbg__Measuring {
 
 std::stack<dbg__Measuring> dbg_cstCurrent;
 
-dbg__Measuring timeStart(const char* label) {
+void timeStart(const char* label) {
+  if (!AI_DENO_DEBUG) return;
   auto m = new dbg__Measuring(label);
   dbg_cstCurrent.push(*m);
-  return *m;
 }
 
 void timeEnd() {

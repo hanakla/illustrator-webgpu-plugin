@@ -1,15 +1,20 @@
+import {
+  makeShaderDataDefinitions,
+  makeStructuredView,
+} from "npm:webgpu-utils";
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
 import { ui } from "../ui/nodes.ts";
-import { texts, useTranslator } from "../ui/locale.ts";
+import { texts, createTranslator } from "../ui/locale.ts";
 import {
   addWebGPUAlignmentPadding,
   lerp,
   paddingImageData,
   removeWebGPUAlignmentPadding,
-} from "./utils.ts";
+} from "./_utils.ts";
+import { createGPUDevice } from "./_shared.ts";
 
-const t = useTranslator(
+const t = createTranslator(
   texts({
     en: {
       title: "Chromatic Aberration V1",
@@ -72,15 +77,16 @@ export const chromaticAberration = definePlugin({
         default: "under",
       },
     },
-    editLiveEffectParameters: (params) => params,
-    liveEffectInterpolate: (params, paramsB, progress) => ({
+    onEditParameters: (params) => params,
+    onAdjustColors: (params, adjustColor) => params,
+    onInterpolate: (params, paramsB, progress) => ({
       colorMode: params.colorMode,
       strength: lerp(params.strength, paramsB.strength, progress),
       angle: lerp(params.angle, paramsB.angle, progress),
       opacity: lerp(params.opacity, paramsB.opacity, progress),
       blendMode: params.blendMode,
     }),
-    liveEffectScaleParameters: (params, scale) => ({
+    onScaleParams: (params, scale) => ({
       colorMode: params.colorMode,
       strength: params.strength * scale,
       angle: params.angle,
@@ -92,26 +98,26 @@ export const chromaticAberration = definePlugin({
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
           ui.text({ text: t("colorMode") }),
-          ui.select({ key: "colorMode", label: t("colorMode"), value: params.colorMode, options: [
+          ui.select({ key: "colorMode", value: params.colorMode, options: [
             {value: 'rgb', label: "RGB"},
             {value: 'cmyk', label: "CMYK"},
           ] }),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("strength") }),
-          ui.slider({ key: "strength", label: t("strength"), dataType: 'float', min: 0, max: 200, value: params.strength }),
+          ui.slider({ key: "strength", dataType: 'float', min: 0, max: 200, value: params.strength }),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("angle") }),
-          ui.slider({ key: "angle", label: t("angle"), dataType: 'float', min: 0, max: 360, value: params.angle }),
+          ui.slider({ key: "angle", dataType: 'float', min: 0, max: 360, value: params.angle }),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("opacity")}),
-          ui.slider({ key: "opacity", label: t("opacity"), dataType: 'float', min: 0, max: 100, value: params.opacity }),
+          ui.slider({ key: "opacity", dataType: 'float', min: 0, max: 100, value: params.opacity }),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: "Blend Mode"}),
-          ui.select({ key: "blendMode", label: t("blendMode"), value: params.blendMode, options: [
+          ui.select({ key: "blendMode", value: params.blendMode, options: [
             {value: 'over', label: t("blendOver")},
             {value: 'under', label: t('blendeUnder')}
           ]}),
@@ -126,25 +132,16 @@ export const chromaticAberration = definePlugin({
       ])
     },
     initLiveEffect: async () => {
-      const device = await navigator.gpu.requestAdapter().then((adapter) =>
-        adapter!.requestDevice({
-          label: "WebGPU(Chromatic Aberration)",
-        })
-      );
-
-      if (!device) {
-        throw new Error("Failed to create WebGPU device");
-      }
-
-      const shader = device.createShaderModule({
-        label: "Chromatic Aberration Shader",
-        code: `
+      return await createGPUDevice({}, async (device) => {
+        const code = `
           struct Params {
-              strength: f32,
-              angle: f32,
-              colorMode: u32,
-              opacity: f32,
-              blendMode: u32,  // 0: over, 1: under
+            dpi: f32,
+            baseDpi: f32,
+            strength: f32,
+            angle: f32,
+            colorMode: u32,
+            opacity: f32,
+            blendMode: u32,  // 0: over, 1: under
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -153,8 +150,8 @@ export const chromaticAberration = definePlugin({
           @group(0) @binding(3) var<uniform> params: Params;
 
           fn getOffset(angle: f32) -> vec2f {
-              let radians = angle * 3.14159 / 180.0;
-              return vec2f(cos(radians), sin(radians));
+            let radians = angle * 3.14159 / 180.0;
+            return vec2f(cos(radians), sin(radians));
           }
 
           fn screenBlend(a: f32, b: f32) -> f32 {
@@ -201,7 +198,7 @@ export const chromaticAberration = definePlugin({
               let texCoord = vec2f(id.xy) / dims;
 
               // strengthをピクセル単位として処理し、テクスチャ座標に変換
-              let pixelOffset = getOffset(params.angle) * params.strength;
+              let pixelOffset = getOffset(params.angle) * params.strength * (params.dpi / params.baseDpi);
               let texOffset = pixelOffset / dims;
 
               var effectColor: vec4f;
@@ -275,33 +272,45 @@ export const chromaticAberration = definePlugin({
 
               textureStore(resultTexture, id.xy, finalColor);
           }
-      `,
-      });
+      `;
 
-      device.addEventListener("lost", (e) => {
-        console.error(e);
-      });
+        const shader = device.createShaderModule({
+          label: "Chromatic Aberration Shader",
+          code,
+        });
 
-      device.addEventListener("uncapturederror", (e) => {
-        console.error(e.error);
-      });
+        const defs = makeShaderDataDefinitions(code);
 
-      const pipeline = device.createComputePipeline({
-        label: "Chromatic Aberration Pipeline",
-        layout: "auto",
-        compute: {
-          module: shader,
-          entryPoint: "computeMain",
-        },
-      });
+        device.addEventListener("lost", (e) => {
+          console.error(e);
+        });
 
-      return { device, pipeline };
+        device.addEventListener("uncapturederror", (e) => {
+          console.error(e.error);
+        });
+
+        const pipeline = device.createComputePipeline({
+          label: "Chromatic Aberration Pipeline",
+          layout: "auto",
+          compute: {
+            module: shader,
+            entryPoint: "computeMain",
+          },
+        });
+
+        return { device, pipeline, defs };
+      });
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+    doLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
       console.log("Chromatic Aberration V1", params);
       // const size = Math.max(imgData.width, imgData.height);
 
-      imgData = await paddingImageData(imgData, params.strength);
+      const dpiScale = env.dpi / env.baseDpi;
+
+      imgData = await paddingImageData(
+        imgData,
+        Math.ceil(params.strength * dpiScale)
+      );
       const outputWidth = imgData.width;
       const outputHeight = imgData.height;
 
@@ -334,10 +343,22 @@ export const chromaticAberration = definePlugin({
       });
 
       // Create uniform buffer
+      const uniformValues = makeStructuredView(defs.uniforms.params);
+
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
-        size: 20, // float + float + uint + float + uint
+        size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+
+      uniformValues.set({
+        dpi: env.dpi,
+        baseDpi: env.baseDpi,
+        strength: params.strength,
+        angle: params.angle,
+        colorMode: params.colorMode === "rgb" ? 0 : 1,
+        opacity: params.opacity / 100,
+        blendMode: params.blendMode === "over" ? 0 : 1,
       });
 
       const bindGroup = device.createBindGroup({
@@ -363,23 +384,13 @@ export const chromaticAberration = definePlugin({
         ],
       });
 
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+
       const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
         size: width * height * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
-
-      // Update uniforms
-      const uniformData = new ArrayBuffer(20); // 4 floats + 1 uint
-      new Float32Array(uniformData, 0, 1)[0] = params.strength;
-      new Float32Array(uniformData, 4, 1)[0] = params.angle;
-      new Uint32Array(uniformData, 8, 1)[0] =
-        params.colorMode === "rgb" ? 0 : 1;
-      new Float32Array(uniformData, 12, 1)[0] = params.opacity / 100;
-      new Uint32Array(uniformData, 16, 1)[0] = 0;
-      new Uint32Array(uniformData, 16, 1)[0] =
-        params.blendMode === "over" ? 0 : 1;
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
       // Update source texture
       device.queue.writeTexture(

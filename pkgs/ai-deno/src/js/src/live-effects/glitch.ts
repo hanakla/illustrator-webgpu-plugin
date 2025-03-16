@@ -1,3 +1,7 @@
+import {
+  makeShaderDataDefinitions,
+  makeStructuredView,
+} from "npm:webgpu-utils";
 import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
 import { ui } from "../ui/nodes.ts";
@@ -6,11 +10,36 @@ import {
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./utils.ts";
+} from "./_utils.ts";
+import { createGPUDevice } from "./_shared.ts";
+import { createTranslator } from "../ui/locale.ts";
+
+const t = createTranslator({
+  en: {
+    title: "Glitch Effect V1",
+    intensity: "Intensity",
+    slices: "Slices",
+    colorShift: "Color Shift",
+    angle: "Angle",
+    bias: "Direction Bias",
+    seed: "Seed",
+    reset: "Reset",
+  },
+  ja: {
+    title: "グリッチエフェクト V1",
+    intensity: "強度",
+    slices: "スライス数",
+    colorShift: "色シフト",
+    angle: "角度",
+    bias: "散布の寄り",
+    seed: "シード値",
+    reset: "リセット",
+  },
+});
 
 export const glitch = definePlugin({
   id: "glitch-effect-v1",
-  title: "Glitch Effect V1",
+  title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -28,7 +57,7 @@ export const glitch = definePlugin({
       },
       colorShift: {
         type: "real",
-        default: 0.3,
+        default: 1,
       },
       angle: {
         type: "real",
@@ -43,17 +72,20 @@ export const glitch = definePlugin({
         default: Math.floor(Math.random() * 10000),
       },
     },
-    editLiveEffectParameters: (params) => {
+    onAdjustColors: (params, adjustColor) => {
+      return params;
+    },
+    onEditParameters: (params) => {
       params.intensity = Math.max(0, Math.min(1, params.intensity));
       params.colorShift = Math.max(0, Math.min(1, params.colorShift));
       params.angle = Math.max(-1, Math.min(1, params.angle));
       params.bias = Math.max(-1, Math.min(1, params.bias));
       return params;
     },
-    liveEffectScaleParameters(params, scaleFactor) {
+    onScaleParams(params, scaleFactor) {
       return params;
     },
-    liveEffectInterpolate: (paramsA, paramsB, t) => {
+    onInterpolate: (paramsA, paramsB, t) => {
       return {
         intensity: lerp(paramsA.intensity, paramsB.intensity, t),
         colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t),
@@ -64,87 +96,55 @@ export const glitch = definePlugin({
       };
     },
 
-    renderUI: (params) => {
+    renderUI: (params, setParam) => {
+      // prettier-ignore
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Intensity" }),
-          ui.slider({
-            key: "intensity",
-            label: "Intensity",
-            dataType: "float",
-            min: 0,
-            max: 1,
-            value: params.intensity,
-          }),
+          ui.text({ text: t("intensity") }),
+          ui.slider({ key: "intensity", dataType: "float", min: 0, max: 1, value: params.intensity }),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Slices" }),
-          ui.slider({
-            key: "slices",
-            label: "Slices",
-            dataType: "int",
-            min: 1,
-            max: 100,
-            value: params.slices,
-          }),
+          ui.text({ text: t("slices") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "slices", dataType: "int", min: 1, max: 400, value: params.slices }),
+            ui.numberInput({ dataType: "int", key: "slices", value: params.slices, min: 1, max: 400, step: 1 }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Color Shift" }),
-          ui.slider({
-            key: "colorShift",
-            label: "Color Shift",
-            dataType: "float",
-            min: 0,
-            max: 1,
-            value: params.colorShift,
-          }),
+          ui.text({ text: t("colorShift") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 100, value: params.colorShift }),
+            ui.numberInput({ dataType: "float", key: "colorShift", value: params.colorShift, min: 0, max: 1, step: 0.01 }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Angle" }),
-          ui.slider({
-            key: "angle",
-            label: "Angle",
-            dataType: "float",
-            min: -1,
-            max: 1,
-            value: params.angle,
-          }),
+          ui.text({ text: t("angle") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "angle", dataType: "float", min: -1, max: 1, value: params.angle }),
+            ui.numberInput({ dataType: "float", key: "angle", value: params.angle, min: -1, max: 1, step: 0.01 }),
+          ]),
+          ui.button({ text: t("reset"), onClick: () => { setParam({ angle: 0 }) } }),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Direction Bias" }),
-          ui.slider({
-            key: "bias",
-            label: "Direction Bias",
-            dataType: "float",
-            min: -1,
-            max: 1,
-            value: params.bias,
-          }),
+          ui.text({ text: t("bias") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "bias", dataType: "float", min: -1, max: 1, value: params.bias }),
+            ui.numberInput({ dataType: "float", key: "bias", value: params.bias, min: -1, max: 1, step: 0.01 }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Seed" }),
-          ui.slider({
-            key: "seed",
-            label: "Seed",
-            dataType: "int",
-            min: 0,
-            max: 10000,
-            value: params.seed,
-          }),
+          ui.text({ text: t("seed") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "seed", dataType: "int", min: 0, max: 10000, value: params.seed }),
+            ui.numberInput({ dataType: "int", key: "seed", value: params.seed, min: 0, max: 10000, step: 1 }),
+          ]),
         ]),
       ]);
     },
 
     initLiveEffect: async () => {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) {
-        throw new Error("WebGPU adapter not available");
-      }
-
-      const device = await adapter.requestDevice();
-
-      const shader = device.createShaderModule({
-        code: `
+      return await createGPUDevice({}, (device) => {
+        const code = `
           struct Params {
             intensity: f32,
             colorShift: f32,
@@ -152,6 +152,8 @@ export const glitch = definePlugin({
             angle: f32,
             bias: f32,
             seed: f32,
+            dpi: i32,
+            baseDpi: i32,
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -174,18 +176,19 @@ export const glitch = definePlugin({
             if (params.intensity > 0.0) {
               // 角度に基づいて斜めのスライスを計算
               let angle = params.angle * 3.14159;
+
               // xとyの座標を角度に基づいて回転させた座標でスライスを決定
               let sliceCoord = texCoord.x * sin(angle) + texCoord.y * cos(angle);
               let sliceIndex = floor(sliceCoord * params.slices);
-              // シード値を使用してランダム値を計算
+
               let seed = params.seed;
               let random = fract(sin(sliceIndex * 43758.5453 + seed) * 43758.5453);
 
               if (random < params.intensity) {
-                let shift = (random - 0.5 + params.bias * 0.5) * params.intensity * 0.2;
+                let shift = (random - 0.5 + params.bias * 0.5) * params.intensity;
 
                 // シフト方向も角度に垂直な方向に
-                let shiftAngle = angle + 3.14159 * 0.5; // 垂直方向（90度回転）
+                let shiftAngle = angle;
                 let xShift = shift * cos(shiftAngle);
                 let yShift = shift * sin(shiftAngle);
 
@@ -194,7 +197,7 @@ export const glitch = definePlugin({
               }
             }
 
-            let rOffset = params.colorShift * 0.05;
+            let rOffset = params.colorShift;
 
             let rCoord = clamp(vec2f(shiftedCoord.x + rOffset, shiftedCoord.y), vec2f(0.0), vec2f(1.0));
             let gCoord = shiftedCoord;
@@ -210,28 +213,39 @@ export const glitch = definePlugin({
 
             textureStore(resultTexture, id.xy, outColor);
           }
-        `,
-      });
+        `;
 
-      const pipeline = device.createComputePipeline({
-        compute: {
-          module: shader,
-          entryPoint: "computeMain",
-        },
-        layout: "auto",
-      });
+        const shader = device.createShaderModule({
+          code,
+        });
 
-      return { device, pipeline };
+        const defs = makeShaderDataDefinitions(code);
+
+        const pipeline = device.createComputePipeline({
+          compute: {
+            module: shader,
+            entryPoint: "computeMain",
+          },
+          layout: "auto",
+        });
+
+        return { pipeline, defs };
+      });
     },
 
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
-      imgData = await paddingImageData(imgData, params.colorShift);
+    doLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
+      imgData = await paddingImageData(
+        imgData,
+        params.colorShift + params.bias
+      );
       const outputWidth = imgData.width;
       const outputHeight = imgData.height;
 
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width;
       const inputHeight = imgData.height;
+
+      const uniformValues = makeStructuredView(defs.uniforms.params);
 
       const texture = device.createTexture({
         size: [inputWidth, inputHeight],
@@ -253,20 +267,20 @@ export const glitch = definePlugin({
       });
 
       const uniformBuffer = device.createBuffer({
-        size: 32, // 5つのf32値 + パディング = 32バイト (WebGPUでは16バイトアライメントが推奨)
+        size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      const uniformData = new Float32Array([
-        params.intensity,
-        params.colorShift,
-        Math.max(1, params.slices),
-        params.angle,
-        params.bias,
-        params.seed,
-        0.0, // パディング
-        0.0, // パディング
-      ]);
+      uniformValues.set({
+        intensity: params.intensity,
+        colorShift: params.colorShift / 100,
+        slices: Math.max(1, params.slices),
+        angle: params.angle,
+        bias: params.bias,
+        seed: params.seed,
+        dpi: env.dpi,
+        baseDpi: env.baseDpi,
+      });
 
       const bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
@@ -283,7 +297,7 @@ export const glitch = definePlugin({
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
 
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
 
       device.queue.writeTexture(
         { texture },

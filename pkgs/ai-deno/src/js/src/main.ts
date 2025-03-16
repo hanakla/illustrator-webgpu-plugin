@@ -1,4 +1,4 @@
-import { AIEffectPlugin, AIPlugin, RGBAColor } from "./types.ts";
+import { AIEffectPlugin, AIPlugin, LiveEffectEnv, ColorRGBA } from "./types.ts";
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
@@ -7,25 +7,34 @@ import { homedir } from "node:os";
 // import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
-import { AnyEventHandler, ChangeEventHandler, UINode } from "./ui/nodes.ts";
+import { ChangeEventHandler, UINode } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/directional-blur.ts";
 import { kirakiraGlow } from "./live-effects/kirakira-glow.ts";
 import { dithering } from "./live-effects/dithering.ts";
 import { pixelSort } from "./live-effects/pixel-sort.ts";
 import { glitch } from "./live-effects/glitch.ts";
 import { logger } from "./logger.ts";
+import { outlineEffect } from "./live-effects/outline.ts";
+import { innerGlow } from "./live-effects/inner-glow.ts";
+import { resizeImageData } from "./live-effects/_utils.ts";
+import { halftone } from "./live-effects/halftone.ts";
+import { fluidDistortion } from "./live-effects/fluid-distortion.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allPlugins: AIPlugin<any, any>[] = [
-  // randomNoiseEffect,
   // blurEffect,
-  glitch,
-  pixelSort,
-  kirakiraGlow,
-  dithering,
   chromaticAberration,
   directionalBlur,
+  dithering,
+  fluidDistortion,
+  glitch,
+  halftone,
+  // innerGlow,
+  kirakiraGlow,
+  outlineEffect,
+  // pixelSort,
+  // randomNoiseEffect,
   testBlueFill,
 ];
 const effectInits = new Map<AIPlugin<any, any>, any>();
@@ -40,18 +49,31 @@ const allEffectPlugins: Record<
 );
 
 // Initialize effects at Startup of Illustrator
-await Promise.all(
-  Object.values(allEffectPlugins).map(
-    async (effect: AIEffectPlugin<any, any>) => {
-      await retry(3, async () => {
-        effectInits.set(
-          effect,
-          (await effect.liveEffect.initLiveEffect?.()) ?? {}
-        );
-      });
-    }
-  )
-);
+try {
+  await Promise.all(
+    Object.values(allEffectPlugins).map(
+      async (effect: AIEffectPlugin<any, any>) => {
+        return retry(3, async () => {
+          try {
+            effectInits.set(
+              effect,
+              (await effect.liveEffect.initLiveEffect?.()) ?? {}
+            );
+          } catch (e) {
+            throw new Error(`Failed to initialize effect: ${effect.id}`, {
+              cause: e,
+            });
+          }
+        });
+      }
+    )
+  );
+} catch (e) {
+  logger.error(e);
+  _AI_DENO_.op_ai_alert(
+    "[AiDeno] Failed to initialize effects\n\n" + e.toString()
+  );
+}
 
 export async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
@@ -105,7 +127,7 @@ export function getEffectViewNode(id: string, params: any): UINode {
   if (!effect) return null;
 
   params = getParams(id, params);
-  params = effect.liveEffect.editLiveEffectParameters?.(params) ?? params;
+  params = effect.liveEffect.onEditParameters?.(params) ?? params;
 
   let localNodeState: NodeState | null = null;
 
@@ -146,7 +168,7 @@ export function editLiveEffectParameters(id: string, params: any) {
 
   params = getParams(id, params);
 
-  return effect.liveEffect.editLiveEffectParameters?.(params) ?? params;
+  return effect.liveEffect.onEditParameters?.(params) ?? params;
 }
 
 export async function editLiveEffectFireCallback(
@@ -228,17 +250,14 @@ function attachNodeIds(node: UINode) {
 export function liveEffectAdjustColors(
   id: string,
   params: any,
-  adjustCallback: (color: RGBAColor) => RGBAColor
+  adjustCallback: (color: ColorRGBA) => ColorRGBA
 ) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
 
   params = getParams(id, params);
 
-  const result = effect.liveEffect.liveEffectAdjustColors(
-    params,
-    adjustCallback
-  );
+  const result = effect.liveEffect.onAdjustColors(params, adjustCallback);
 
   return {
     hasChanged: !isEqual(result, params),
@@ -256,10 +275,7 @@ export function liveEffectScaleParameters(
 
   params = getParams(id, params);
 
-  const result = effect.liveEffect.liveEffectScaleParameters(
-    params,
-    scaleFactor
-  );
+  const result = effect.liveEffect.onScaleParams(params, scaleFactor);
 
   return {
     hasChanged: result != null,
@@ -279,19 +295,20 @@ export function liveEffectInterpolate(
   params = getParams(id, params);
   params2 = getParams(id, params2);
 
-  return effect.liveEffect.liveEffectInterpolate(params, params2, t);
+  return effect.liveEffect.onInterpolate(params, params2, t);
 }
 
 export const doLiveEffect = async (
   id: string,
-  state: any,
+  params: any,
+  env: LiveEffectEnv,
   width: number,
   height: number,
   data: Uint8ClampedArray
 ) => {
   const effect = findEffect(id);
   if (!effect) return null;
-  const defaultValues = getDefaultValus(id);
+  const defaultParams = getDefaultValus(id);
 
   const init = effectInits.get(effect);
   if (!init) {
@@ -299,18 +316,29 @@ export const doLiveEffect = async (
     return null;
   }
 
-  logger.log("[deno_ai(js)] doLiveEffect", id, state, width, height);
+  logger.log("[deno_ai(js)] doLiveEffect", id, params, env, width, height);
   try {
+    const dpiScale = env.dpi / env.baseDpi;
+    const input = await resizeImageData(
+      {
+        data,
+        width,
+        height,
+      },
+      width * dpiScale,
+      height * dpiScale
+    );
+
     const result = await effect.liveEffect.doLiveEffect(
       init,
       {
-        ...defaultValues,
-        ...state,
+        ...defaultParams,
+        ...params,
       },
+      input,
       {
-        width,
-        height,
-        data,
+        ...env,
+        baseDpi: 72,
       }
     );
 
