@@ -50,7 +50,7 @@ export const chromaticAberration = definePlugin({
 
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {
@@ -301,7 +301,7 @@ export const chromaticAberration = definePlugin({
         return { device, pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
+    goLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
       console.log("Chromatic Aberration V1", params);
       // const size = Math.max(imgData.width, imgData.height);
 

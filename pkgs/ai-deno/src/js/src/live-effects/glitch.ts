@@ -43,7 +43,7 @@ export const glitch = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {
@@ -233,7 +233,7 @@ export const glitch = definePlugin({
       });
     },
 
-    doLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
+    goLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
       imgData = await paddingImageData(
         imgData,
         params.colorShift + params.bias

@@ -430,6 +430,7 @@ fn runtime_options_factory(
         //     schema_whlist: (),
         //     cwd: (),
         // }),
+        startup_snapshot: None,
         extensions,
         extension_transpiler: Some(extension_transpiler),
         is_main: true,

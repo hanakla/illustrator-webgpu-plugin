@@ -14,7 +14,7 @@ export const dithering = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {
@@ -206,7 +206,7 @@ export const dithering = definePlugin({
 
       return { device, pipeline };
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+    goLiveEffect: async ({ device, pipeline }, params, imgData) => {
       console.log("Dithering Effect V1", params);
 
       const outputWidth = imgData.width,

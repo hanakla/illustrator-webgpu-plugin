@@ -23,7 +23,6 @@
 		9E9C47171423A25E004EA572 /* FlashUIController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47151423A25E004EA572 /* FlashUIController.cpp */; };
 		9E9C47181423A25E004EA572 /* SDKPlugPlug.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47161423A25E004EA572 /* SDKPlugPlug.cpp */; };
 		9E9C475A1423AD0C004EA572 /* IAIFilePath.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47591423AD0C004EA572 /* IAIFilePath.cpp */; };
-		A51B63312D5A9A2B00BC41CA /* libai_deno.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B63302D5A9A2B00BC41CA /* libai_deno.dylib */; };
 		A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */ = {isa = PBXBuildFile; fileRef = A51B63322D5AA19E00BC41CA /* libai_dino.h */; };
 		A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E02D5F5A7D00BC41CA /* Metal.framework */; };
 		A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */; };
@@ -108,6 +107,7 @@
 		A51B63322D5AA19E00BC41CA /* libai_dino.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = libai_dino.h; path = "../ai-deno/target/release/includes/libai_dino.h"; sourceTree = SOURCE_ROOT; };
 		A51B65E02D5F5A7D00BC41CA /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		A58518E62D872603007D381B /* librusty_v8.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = librusty_v8.a; path = "../ai-deno/target/release/gn_out/obj/librusty_v8.a"; sourceTree = "<group>"; };
 		A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = "spectrum-tokens.hpp"; path = "Source/spectrum-tokens.hpp"; sourceTree = "<group>"; };
 		A59DB54F2D81D8A900C7BD59 /* libai_deno.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libai_deno.a; path = "../ai-deno/target/release/libai_deno.a"; sourceTree = "<group>"; };
 		A59DB5602D821FDD00C7BD59 /* Sandbox */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Sandbox; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -398,7 +398,6 @@
 			files = (
 				A59DB5502D81D8A900C7BD59 /* libai_deno.a in Frameworks */,
 				A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */,
-				A51B63312D5A9A2B00BC41CA /* libai_deno.dylib in Frameworks */,
 				A5F9AB122D637800007EE38C /* GameController.framework in Frameworks */,
 				A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */,
 				A5ACCD822D6F017A00069E63 /* Security.framework in Frameworks */,
@@ -1265,6 +1264,7 @@
 		C4A3F94D134C5A7F00128D2D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A58518E62D872603007D381B /* librusty_v8.a */,
 				A59DB54F2D81D8A900C7BD59 /* libai_deno.a */,
 				A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */,
 				A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */,

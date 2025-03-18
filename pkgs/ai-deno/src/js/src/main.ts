@@ -19,6 +19,7 @@ import { innerGlow } from "./live-effects/inner-glow.ts";
 import { resizeImageData } from "./live-effects/_utils.ts";
 import { halftone } from "./live-effects/halftone.ts";
 import { fluidDistortion } from "./live-effects/fluid-distortion.ts";
+import { kaleidoscope } from "./live-effects/kaleidoscope.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
@@ -31,6 +32,7 @@ const allPlugins: AIPlugin<any, any>[] = [
   glitch,
   halftone,
   // innerGlow,
+  kaleidoscope,
   kirakiraGlow,
   outlineEffect,
   // pixelSort,
@@ -47,11 +49,6 @@ const allEffectPlugins: Record<
     .filter((p): p is AIEffectPlugin<any, any> => !!p.liveEffect)
     .map((p) => [p.id, p])
 );
-
-const adapter = await navigator.gpu.requestAdapter();
-const device = await adapter!.requestDevice();
-
-console.log("device", device, device.lost);
 
 // Initialize effects at Startup of Illustrator
 try {
@@ -256,11 +253,14 @@ export function liveEffectAdjustColors(
   id: string,
   params: any,
   adjustCallback: (color: ColorRGBA) => ColorRGBA
-) {
+): {
+  hasChanged: boolean;
+  params: any;
+} {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
 
-  params = getParams(id, params);
+  params = structuredClone(getParams(id, params));
 
   const result = effect.liveEffect.onAdjustColors(params, adjustCallback);
 
@@ -334,7 +334,7 @@ export const doLiveEffect = async (
       height * dpiScale
     );
 
-    const result = await effect.liveEffect.doLiveEffect(
+    const result = await effect.liveEffect.goLiveEffect(
       init,
       {
         ...defaultParams,

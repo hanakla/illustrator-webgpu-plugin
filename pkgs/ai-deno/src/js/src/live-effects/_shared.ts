@@ -34,9 +34,9 @@ export async function createGPUDevice<
       console.error(e.error);
     });
 
-    device.lost.then(async () => {
-      deviceRef = await init();
-    });
+    // device.lost.then(async () => {
+    //   deviceRef = await init();
+    // });
 
     inits = await initializer(device);
 

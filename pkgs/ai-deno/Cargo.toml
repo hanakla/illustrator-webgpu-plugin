@@ -80,6 +80,7 @@ futures = "0.3.31"
 
 [build-dependencies]
 cbindgen = "0.28.0"
+deno_runtime = { version = "0.201.0", features = ["transpile"] }
 
 [[example]]
 name = "example"

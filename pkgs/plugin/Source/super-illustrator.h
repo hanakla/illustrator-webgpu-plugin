@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AIGradient.h"
 #include "AIRasterize.h"
 #include "IllustratorSDK.h"
 
@@ -11,6 +12,9 @@ extern "C" AIPathSuite*       sAIPath;
 extern "C" AIPathStyleSuite*  sAIPathStyle;
 extern "C" AILayerSuite*      sAILayer;
 extern "C" AIPreferenceSuite* sAIPref;
+extern "C" AIRasterSuite*     sAIRaster;
+extern "C" AIMaskSuite*       sAIMask;
+extern "C" AIGradientSuite*   sAIGradient;
 
 #ifndef CHKERR
 #define CHKERR(...)                                                         \
@@ -416,7 +420,7 @@ namespace suai {
           type, string_format("Unknown(%d)", type),
           {
               {AIArtType::kAnyArt, "Any"},
-              {AIArtType::kUnknownArt, "Unknown"},
+              {AIArtType::kUnknownArt, string_format("Unknown(%d)", type)},
               {AIArtType::kGroupArt, "Group"},
               {AIArtType::kPathArt, "Path"},
               {AIArtType::kCompoundPathArt, "CompoundPath"},
@@ -507,227 +511,387 @@ namespace suai {
       return suai::getErrorName(error);
     }
 
-    json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth);
+    namespace serialize {
 
-    json __boundingBoxToJson(const AIRealRect& bounds) {
-      return {
-          {"left", bounds.left},
-          {"top", bounds.top},
-          {"right", bounds.right},
-          {"bottom", bounds.bottom}
-      };
-    }
+      // json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth);
 
-    json __boundingBoxToJson(const AIRect& bounds) {
-      return {
-          {"left", bounds.left},
-          {"top", bounds.top},
-          {"right", bounds.right},
-          {"bottom", bounds.bottom}
-      };
-    }
-
-    json __colorToJson(const AIColor& color) {
-      json colorJson;
-
-      switch (color.kind) {
-        case AIColorTag::kGrayColor:
-          colorJson = {{"type", "gray"}, {"value", color.c.g.gray}};
-          break;
-        case AIColorTag::kThreeColor:
-          colorJson = {
-              {"type", "rgb"},
-              {"color", json(
-                            {{"red", color.c.rgb.red},
-                             {"green", color.c.rgb.green},
-                             {"blue", color.c.rgb.blue}}
-                        )},
-
-          };
-          break;
-        case AIColorTag::kFourColor:
-          colorJson = {
-              {"type", "cmyk"},
-              {"color", json(
-                            {{"cyan", color.c.f.cyan},
-                             {"magenta", color.c.f.magenta},
-                             {"yellow", color.c.f.yellow},
-                             {"black", color.c.f.black}}
-                        )}
-          };
-          break;
-        case AIColorTag::kPattern:
-          colorJson = {{"type", "pattern"}};
-          break;
-        case AIColorTag::kGradient:
-          colorJson = {{"type", "gradient"}};
-          break;
-        case AIColorTag::kNoneColor:
-        default:
-          colorJson = {{"type", "none"}};
-          break;
+      json AIRectOrRealRectToJSON(const AIRealRect& bounds) {
+        return {
+            {"__typename", "AIRealRect"},
+            {"left", bounds.left},
+            {"top", bounds.top},
+            {"right", bounds.right},
+            {"bottom", bounds.bottom}
+        };
       }
 
-      return colorJson;
-    }
+      json AIRectOrRealRectToJSON(const AIRect& bounds) {
+        return {
+            {"__typename", "AIRect"},
+            {"left", bounds.left},
+            {"top", bounds.top},
+            {"right", bounds.right},
+            {"bottom", bounds.bottom}
+        };
+      }
 
-    json __pathInfoToJson(AIPathSegment* segments, ai::int16 segmentCount) {
-      json segmentsJson = json::array();
+      json AIPointToJSON(const AIRealPoint& point) {
+        return {{"__typename", "AIRealPoint"}, {"x", point.h}, {"y", point.v}};
+      }
 
-      for (ai::int16 i = 0; i < segmentCount; i++) {
-        json segmentJson = {
-            {"anchor", {{"x", segments[i].p.h}, {"y", segments[i].p.v}}},
-            {"in", nullptr},
-            {"out", nullptr},
+      json AIPointToJSON(const AIPoint& point) {
+        return {{"__typename", "AIPoint"}, {"x", point.h}, {"y", point.v}};
+      }
+
+      json AIMatrixToJSON(const AIRealMatrix& matrix) {
+        return {
+            {"__typename", "AIRealMatrix"},
+            {"a", matrix.a},
+            {"b", matrix.b},
+            {"c", matrix.c},
+            {"d", matrix.d},
+            {"tx", matrix.tx},
+            {"ty", matrix.ty}
+        };
+      }
+
+      json AIGradientStyleToJSON(const AIGradientStyle& style);
+
+      json AIColorToJSON(const AIColor& color) {
+        switch (color.kind) {
+          case AIColorTag::kGrayColor:
+            return {{"type", "gray"}, {"color", {"gray", color.c.g.gray}}};
+          case AIColorTag::kThreeColor:
+            return {
+                {"type", "rgb"},
+                {"color",
+                 {{"red", color.c.rgb.red},
+                  {"green", color.c.rgb.green},
+                  {"blue", color.c.rgb.blue}}},
+
+            };
+          case AIColorTag::kFourColor:
+            return {
+                {"type", "cmyk"},
+                {"color", json(
+                              {{"cyan", color.c.f.cyan},
+                               {"magenta", color.c.f.magenta},
+                               {"yellow", color.c.f.yellow},
+                               {"black", color.c.f.black}}
+                          )}
+            };
+          case AIColorTag::kPattern:
+            return {{"type", "pattern"}};
+          case AIColorTag::kGradient:
+            return {{"type", "gradient"}, {"gradient", AIGradientStyleToJSON(color.c.b)}};
+          case AIColorTag::kNoneColor:
+          default:
+            return {{"type", "none"}};
+        }
+      }
+
+      json AIGradientStyleToJSON(const AIGradientStyle& style) {
+        AIErr error;
+
+        ai::int16 stopCount = 0;
+        error = sAIGradient->GetGradientStopCount(style.gradient, &stopCount);
+        aisdk::check_ai_error(error);
+
+        json           stopsJson = json::array();
+        AIGradientStop stop;
+
+        for (ai::int16 i = 0; i < stopCount; i++) {
+          error = sAIGradient->GetNthGradientStop(style.gradient, i, &stop);
+          aisdk::check_ai_error(error);
+
+          stopsJson.push_back(json(
+              {{"__typename", "AIGradientStop"},
+               {"color", AIColorToJSON(stop.color)},
+               {"midPoint", stop.midPoint},
+               {"rampPoint", stop.rampPoint},
+               {"opacity", stop.opacity}}
+          ));
+        }
+
+        ai::int16 type = 0;
+        error          = sAIGradient->GetGradientType(style.gradient, &type);
+        aisdk::check_ai_error(error);
+
+        std::string typeName = mapValue<int, std::string>(
+            (int)type, "LinearGradient",
+            {{(int)kRadialGradient, "RadialGradient"},
+             {(int)kLinearGradient, "LinearGradient"}}
+        );
+
+        return {
+            {"__typename", "AIGradientStyle"},
+            {"type", typeName},
+            {"origin", AIPointToJSON(style.gradientOrigin)},
+            {"matrix", AIMatrixToJSON(style.matrix)},
+            {"angle", style.gradientAngle},
+            {"length", style.gradientLength},
+            {"hilite", style.hiliteAngle},
+            {"hiliteLength", style.hiliteLength},
+            {"stops", stopsJson}
+        };
+      }
+
+      json AIDashStyleToJSON(const AIDashStyle& dash) {
+        std::vector<float> dashArrayVec = std::vector<float>(/*dash.array*/);
+
+        return {
+            {"__typename", "AIDashStyle"},
+            {"length", dash.length},
+            {"offset", dash.offset},
+            {"array", dash.array}
+        };
+      }
+
+      json AIStrokeStyleToJSON(const AIStrokeStyle& stroke) {
+        json strokeJson = {
+            {"__typename", "AIStrokeStyle"},
+            {"color", AIColorToJSON(stroke.color)},
+            {"width", stroke.width},
+            {"join", stroke.join == AILineJoin::kAIMiterJoin   ? "miter"
+                     : stroke.join == AILineJoin::kAIRoundJoin ? "round"
+                                                               : "bevel"},
+            {"cap", stroke.cap},
+            {"dash", AIDashStyleToJSON(stroke.dash)},
+            {"miterLimit", stroke.miterLimit},
+            {"overprint", stroke.overprint},
         };
 
-        // 制御点がアンカーポイントと異なる場合のみ追加
-        if (segments[i].in.h != segments[i].p.h || segments[i].in.v != segments[i].p.v) {
-          segmentJson["in"] = {{"x", segments[i].in.h}, {"y", segments[i].in.v}};
-        }
-
-        if (segments[i].out.h != segments[i].p.h ||
-            segments[i].out.v != segments[i].p.v) {
-          segmentJson["out"] = {{"x", segments[i].out.h}, {"y", segments[i].out.v}};
-        }
-
-        segmentsJson.push_back(segmentJson);
+        return strokeJson;
       }
 
-      return {{"segments", segmentsJson}, {"closed", segments[0].corner != 0}};
-    }
+      json AIFillStyleToJSON(const AIFillStyle& fill) {
+        json fillJson = {
+            {"__typename", "AIFillStyle"},
+            {"color", AIColorToJSON(fill.color)},
+            {"overprint", fill.overprint},
+        };
 
-    json __rasterInfoToJson(const AIRasterRecord& info) {
-      return {
-          {"width", info.bounds.right - info.bounds.left},
-          {"height", info.bounds.bottom - info.bounds.top},
-          {"bitsPerPixel", info.bitsPerPixel},
-          {"colorSpace", info.colorSpace},
-          {"flags", info.flags}
-      };
-    }
+        return fillJson;
+      }
 
-    json __artObjectToJson(AIArtHandle art, int depth, int maxDepth) {
-      if (!art || depth > maxDepth) return nullptr;
+      json AIRealBezierToJSON(const AIRealBezier& bezier) {
+        return {
+            {"__typename", "AIRealBezier"},
+            {"p0", AIPointToJSON(bezier.p0)},
+            {"p1", AIPointToJSON(bezier.p1)},
+            {"p2", AIPointToJSON(bezier.p2)},
+            {"p3", AIPointToJSON(bezier.p3)}
+        };
+      }
 
-      AIErr error = kNoErr;
-      json  artJson;
+      json AIPathSegmentsToJSON(AIArtHandle& path) {
+        AIErr error;
 
-      short artType = getArtType(art, &error);
-      aisdk::check_ai_error(error);
-
-      auto attrs = getUserAttrs(art, &error);
-      aisdk::check_ai_error(error);
-
-      auto [artName, isDefaultName] = getName(art, &error);
-      aisdk::check_ai_error(error);
-
-      // バウンディングボックスを取得
-      AIRealRect bounds;
-      error = sAIArt->GetArtBounds(art, &bounds);
-
-      // 基本情報を設定
-      artJson["artTypeCode"] = artType;
-      artJson["artType"]     = getTypeName(art);
-
-      artJson["name"]          = artName;
-      artJson["isDefaultName"] = isDefaultName != 0;
-
-      artJson["bounds"]     = __boundingBoxToJson(bounds);
-      artJson["attributes"] = attrs.toJson();
-
-      if (artType == AIArtType::kPathArt) {
         ai::int16 segmentCount = 0;
-        error                  = sAIPath->GetPathSegmentCount(art, &segmentCount);
-
-        if (!error && segmentCount > 0) {
-          AIPathSegment* segments = new AIPathSegment[segmentCount];
-          error = sAIPath->GetPathSegments(art, 0, segmentCount, segments);
-
-          if (!error) { artJson["pathInfo"] = __pathInfoToJson(segments, segmentCount); }
-
-          delete[] segments;
-        }
-
-        AIPathStyle style;
-        AIBoolean   outHasAdvFill;
-        error = sAIPathStyle->GetPathStyle(art, &style, &outHasAdvFill);  // TODO: false??
-        if (!error) {
-          // artJson["fillColor"]   = __colorToJson(style.fill.color);
-          // artJson["strokeColor"] = __colorToJson(style.stroke.color);
-          // artJson["strokeWidth"] = style.strokeWidth;
-        }
-
-      } else if (artType == kRasterArt) {
-        //        AIRasterRecord info;
-        //        error = sAIRaster->GetRasterInfo(art, &info);
-        //        aisdk::check_ai_error(error);
-        //        artJson["rasterInfo"] = __rasterInfoToJson(info);
-      } else if (artType == kTextFrameArt) {
-        //        artJson["isTextFrame"] = true;
-      }
-
-      AIBoolean hasDictionary  = sAIArt->HasDictionary(art);
-      artJson["hasDictionary"] = hasDictionary && !sAIArt->IsDictionaryEmpty(art);
-
-      // タグ（メモ）を取得
-      AIBoolean hasNote = sAIArt->HasNote(art);
-      artJson["note"]   = json::value_t::null;
-
-      if (hasNote) {
-        ai::UnicodeString note;
-        error = sAIArt->GetNote(art, note);
-        aisdk::check_ai_error(error);
-        artJson["note"] = note.as_Platform();
-      }
-
-      if ((artType == kGroupArt || artType == kCompoundPathArt ||
-           artType == kTextFrameArt || artType == kSymbolArt) &&
-          depth < maxDepth) {
-        AIArtHandle firstChild;
-        error = sAIArt->GetArtFirstChild(art, &firstChild);
+        error                  = sAIPath->GetPathSegmentCount(path, &segmentCount);
         aisdk::check_ai_error(error);
 
-        if (firstChild) {
-          artJson["children"] = __getChildrenAsJson(art, depth, maxDepth);
+        AIPathSegment segments[segmentCount];
+        error = sAIPath->GetPathSegments(path, 0, segmentCount, segments);
+        aisdk::check_ai_error(error);
+
+        std::vector<int> selectedSegments;
+
+        json segmentsJson = json::array();
+        for (ai::int16 i = 0; i < segmentCount; i++) {
+          AIPathSegment segment = segments[i];
+
+          AIRealBezier bezier;
+
+          error = sAIPath->GetPathBezier(path, i, &bezier);
+          aisdk::check_ai_error(error);
+
+          ai::int16 selectFlags = false;
+          error                 = sAIPath->GetPathSegmentSelected(path, i, &selectFlags);
+          aisdk::check_ai_error(error);
+          bool isSelected =
+              selectFlags != AIPathSegementSelectionState::kSegmentNotSelected;
+
+          if (isSelected) { selectedSegments.push_back(i); }
+
+          segmentsJson.push_back(json(
+              {{"__typename", "AIPathSegment"},
+               {"p", AIPointToJSON(segment.p)},
+               {"in", AIPointToJSON(segment.in)},
+               {"out", AIPointToJSON(segment.out)},
+               {"corner", (bool)segment.corner},
+               {"bezier", AIRealBezierToJSON(bezier)},
+               {"isSelected", isSelected}}
+          ));
         }
+
+        AIBoolean isClosed = false;
+        error              = sAIPath->GetPathClosed(path, &isClosed);
+        aisdk::check_ai_error(error);
+
+        AIBoolean isClip = false;
+        error            = sAIPath->GetPathIsClip(path, &isClip);
+        aisdk::check_ai_error(error);
+
+        AIBoolean isGuide = false;
+        sAIPath->GetPathGuide(path, &isGuide);
+        aisdk::check_ai_error(error);
+
+        AIReal length = 0;
+        error         = sAIPath->GetPathLength(path, &length, 0);
+        aisdk::check_ai_error(error);
+
+        AIBoolean allSelected = false;
+        error                 = sAIPath->GetPathAllSegmentsSelected(path, &allSelected);
+        aisdk::check_ai_error(error);
+
+        // error =
+
+        return {
+            {"segments", segmentsJson},
+            {"length", length},
+            {"selectedSegments", selectedSegments},
+            {"allSelected", (bool)allSelected},
+            {"isClosed", (bool)isClosed},
+            {"isClip", (bool)isClip},
+            {"isGuide", (bool)isGuide}
+        };
       }
 
-      // レイヤーへの参照を取得
-      AILayerHandle layer;
-      error = sAIArt->GetLayerOfArt(art, &layer);
-      if (!error && layer) {
-        ai::UnicodeString layerName;
-        error = sAILayer->GetLayerTitle(layer, layerName);
-        if (!error && !layerName.empty()) {
-          artJson["layerName"] = layerName.as_Platform();
+      json AIRasterRecordToJson(const AIRasterRecord& info) {
+        return {
+            {"__typename", "AIRasterRecord"},
+            {"width", info.bounds.right - info.bounds.left},
+            {"height", info.bounds.bottom - info.bounds.top},
+            {"bitsPerPixel", info.bitsPerPixel},
+            {"colorSpace", info.colorSpace},
+            {"flags", info.flags}
+        };
+      }
+
+      json AIPathStyleToJSON(const AIPathStyle& style) {
+        return {
+            {"__typename", "AIPathStyle"},
+            {"fill", AIFillStyleToJSON(style.fill)},
+            {"fillPaint", (bool)style.fillPaint},
+            {"stroke", AIStrokeStyleToJSON(style.stroke)},
+            {"strokePaint", (bool)style.strokePaint},
+            {"clip", (bool)style.clip},
+            {"evenodd", (bool)style.evenodd},
+            {"lockClip", (bool)style.lockClip},
+            {"resolution", (double)style.resolution},
+        };
+      }
+
+      std::optional<json> ArtObjectToJson(AIArtHandle art, int depth, int maxDepth) {
+        if (!art || depth > maxDepth) return std::nullopt;
+
+        AIErr error   = kNoErr;
+        json  artJson = json({{
+            "__typename",
+            "AIArtHandle",
+        }});
+
+        short artType = getArtType(art, &error);
+        aisdk::check_ai_error(error);
+
+        auto attrs = getUserAttrs(art, &error);
+        aisdk::check_ai_error(error);
+
+        auto [artName, isDefaultName] = getName(art, &error);
+        aisdk::check_ai_error(error);
+
+        // 基本情報を設定
+        artJson["artTypeCode"] = artType;
+        artJson["artTypeName"] = getTypeName(art);
+
+        artJson["name"]          = artName;
+        artJson["isDefaultName"] = isDefaultName != 0;
+
+        std::cout << "Got Art: " << getTypeName(art) << std::endl;
+        if (artType == AIArtType::kUnknownArt) { return artJson; }
+
+        // Bounding box
+        AIRealRect bounds;
+        error = sAIArt->GetArtBounds(art, &bounds);
+        aisdk::check_ai_error(error);
+
+        std::cout << "Got Art Bounds" << std::endl;
+
+        artJson["bounds"]     = AIRectOrRealRectToJSON(bounds);
+        artJson["attributes"] = attrs.toJson();
+
+        if (artType == AIArtType::kPathArt) {
+          AIPathStyle style;
+          AIBoolean   outHasAdvFill;
+          error = sAIPathStyle->GetPathStyle(art, &style, &outHasAdvFill);
+          aisdk::check_ai_error(error);
+
+          artJson["style"]         = AIPathStyleToJSON(style);
+          artJson["outHasAdvFill"] = (bool)outHasAdvFill;
+          artJson["path"]          = AIPathSegmentsToJSON(art);
+        } else if (artType == kRasterArt) {
+          AIRasterRecord info;
+          error = sAIRaster->GetRasterInfo(art, &info);
+          aisdk::check_ai_error(error);
+          artJson["rasterInfo"] = AIRasterRecordToJson(info);
+        } else if (artType == kTextFrameArt) {
+          artJson["isTextFrame"] = true;
         }
+
+        AIBoolean hasDictionary  = sAIArt->HasDictionary(art);
+        artJson["hasDictionary"] = hasDictionary && !sAIArt->IsDictionaryEmpty(art);
+
+        // Get Note
+        AIBoolean hasNote = sAIArt->HasNote(art);
+        artJson["note"]   = json::value_t::null;
+
+        if (hasNote) {
+          ai::UnicodeString note;
+          error = sAIArt->GetNote(art, note);
+          aisdk::check_ai_error(error);
+
+          artJson["note"] = note.as_Platform();
+        }
+
+        if ((artType == kGroupArt || artType == kCompoundPathArt ||
+             artType == kTextFrameArt || artType == kSymbolArt) &&
+            depth < maxDepth) {
+          AIArtHandle children;
+          error = sAIArt->GetArtFirstChild(art, &children);
+          aisdk::check_ai_error(error);
+
+          std::vector<json> childrenJson;
+
+          while (children) {
+            childrenJson.push_back(ArtObjectToJson(children, depth + 1, maxDepth));
+            error = sAIArt->GetArtSibling(children, &children);
+            aisdk::check_ai_error(error);
+          }
+
+          artJson["children"] = childrenJson;
+        }
+
+        // Get Mask
+        AIMaskRef maskRef = NULL;
+        error             = sAIMask->GetMask(art, &maskRef);
+        aisdk::check_ai_error(error);
+
+        std::optional<AIArtHandle> maskArt = sAIMask->GetArt(maskRef);
+
+        artJson["mask"] = json::value_t::null;
+        if (maskArt) {
+          artJson["mask"] = ArtObjectToJson(maskArt.value(), depth + 1, maxDepth);
+        }
+
+        return artJson;
       }
 
-      return artJson;
-    }
-
-    json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth) {
-      json childrenJson = json::array();
-
-      AIArtHandle childArt;
-      AIErr       error = sAIArt->GetArtFirstChild(parentArt, &childArt);
-
-      while (!error && childArt) {
-        childrenJson.push_back(__artObjectToJson(childArt, depth + 1, maxDepth));
-
-        AIArtHandle nextArt;
-        error    = sAIArt->GetArtSibling(childArt, &nextArt);
-        childArt = nextArt;
+      json ArtToJSON(AIArtHandle art, int maxDepth = 100) {
+        json jsonObj = ArtObjectToJson(art, 0, maxDepth);
+        return jsonObj;
       }
-
-      return childrenJson;
-    }
-
-    json artToJSON(AIArtHandle art, int maxDepth = 100) {
-      json jsonObj = __artObjectToJson(art, 0, maxDepth);
-      return jsonObj;
-    }
+    }  // namespace serialize
   }  // namespace art
 
   namespace pref {

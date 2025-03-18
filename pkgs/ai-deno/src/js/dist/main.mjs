@@ -63,7 +63,7 @@ var ui = {
 };
 
 // src/js/src/ui/locale.ts
-var texts = (t8) => t8;
+var texts = (t9) => t9;
 function createTranslator(texts2) {
   const locale = getLocale(Object.keys(texts2), "en");
   return (key, params = {}) => {
@@ -201,8 +201,8 @@ async function toPng(imgData) {
   ctx.putImageData(img, 0, 0);
   return toBlob(canvas, "image/png", 100);
 }
-function lerp(a, b, t8) {
-  return a + (b - a) * t8;
+function lerp(a, b, t9) {
+  return a + (b - a) * t9;
 }
 function parseColorCode(color) {
   const hex = (color.startsWith("#") ? color.slice(1) : color).toUpperCase();
@@ -287,25 +287,22 @@ async function createGPUDevice(options = {}, initializer) {
   let inits = null;
   const init = async () => {
     var _a2;
-    const adapter2 = await navigator.gpu.requestAdapter(options.adapter);
-    if (!adapter2) {
+    const adapter = await navigator.gpu.requestAdapter(options.adapter);
+    if (!adapter) {
       throw new Error("No adapter found");
     }
-    const device2 = await adapter2.requestDevice({
+    const device = await adapter.requestDevice({
       ...options.device,
       requiredLimits: {
         ...(_a2 = options.device) == null ? void 0 : _a2.requiredLimits,
-        maxTextureDimension2D: adapter2.limits.maxTextureDimension2D
+        maxTextureDimension2D: adapter.limits.maxTextureDimension2D
       }
     });
-    device2.addEventListener("uncapturederror", (e) => {
+    device.addEventListener("uncapturederror", (e) => {
       console.error(e.error);
     });
-    device2.lost.then(async () => {
-      deviceRef = await init();
-    });
-    inits = await initializer(device2);
-    return device2;
+    inits = await initializer(device);
+    return device;
   };
   deviceRef = await init();
   logger.info("Create GPU Device: ", ((_a = options.device) == null ? void 0 : _a.label) ?? "<<unnamed>>");
@@ -360,7 +357,7 @@ var chromaticAberration = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -439,7 +436,7 @@ var chromaticAberration = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, async (device2) => {
+      return await createGPUDevice({}, async (device) => {
         const code = `
           struct Params {
             dpi: f32,
@@ -580,18 +577,18 @@ var chromaticAberration = definePlugin({
               textureStore(resultTexture, id.xy, finalColor);
           }
       `;
-        const shader = device2.createShaderModule({
+        const shader = device.createShaderModule({
           label: "Chromatic Aberration Shader",
           code
         });
         const defs = makeShaderDataDefinitions(code);
-        device2.addEventListener("lost", (e) => {
+        device.addEventListener("lost", (e) => {
           console.error(e);
         });
-        device2.addEventListener("uncapturederror", (e) => {
+        device.addEventListener("uncapturederror", (e) => {
           console.error(e.error);
         });
-        const pipeline = device2.createComputePipeline({
+        const pipeline = device.createComputePipeline({
           label: "Chromatic Aberration Pipeline",
           layout: "auto",
           compute: {
@@ -599,10 +596,10 @@ var chromaticAberration = definePlugin({
             entryPoint: "computeMain"
           }
         });
-        return { device: device2, pipeline, defs };
+        return { device, pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device: device2, pipeline, defs }, params, imgData, env) => {
+    goLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
       console.log("Chromatic Aberration V1", params);
       const dpiScale = env.dpi / env.baseDpi;
       imgData = await paddingImageData(
@@ -614,25 +611,25 @@ var chromaticAberration = definePlugin({
       imgData = await addWebGPUAlignmentPadding(imgData);
       const width = imgData.width;
       const height = imgData.height;
-      const texture = device2.createTexture({
+      const texture = device.createTexture({
         label: "Input Texture",
         size: [width, height],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         label: "Result Texture",
         size: [width, height],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
       const uniformValues = makeStructuredView(defs.uniforms.params);
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -646,7 +643,7 @@ var chromaticAberration = definePlugin({
         opacity: params.opacity / 100,
         blendMode: params.blendMode === "over" ? 0 : 1
       });
-      const bindGroup = device2.createBindGroup({
+      const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -668,19 +665,19 @@ var chromaticAberration = definePlugin({
           }
         ]
       });
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-      const stagingBuffer = device2.createBuffer({
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
         size: width * height * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
-      device2.queue.writeTexture(
+      device.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: width * 4, rowsPerImage: height },
         [width, height]
       );
-      const commandEncoder = device2.createCommandEncoder({
+      const commandEncoder = device.createCommandEncoder({
         label: "Main Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -698,7 +695,7 @@ var chromaticAberration = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: width * 4 },
         [width, height]
       );
-      device2.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -751,13 +748,13 @@ var testBlueFill = definePlugin({
       }
     },
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
-    onInterpolate: (paramsA, paramsB, t8) => paramsA,
-    doLiveEffect: async (init, params, input) => {
+    onInterpolate: (paramsA, paramsB, t9) => paramsA,
+    goLiveEffect: async (init, params, input) => {
       let width = input.width;
       let height = input.height;
       let len = input.data.length;
@@ -925,7 +922,7 @@ var directionalBlur = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -1043,7 +1040,7 @@ var directionalBlur = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, (device2) => {
+      return await createGPUDevice({}, (device) => {
         const code = `
           struct Params {
             strength: f32,
@@ -1179,21 +1176,21 @@ var directionalBlur = definePlugin({
             textureStore(resultTexture, id.xy, finalColor);
           }
         `;
-        const shader = device2.createShaderModule({
+        const shader = device.createShaderModule({
           code
         });
         const defs = makeShaderDataDefinitions2(code);
-        const pipeline = device2.createComputePipeline({
+        const pipeline = device.createComputePipeline({
           layout: "auto",
           compute: {
             module: shader,
             entryPoint: "computeMain"
           }
         });
-        return { device: device2, pipeline, defs };
+        return { device, pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device: device2, pipeline, defs }, params, imgData) => {
+    goLiveEffect: async ({ device, pipeline, defs }, params, imgData) => {
       try {
         imgData = await paddingImageData(imgData, Math.ceil(params.strength));
         const outputWidth = imgData.width;
@@ -1201,17 +1198,17 @@ var directionalBlur = definePlugin({
         imgData = await addWebGPUAlignmentPadding(imgData);
         const inputWidth = imgData.width;
         const inputHeight = imgData.height;
-        const texture = device2.createTexture({
+        const texture = device.createTexture({
           size: [inputWidth, inputHeight],
           format: "rgba8unorm",
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
         });
-        const resultTexture = device2.createTexture({
+        const resultTexture = device.createTexture({
           size: [inputWidth, inputHeight],
           format: "rgba8unorm",
           usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
         });
-        const sampler = device2.createSampler({
+        const sampler = device.createSampler({
           magFilter: "linear",
           minFilter: "linear",
           addressModeU: "clamp-to-edge",
@@ -1224,7 +1221,7 @@ var directionalBlur = definePlugin({
           blurModeValue = 2;
         }
         const uniformValues = makeStructuredView2(defs.uniforms.params);
-        const uniformBuffer = device2.createBuffer({
+        const uniformBuffer = device.createBuffer({
           size: uniformValues.arrayBuffer.byteLength,
           // 6 * 4 bytes
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -1237,8 +1234,8 @@ var directionalBlur = definePlugin({
           fadeOut: params.fadeOut || 0,
           fadeDirection: params.fadeDirection || 0
         });
-        device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-        const bindGroup = device2.createBindGroup({
+        device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+        const bindGroup = device.createBindGroup({
           layout: pipeline.getBindGroupLayout(0),
           entries: [
             {
@@ -1259,13 +1256,13 @@ var directionalBlur = definePlugin({
             }
           ]
         });
-        device2.queue.writeTexture(
+        device.queue.writeTexture(
           { texture },
           imgData.data,
           { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
           [inputWidth, inputHeight]
         );
-        const commandEncoder = device2.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         const computePass = commandEncoder.beginComputePass();
         computePass.setPipeline(pipeline);
         computePass.setBindGroup(0, bindGroup);
@@ -1274,7 +1271,7 @@ var directionalBlur = definePlugin({
           Math.ceil(inputHeight / 16)
         );
         computePass.end();
-        const stagingBuffer = device2.createBuffer({
+        const stagingBuffer = device.createBuffer({
           size: inputWidth * inputHeight * 4,
           usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
         });
@@ -1288,7 +1285,7 @@ var directionalBlur = definePlugin({
           [inputWidth, inputHeight]
         );
         const commandBuffer = commandEncoder.finish();
-        device2.queue.submit([commandBuffer]);
+        device.queue.submit([commandBuffer]);
         await stagingBuffer.mapAsync(GPUMapMode.READ);
         const copyArrayBuffer = stagingBuffer.getMappedRange();
         const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -1332,7 +1329,7 @@ var kirakiraGlow = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -1363,11 +1360,11 @@ var kirakiraGlow = definePlugin({
         highQuality: params.highQuality
       };
     },
-    onInterpolate: (paramsA, paramsB, t8) => {
+    onInterpolate: (paramsA, paramsB, t9) => {
       return {
-        strength: lerp(paramsA.strength, paramsB.strength, t8),
-        transparentOriginal: t8 < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal,
-        highQuality: t8 < 0.5 ? paramsA.highQuality : paramsB.highQuality
+        strength: lerp(paramsA.strength, paramsB.strength, t9),
+        transparentOriginal: t9 < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal,
+        highQuality: t9 < 0.5 ? paramsA.highQuality : paramsB.highQuality
       };
     },
     renderUI: (params) => {
@@ -1406,8 +1403,8 @@ var kirakiraGlow = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, async (device2) => {
-        const shader = device2.createShaderModule({
+      return await createGPUDevice({}, async (device) => {
+        const shader = device.createShaderModule({
           label: "Optimized Glow Effect Shader",
           code: `
           struct Params {
@@ -1551,7 +1548,7 @@ var kirakiraGlow = definePlugin({
           }
           `
         });
-        const downsamplePipeline = device2.createComputePipeline({
+        const downsamplePipeline = device.createComputePipeline({
           label: "Downsample Pipeline",
           layout: "auto",
           compute: {
@@ -1559,7 +1556,7 @@ var kirakiraGlow = definePlugin({
             entryPoint: "computeDownsample"
           }
         });
-        const horizontalBlurPipeline = device2.createComputePipeline({
+        const horizontalBlurPipeline = device.createComputePipeline({
           label: "Horizontal Blur Pipeline",
           layout: "auto",
           compute: {
@@ -1567,7 +1564,7 @@ var kirakiraGlow = definePlugin({
             entryPoint: "computeHorizontalBlur"
           }
         });
-        const verticalBlurPipeline = device2.createComputePipeline({
+        const verticalBlurPipeline = device.createComputePipeline({
           label: "Vertical Blur Pipeline",
           layout: "auto",
           compute: {
@@ -1575,7 +1572,7 @@ var kirakiraGlow = definePlugin({
             entryPoint: "computeVerticalBlur"
           }
         });
-        const compositePipeline = device2.createComputePipeline({
+        const compositePipeline = device.createComputePipeline({
           label: "Composite Pipeline",
           layout: "auto",
           compute: {
@@ -1591,8 +1588,8 @@ var kirakiraGlow = definePlugin({
         };
       });
     },
-    doLiveEffect: async ({
-      device: device2,
+    goLiveEffect: async ({
+      device,
       downsamplePipeline,
       horizontalBlurPipeline,
       verticalBlurPipeline,
@@ -1615,30 +1612,30 @@ var kirakiraGlow = definePlugin({
       }
       const smallWidth = Math.ceil(inputWidth / downscaleFactor);
       const smallHeight = Math.ceil(inputHeight / downscaleFactor);
-      const inputTexture = device2.createTexture({
+      const inputTexture = device.createTexture({
         label: "KiraKiraGlow_InputTexture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
       });
-      const tempTexture = device2.createTexture({
+      const tempTexture = device.createTexture({
         label: "KiraKiraGlow_TempTexture",
         size: [smallWidth, smallHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         label: "KiraKiraGlow_ResultTexture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         label: "KiraKiraGlow_Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         label: "KiraKiraGlow_UniformBuffer",
         size: 24,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -1651,14 +1648,14 @@ var kirakiraGlow = definePlugin({
       uniformView.setUint32(12, inputWidth, true);
       uniformView.setUint32(16, inputHeight, true);
       uniformView.setUint32(20, downscaleFactor, true);
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device2.queue.writeTexture(
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const downsampleBindGroup = device2.createBindGroup({
+      const downsampleBindGroup = device.createBindGroup({
         label: "KiraKiraGlow_DownsampleBindGroup",
         layout: downsamplePipeline.getBindGroupLayout(0),
         entries: [
@@ -1667,7 +1664,7 @@ var kirakiraGlow = definePlugin({
           { binding: 3, resource: sampler }
         ]
       });
-      const horizontalBlurBindGroup = device2.createBindGroup({
+      const horizontalBlurBindGroup = device.createBindGroup({
         label: "KiraKiraGlow_HorizontalBlurBindGroup",
         layout: horizontalBlurPipeline.getBindGroupLayout(0),
         entries: [
@@ -1677,12 +1674,12 @@ var kirakiraGlow = definePlugin({
           { binding: 4, resource: { buffer: uniformBuffer } }
         ]
       });
-      const horizontalBlurReadGroup = device2.createBindGroup({
+      const horizontalBlurReadGroup = device.createBindGroup({
         label: "KiraKiraGlow_HorizontalBlurReadGroup",
         layout: horizontalBlurPipeline.getBindGroupLayout(1),
         entries: [{ binding: 0, resource: tempTexture.createView() }]
       });
-      const verticalBlurBindGroup = device2.createBindGroup({
+      const verticalBlurBindGroup = device.createBindGroup({
         label: "KiraKiraGlow_VerticalBlurBindGroup",
         layout: verticalBlurPipeline.getBindGroupLayout(0),
         entries: [
@@ -1692,12 +1689,12 @@ var kirakiraGlow = definePlugin({
           { binding: 4, resource: { buffer: uniformBuffer } }
         ]
       });
-      const verticalBlurReadGroup = device2.createBindGroup({
+      const verticalBlurReadGroup = device.createBindGroup({
         label: "KiraKiraGlow_VerticalBlurReadGroup",
         layout: verticalBlurPipeline.getBindGroupLayout(1),
         entries: [{ binding: 1, resource: resultTexture.createView() }]
       });
-      const compositeBindGroup = device2.createBindGroup({
+      const compositeBindGroup = device.createBindGroup({
         label: "KiraKiraGlow_CompositeBindGroup",
         layout: compositePipeline.getBindGroupLayout(0),
         entries: [
@@ -1708,12 +1705,12 @@ var kirakiraGlow = definePlugin({
           { binding: 4, resource: { buffer: uniformBuffer } }
         ]
       });
-      const compositeReadGroup = device2.createBindGroup({
+      const compositeReadGroup = device.createBindGroup({
         label: "KiraKiraGlow_CompositeReadGroup",
         layout: compositePipeline.getBindGroupLayout(1),
         entries: [{ binding: 0, resource: tempTexture.createView() }]
       });
-      const commandEncoder = device2.createCommandEncoder({
+      const commandEncoder = device.createCommandEncoder({
         label: "KiraKiraGlow_CommandEncoder"
       });
       {
@@ -1767,7 +1764,7 @@ var kirakiraGlow = definePlugin({
         );
         computePass.end();
       }
-      const stagingBuffer = device2.createBuffer({
+      const stagingBuffer = device.createBuffer({
         label: "KiraKiraGlow_StagingBuffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -1777,7 +1774,7 @@ var kirakiraGlow = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device2.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -1803,7 +1800,7 @@ var dithering = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -1837,12 +1834,12 @@ var dithering = definePlugin({
         colorMode: params.colorMode
       };
     },
-    onInterpolate: (paramsA, paramsB, t8) => {
+    onInterpolate: (paramsA, paramsB, t9) => {
       return {
-        threshold: lerp(paramsA.threshold, paramsB.threshold, t8),
-        strength: lerp(paramsA.strength, paramsB.strength, t8),
-        patternType: t8 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        colorMode: t8 < 0.5 ? paramsA.colorMode : paramsB.colorMode
+        threshold: lerp(paramsA.threshold, paramsB.threshold, t9),
+        strength: lerp(paramsA.strength, paramsB.strength, t9),
+        patternType: t9 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        colorMode: t9 < 0.5 ? paramsA.colorMode : paramsB.colorMode
       };
     },
     renderUI: (params) => {
@@ -1869,15 +1866,15 @@ var dithering = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device2 = await navigator.gpu.requestAdapter().then(
-        (adapter2) => adapter2.requestDevice({
+      const device = await navigator.gpu.requestAdapter().then(
+        (adapter) => adapter.requestDevice({
           label: "WebGPU(Dithering Effect)"
         })
       );
-      if (!device2) {
+      if (!device) {
         throw new Error("Failed to create WebGPU device");
       }
-      const shader = device2.createShaderModule({
+      const shader = device.createShaderModule({
         label: "Dithering Effect Shader",
         code: `
           struct Params {
@@ -1968,13 +1965,13 @@ var dithering = definePlugin({
           }
       `
       });
-      device2.addEventListener("lost", (e) => {
+      device.addEventListener("lost", (e) => {
         console.error(e);
       });
-      device2.addEventListener("uncapturederror", (e) => {
+      device.addEventListener("uncapturederror", (e) => {
         console.error(e.error);
       });
-      const pipeline = device2.createComputePipeline({
+      const pipeline = device.createComputePipeline({
         label: "Dithering Effect Pipeline",
         layout: "auto",
         compute: {
@@ -1982,37 +1979,37 @@ var dithering = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      return { device: device2, pipeline };
+      return { device, pipeline };
     },
-    doLiveEffect: async ({ device: device2, pipeline }, params, imgData) => {
+    goLiveEffect: async ({ device, pipeline }, params, imgData) => {
       console.log("Dithering Effect V1", params);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const texture = device2.createTexture({
+      const texture = device.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: 16,
         // 4 * float32
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const bindGroup = device2.createBindGroup({
+      const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -2034,7 +2031,7 @@ var dithering = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device2.createBuffer({
+      const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -2050,14 +2047,14 @@ var dithering = definePlugin({
       uniformView.setUint32(8, patternTypeValue, true);
       let colorModeValue = params.colorMode === "monochrome" ? 0 : 1;
       uniformView.setUint32(12, colorModeValue, true);
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device2.queue.writeTexture(
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device2.createCommandEncoder({
+      const commandEncoder = device.createCommandEncoder({
         label: "Main Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -2075,7 +2072,7 @@ var dithering = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device2.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -2127,7 +2124,7 @@ var glitch = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -2169,13 +2166,13 @@ var glitch = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t8) => {
+    onInterpolate: (paramsA, paramsB, t9) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t8),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t8),
-        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t8)),
-        angle: lerp(paramsA.angle, paramsB.angle, t8),
-        bias: lerp(paramsA.bias, paramsB.bias, t8),
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t9),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t9),
+        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t9)),
+        angle: lerp(paramsA.angle, paramsB.angle, t9),
+        bias: lerp(paramsA.bias, paramsB.bias, t9),
         seed: paramsA.seed
         // シード値は補間しない
       };
@@ -2227,7 +2224,7 @@ var glitch = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, (device2) => {
+      return await createGPUDevice({}, (device) => {
         const code = `
           struct Params {
             intensity: f32,
@@ -2298,11 +2295,11 @@ var glitch = definePlugin({
             textureStore(resultTexture, id.xy, outColor);
           }
         `;
-        const shader = device2.createShaderModule({
+        const shader = device.createShaderModule({
           code
         });
         const defs = makeShaderDataDefinitions3(code);
-        const pipeline = device2.createComputePipeline({
+        const pipeline = device.createComputePipeline({
           compute: {
             module: shader,
             entryPoint: "computeMain"
@@ -2312,7 +2309,7 @@ var glitch = definePlugin({
         return { pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device: device2, pipeline, defs }, params, imgData, env) => {
+    goLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
       imgData = await paddingImageData(
         imgData,
         params.colorShift + params.bias
@@ -2323,23 +2320,23 @@ var glitch = definePlugin({
       const inputWidth = imgData.width;
       const inputHeight = imgData.height;
       const uniformValues = makeStructuredView3(defs.uniforms.params);
-      const texture = device2.createTexture({
+      const texture = device.createTexture({
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         magFilter: "linear",
         minFilter: "linear",
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge"
       });
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
@@ -2353,7 +2350,7 @@ var glitch = definePlugin({
         dpi: env.dpi,
         baseDpi: env.baseDpi
       });
-      const bindGroup = device2.createBindGroup({
+      const bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: texture.createView() },
@@ -2362,18 +2359,18 @@ var glitch = definePlugin({
           { binding: 3, resource: { buffer: uniformBuffer } }
         ]
       });
-      const stagingBuffer = device2.createBuffer({
+      const stagingBuffer = device.createBuffer({
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-      device2.queue.writeTexture(
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      device.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device2.createCommandEncoder();
+      const commandEncoder = device.createCommandEncoder();
       const computePass = commandEncoder.beginComputePass();
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
@@ -2387,7 +2384,7 @@ var glitch = definePlugin({
         [inputWidth, inputHeight]
       );
       const commandBuffer = commandEncoder.finish();
-      device2.queue.submit([commandBuffer]);
+      device.queue.submit([commandBuffer]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -2426,7 +2423,7 @@ var outlineEffect = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -2457,14 +2454,14 @@ var outlineEffect = definePlugin({
         size: params.size * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t8) => {
+    onInterpolate: (paramsA, paramsB, t9) => {
       return {
-        size: lerp(paramsA.size, paramsB.size, t8),
+        size: lerp(paramsA.size, paramsB.size, t9),
         color: {
-          r: lerp(paramsA.color.r, paramsB.color.r, t8),
-          g: lerp(paramsA.color.g, paramsB.color.g, t8),
-          b: lerp(paramsA.color.b, paramsB.color.b, t8),
-          a: lerp(paramsA.color.a, paramsB.color.a, t8)
+          r: lerp(paramsA.color.r, paramsB.color.r, t9),
+          g: lerp(paramsA.color.g, paramsB.color.g, t9),
+          b: lerp(paramsA.color.b, paramsB.color.b, t9),
+          a: lerp(paramsA.color.a, paramsB.color.a, t9)
         }
       };
     },
@@ -2489,15 +2486,15 @@ var outlineEffect = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device2 = await navigator.gpu.requestAdapter().then(
-        (adapter2) => adapter2.requestDevice({
+      const device = await navigator.gpu.requestAdapter().then(
+        (adapter) => adapter.requestDevice({
           label: "WebGPU(Outline Effect Morphology)"
         })
       );
-      if (!device2) {
+      if (!device) {
         throw new Error("Failed to create WebGPU device");
       }
-      const boundaryShader = device2.createShaderModule({
+      const boundaryShader = device.createShaderModule({
         label: "Outline Boundary Detection Shader",
         code: `
           struct Params {
@@ -2600,7 +2597,7 @@ var outlineEffect = definePlugin({
           }
         `
       });
-      const morphologyShader = device2.createShaderModule({
+      const morphologyShader = device.createShaderModule({
         label: "Outline Morphology Shader",
         code: `
           struct Params {
@@ -2747,13 +2744,13 @@ var outlineEffect = definePlugin({
           }
         `
       });
-      device2.addEventListener("lost", (e) => {
+      device.addEventListener("lost", (e) => {
         console.error(e);
       });
-      device2.addEventListener("uncapturederror", (e) => {
+      device.addEventListener("uncapturederror", (e) => {
         console.error(e.error);
       });
-      const boundaryPipeline = device2.createComputePipeline({
+      const boundaryPipeline = device.createComputePipeline({
         label: "Outline Boundary Pipeline",
         layout: "auto",
         compute: {
@@ -2761,7 +2758,7 @@ var outlineEffect = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      const morphologyPipeline = device2.createComputePipeline({
+      const morphologyPipeline = device.createComputePipeline({
         label: "Outline Morphology Pipeline",
         layout: "auto",
         compute: {
@@ -2769,45 +2766,45 @@ var outlineEffect = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      return { device: device2, boundaryPipeline, morphologyPipeline };
+      return { device, boundaryPipeline, morphologyPipeline };
     },
-    doLiveEffect: async ({ device: device2, boundaryPipeline, morphologyPipeline }, params, imgData, env) => {
+    goLiveEffect: async ({ device, boundaryPipeline, morphologyPipeline }, params, imgData, env) => {
       console.log("Outline Effect Morphology V1", params);
       const padding = Math.ceil(params.size);
       imgData = await paddingImageData(imgData, padding);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const inputTexture = device2.createTexture({
+      const inputTexture = device.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const intermediateTexture = device2.createTexture({
+      const intermediateTexture = device.createTexture({
         label: "Intermediate Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: 96,
         // 必要なサイズ (フロート4個 + vec4 + パディング)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const boundaryBindGroup = device2.createBindGroup({
+      const boundaryBindGroup = device.createBindGroup({
         label: "Boundary Detection Bind Group",
         layout: boundaryPipeline.getBindGroupLayout(0),
         entries: [
@@ -2829,7 +2826,7 @@ var outlineEffect = definePlugin({
           }
         ]
       });
-      const morphologyBindGroup = device2.createBindGroup({
+      const morphologyBindGroup = device.createBindGroup({
         label: "Morphology Bind Group",
         layout: morphologyPipeline.getBindGroupLayout(0),
         entries: [
@@ -2855,7 +2852,7 @@ var outlineEffect = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device2.createBuffer({
+      const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -2869,14 +2866,14 @@ var outlineEffect = definePlugin({
       uniformView.setFloat32(28, params.color.a, true);
       uniformView.setFloat32(32, env.dpi, true);
       uniformView.setFloat32(36, env.baseDpi, true);
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device2.queue.writeTexture(
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device2.createCommandEncoder({
+      const commandEncoder = device.createCommandEncoder({
         label: "Morphology Outline Command Encoder"
       });
       const boundaryPass = commandEncoder.beginComputePass({
@@ -2904,7 +2901,7 @@ var outlineEffect = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device2.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -2948,7 +2945,7 @@ var halftone = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -2996,16 +2993,16 @@ var halftone = definePlugin({
         // Angle doesn't need scaling
       };
     },
-    onInterpolate: (paramsA, paramsB, t8) => {
+    onInterpolate: (paramsA, paramsB, t9) => {
       return {
-        size: lerp(paramsA.size, paramsB.size, t8),
-        interval: lerp(paramsA.interval, paramsB.interval, t8),
-        angle: lerp(paramsA.angle, paramsB.angle, t8),
+        size: lerp(paramsA.size, paramsB.size, t9),
+        interval: lerp(paramsA.interval, paramsB.interval, t9),
+        angle: lerp(paramsA.angle, paramsB.angle, t9),
         color: {
-          r: lerp(paramsA.color.r, paramsB.color.r, t8),
-          g: lerp(paramsA.color.g, paramsB.color.g, t8),
-          b: lerp(paramsA.color.b, paramsB.color.b, t8),
-          a: lerp(paramsA.color.a, paramsB.color.a, t8)
+          r: lerp(paramsA.color.r, paramsB.color.r, t9),
+          g: lerp(paramsA.color.g, paramsB.color.g, t9),
+          b: lerp(paramsA.color.b, paramsB.color.b, t9),
+          a: lerp(paramsA.color.a, paramsB.color.a, t9)
         }
       };
     },
@@ -3077,15 +3074,15 @@ var halftone = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device2 = await navigator.gpu.requestAdapter().then(
-        (adapter2) => adapter2.requestDevice({
+      const device = await navigator.gpu.requestAdapter().then(
+        (adapter) => adapter.requestDevice({
           label: "WebGPU(Halftone Effect)"
         })
       );
-      if (!device2) {
+      if (!device) {
         throw new Error("Failed to create WebGPU device");
       }
-      const shader = device2.createShaderModule({
+      const shader = device.createShaderModule({
         label: "Halftone Effect Shader",
         code: `
           struct Params {
@@ -3198,13 +3195,13 @@ var halftone = definePlugin({
           }
         `
       });
-      device2.addEventListener("lost", (e) => {
+      device.addEventListener("lost", (e) => {
         console.error(e);
       });
-      device2.addEventListener("uncapturederror", (e) => {
+      device.addEventListener("uncapturederror", (e) => {
         console.error(e.error);
       });
-      const pipeline = device2.createComputePipeline({
+      const pipeline = device.createComputePipeline({
         label: "Halftone Effect Pipeline",
         layout: "auto",
         compute: {
@@ -3212,36 +3209,36 @@ var halftone = definePlugin({
           entryPoint: "computeMain"
         }
       });
-      return { device: device2, pipeline };
+      return { device, pipeline };
     },
-    doLiveEffect: async ({ device: device2, pipeline }, params, imgData, env) => {
+    goLiveEffect: async ({ device, pipeline }, params, imgData, env) => {
       console.log("Halftone Effect", params);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const inputTexture = device2.createTexture({
+      const inputTexture = device.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: 48,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const bindGroup = device2.createBindGroup({
+      const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -3263,7 +3260,7 @@ var halftone = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device2.createBuffer({
+      const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
@@ -3280,14 +3277,14 @@ var halftone = definePlugin({
       view.setFloat32(36, params.color.g, true);
       view.setFloat32(40, params.color.b, true);
       view.setFloat32(44, params.color.a, true);
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformData);
-      device2.queue.writeTexture(
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
-      const commandEncoder = device2.createCommandEncoder({
+      const commandEncoder = device.createCommandEncoder({
         label: "Halftone Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -3305,7 +3302,7 @@ var halftone = definePlugin({
         { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
         [inputWidth, inputHeight]
       );
-      device2.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -3355,7 +3352,7 @@ var fluidDistortion = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: 2 /* kPostEffectFilter */,
+      type: 2 /* kPostEffectFilter */,
       features: []
     },
     paramSchema: {
@@ -3406,14 +3403,14 @@ var fluidDistortion = definePlugin({
         colorShift: params.colorShift
       };
     },
-    onInterpolate: (paramsA, paramsB, t8) => {
+    onInterpolate: (paramsA, paramsB, t9) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t8),
-        speed: lerp(paramsA.speed, paramsB.speed, t8),
-        scale: lerp(paramsA.scale, paramsB.scale, t8),
-        turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t8),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t8),
-        timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t8)
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t9),
+        speed: lerp(paramsA.speed, paramsB.speed, t9),
+        scale: lerp(paramsA.scale, paramsB.scale, t9),
+        turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t9),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t9),
+        timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t9)
       };
     },
     renderUI: (params, setParam) => {
@@ -3527,7 +3524,7 @@ var fluidDistortion = definePlugin({
         {
           device: { label: "WebGPU(Fluid Distortion)" }
         },
-        (device2) => {
+        (device) => {
           const code = `
             struct Params {
               inputDpi: i32,
@@ -3710,18 +3707,18 @@ var fluidDistortion = definePlugin({
                 textureStore(resultTexture, id.xy, finalColor);
             }
           `;
-          const shader = device2.createShaderModule({
+          const shader = device.createShaderModule({
             label: "Fluid Distortion Shader",
             code
           });
           const pipelineDef = makeShaderDataDefinitions4(code);
-          device2.addEventListener("lost", (e) => {
+          device.addEventListener("lost", (e) => {
             console.error(e);
           });
-          device2.addEventListener("uncapturederror", (e) => {
+          device.addEventListener("uncapturederror", (e) => {
             console.error(e.error);
           });
-          const pipeline = device2.createComputePipeline({
+          const pipeline = device.createComputePipeline({
             label: "Fluid Distortion Pipeline",
             layout: "auto",
             compute: {
@@ -3729,11 +3726,11 @@ var fluidDistortion = definePlugin({
               entryPoint: "computeMain"
             }
           });
-          return { device: device2, pipeline, pipelineDef };
+          return { device, pipeline, pipelineDef };
         }
       );
     },
-    doLiveEffect: async ({ device: device2, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
+    goLiveEffect: async ({ device, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
       console.log("Fluid Distortion V1", params);
       const dpiRatio = baseDpi / dpi;
       const inverseDpiRatio = dpi / baseDpi;
@@ -3758,19 +3755,19 @@ var fluidDistortion = definePlugin({
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
-      const texture = device2.createTexture({
+      const texture = device.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const resultTexture = device2.createTexture({
+      const resultTexture = device.createTexture({
         label: "Result Texture",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device2.createSampler({
+      const sampler = device.createSampler({
         label: "Texture Sampler",
         magFilter: "linear",
         minFilter: "linear",
@@ -3778,7 +3775,7 @@ var fluidDistortion = definePlugin({
         addressModeV: "repeat"
       });
       const uniformValues = makeStructuredView4(pipelineDef.uniforms.params);
-      const uniformBuffer = device2.createBuffer({
+      const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -3793,8 +3790,8 @@ var fluidDistortion = definePlugin({
         colorShift: params.colorShift * dpiRatio,
         timeSeed: params.timeSeed
       });
-      device2.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
-      const bindGroup = device2.createBindGroup({
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -3816,20 +3813,20 @@ var fluidDistortion = definePlugin({
           }
         ]
       });
-      const stagingBuffer = device2.createBuffer({
+      const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
       console.time("writeTexture");
-      device2.queue.writeTexture(
+      device.queue.writeTexture(
         { texture },
         imgData.data,
         { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
         [inputWidth, inputHeight]
       );
       console.timeEnd("writeTexture");
-      const commandEncoder = device2.createCommandEncoder({
+      const commandEncoder = device.createCommandEncoder({
         label: "Main Command Encoder"
       });
       const computePass = commandEncoder.beginComputePass({
@@ -3848,7 +3845,7 @@ var fluidDistortion = definePlugin({
         [inputWidth, inputHeight]
       );
       console.time("execute");
-      device2.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([commandEncoder.finish()]);
       console.timeEnd("execute");
       console.time("mapAsync");
       await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -3874,6 +3871,913 @@ var fluidDistortion = definePlugin({
   }
 });
 
+// src/js/src/live-effects/kaleidoscope.ts
+import {
+  makeShaderDataDefinitions as makeShaderDataDefinitions5,
+  makeStructuredView as makeStructuredView5
+} from "npm:webgpu-utils";
+var t8 = createTranslator({
+  en: {
+    title: "Kaleidoscope",
+    segments: "Segments",
+    pattern: "Pattern",
+    rotation: "Rotation",
+    centerX: "Sample Position X",
+    centerY: "Sample Position Y",
+    zoom: "Zoom",
+    distortion: "Distortion",
+    complexity: "Complexity",
+    colorShift: "Color Shift",
+    cellEffect: "Cell Reflection",
+    cellSize: "Cell Size",
+    blendMode: "Blend Mode",
+    padding: "Padding",
+    triangular: "Triangular",
+    square: "Square",
+    hexagonal: "Hexagonal",
+    octagonal: "Octagonal",
+    circular: "Circular",
+    spiral: "Spiral",
+    fractal: "Fractal",
+    composite: "Composite",
+    normal: "Normal",
+    kaleidoscope: "Kaleidoscope",
+    mirror: "Mirror",
+    rotational: "Rotational"
+  },
+  ja: {
+    title: "\u4E07\u83EF\u93E1",
+    segments: "\u5206\u5272\u6570",
+    pattern: "\u30D1\u30BF\u30FC\u30F3",
+    rotation: "\u56DE\u8EE2",
+    centerX: "\u30B5\u30F3\u30D7\u30EB\u4F4D\u7F6E X",
+    centerY: "\u30B5\u30F3\u30D7\u30EB\u4F4D\u7F6E Y",
+    zoom: "\u30BA\u30FC\u30E0",
+    distortion: "\u6B6A\u307F",
+    complexity: "\u8907\u96D1\u3055",
+    colorShift: "\u8272\u30B7\u30D5\u30C8",
+    cellEffect: "\u30BB\u30EB\u53CD\u5C04",
+    cellSize: "\u30BB\u30EB\u30B5\u30A4\u30BA",
+    blendMode: "\u30D6\u30EC\u30F3\u30C9\u30E2\u30FC\u30C9",
+    padding: "\u30D1\u30C7\u30A3\u30F3\u30B0",
+    triangular: "\u4E09\u89D2\u5F62",
+    square: "\u56DB\u89D2\u5F62",
+    hexagonal: "\u516D\u89D2\u5F62",
+    octagonal: "\u516B\u89D2\u5F62",
+    circular: "\u5186\u5F62",
+    spiral: "\u6E26\u5DFB\u304D",
+    fractal: "\u30D5\u30E9\u30AF\u30BF\u30EB",
+    composite: "\u8907\u5408",
+    normal: "\u30CE\u30FC\u30DE\u30EB",
+    kaleidoscope: "\u4E07\u83EF\u93E1",
+    mirror: "\u30DF\u30E9\u30FC",
+    rotational: "\u56DE\u8EE2"
+  }
+});
+var kaleidoscope = definePlugin({
+  id: "kaleidoscope",
+  title: t8("title"),
+  version: { major: 1, minor: 0 },
+  liveEffect: {
+    styleFilterFlags: {
+      type: 2 /* kPostEffectFilter */,
+      features: []
+    },
+    paramSchema: {
+      pattern: {
+        type: "string",
+        enum: [
+          "triangular",
+          "square",
+          "hexagonal",
+          "octagonal",
+          "circular",
+          "spiral",
+          "fractal",
+          "composite"
+        ],
+        default: "triangular"
+      },
+      segments: {
+        type: "int",
+        default: 6,
+        min: 2,
+        max: 36
+      },
+      rotation: {
+        type: "real",
+        default: 0,
+        min: 0,
+        max: 360
+      },
+      centerX: {
+        type: "real",
+        default: 0.5,
+        min: -1,
+        max: 2
+      },
+      centerY: {
+        type: "real",
+        default: 0.5,
+        min: -1,
+        max: 2
+      },
+      zoom: {
+        type: "real",
+        default: 1,
+        min: 0.1,
+        max: 5
+      },
+      distortion: {
+        type: "real",
+        default: 0,
+        min: 0,
+        max: 1
+      },
+      complexity: {
+        type: "real",
+        default: 0.5,
+        min: 0,
+        max: 1
+      },
+      colorShift: {
+        type: "real",
+        default: 0,
+        min: 0,
+        max: 1
+      },
+      cellEffect: {
+        type: "real",
+        default: 0,
+        min: 0,
+        max: 1
+      },
+      cellSize: {
+        type: "real",
+        default: 0.2,
+        min: 0.05,
+        max: 1
+      },
+      blendMode: {
+        type: "string",
+        enum: ["normal", "kaleidoscope", "mirror", "rotational"],
+        default: "normal"
+      },
+      padding: {
+        type: "int",
+        default: 0,
+        min: 0,
+        max: 500
+      }
+    },
+    onEditParameters: (params) => {
+      return {
+        ...params,
+        segments: Math.max(2, Math.min(36, Math.round(params.segments))),
+        rotation: (params.rotation % 360 + 360) % 360,
+        centerX: Math.max(-1, Math.min(2, params.centerX)),
+        centerY: Math.max(-1, Math.min(2, params.centerY)),
+        zoom: Math.max(0.1, Math.min(5, params.zoom)),
+        distortion: Math.max(0, Math.min(1, params.distortion)),
+        complexity: Math.max(0, Math.min(1, params.complexity)),
+        colorShift: Math.max(0, Math.min(1, params.colorShift)),
+        cellEffect: Math.max(0, Math.min(1, params.cellEffect)),
+        cellSize: Math.max(0.05, Math.min(1, params.cellSize)),
+        padding: Math.max(0, Math.min(500, Math.round(params.padding)))
+      };
+    },
+    onAdjustColors: (params, adjustColor) => {
+      return {
+        ...params
+        // Ex.
+        // color: adjustColor(params.color),
+      };
+    },
+    onScaleParams(params, scaleFactor) {
+      return {
+        ...params,
+        padding: Math.round(params.padding * scaleFactor)
+      };
+    },
+    onInterpolate: (paramsA, paramsB, t9) => {
+      return {
+        pattern: t9 < 0.5 ? paramsA.pattern : paramsB.pattern,
+        segments: Math.round(lerp(paramsA.segments, paramsB.segments, t9)),
+        rotation: lerp(paramsA.rotation, paramsB.rotation, t9),
+        centerX: lerp(paramsA.centerX, paramsB.centerX, t9),
+        centerY: lerp(paramsA.centerY, paramsB.centerY, t9),
+        zoom: lerp(paramsA.zoom, paramsB.zoom, t9),
+        distortion: lerp(paramsA.distortion, paramsB.distortion, t9),
+        complexity: lerp(paramsA.complexity, paramsB.complexity, t9),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t9),
+        cellEffect: lerp(paramsA.cellEffect, paramsB.cellEffect, t9),
+        cellSize: lerp(paramsA.cellSize, paramsB.cellSize, t9),
+        blendMode: t9 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
+        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t9))
+      };
+    },
+    renderUI: (params, setParam) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("pattern") }),
+          ui.select({ key: "pattern", value: params.pattern, options: [
+            { label: t8("triangular"), value: "triangular" },
+            { label: t8("square"), value: "square" },
+            { label: t8("hexagonal"), value: "hexagonal" },
+            { label: t8("octagonal"), value: "octagonal" },
+            { label: t8("circular"), value: "circular" },
+            { label: t8("spiral"), value: "spiral" },
+            { label: t8("fractal"), value: "fractal" },
+            { label: t8("composite"), value: "composite" }
+          ] })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("blendMode") }),
+          ui.select({ key: "blendMode", value: params.blendMode, options: [
+            { label: t8("normal"), value: "normal" },
+            { label: t8("kaleidoscope"), value: "kaleidoscope" },
+            { label: t8("mirror"), value: "mirror" },
+            { label: t8("rotational"), value: "rotational" }
+          ] })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("segments") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "segments", dataType: "int", min: 2, max: 36, value: params.segments }),
+            ui.numberInput({ key: "segments", dataType: "int", value: params.segments })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("rotation") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "rotation", dataType: "float", min: 0, max: 360, value: params.rotation }),
+            ui.numberInput({ key: "rotation", dataType: "float", value: params.rotation })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("centerX") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "centerX", dataType: "float", min: -1, max: 2, value: params.centerX }),
+            ui.numberInput({ key: "centerX", dataType: "float", value: params.centerX })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("centerY") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "centerY", dataType: "float", min: -1, max: 2, value: params.centerY }),
+            ui.numberInput({ key: "centerY", dataType: "float", value: params.centerY })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("zoom") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "zoom", dataType: "float", min: 0.1, max: 5, value: params.zoom }),
+            ui.numberInput({ key: "zoom", dataType: "float", value: params.zoom })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("distortion") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "distortion", dataType: "float", min: 0, max: 1, value: params.distortion }),
+            ui.numberInput({ key: "distortion", dataType: "float", value: params.distortion })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("complexity") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "complexity", dataType: "float", min: 0, max: 1, value: params.complexity }),
+            ui.numberInput({ key: "complexity", dataType: "float", value: params.complexity })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("colorShift") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 1, value: params.colorShift }),
+            ui.numberInput({ key: "colorShift", dataType: "float", value: params.colorShift })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t8("padding") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "padding", dataType: "int", min: 0, max: 500, value: params.padding }),
+            ui.numberInput({ key: "padding", dataType: "int", value: params.padding })
+          ])
+        ])
+      ]);
+    },
+    initLiveEffect: async () => {
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Kaleidoscope)" }
+        },
+        (device) => {
+          const code = `
+            struct Params {
+              inputDpi: i32,
+              baseDpi: i32,
+              segments: i32,
+              patternType: i32, // 0: triangular, 1: square, 2: hexagonal, 3: octagonal, 4: circular, 5: spiral, 6: fractal, 7: composite
+              rotation: f32,    // in degrees
+              centerX: f32,     // normalized 0-1 (sampling position)
+              centerY: f32,     // normalized 0-1 (sampling position)
+              zoom: f32,        // scale factor
+              distortion: f32,  // 0-1
+              complexity: f32,  // 0-1
+              colorShift: f32,  // 0-1
+              cellEffect: f32,  // 0-1
+              cellSize: f32,    // cell size for reflection effect
+              blendMode: i32    // 0: normal, 1: kaleidoscope, 2: mirror, 3: rotational
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+
+            // Convert degrees to radians
+            fn degToRad(degrees: f32) -> f32 {
+              return degrees * 3.14159265359 / 180.0;
+            }
+
+            // Rotate a 2D point around a center
+            fn rotate2D(point: vec2f, center: vec2f, angle: f32) -> vec2f {
+              let s = sin(angle);
+              let c = cos(angle);
+              let p = point - center;
+              return vec2f(
+                p.x * c - p.y * s,
+                p.x * s + p.y * c
+              ) + center;
+            }
+
+            // Hash function to generate pseudo-random numbers
+            fn hash(n: f32) -> f32 {
+              return fract(sin(n) * 43758.5453);
+            }
+
+            // Hash function for 2D coordinates
+            fn hash2D(p: vec2f) -> f32 {
+              return hash(p.x + p.y * 57.0);
+            }
+
+            // Random 2D vector
+            fn random2D(p: vec2f) -> vec2f {
+              return vec2f(
+                hash(p.x * 127.1 + p.y * 311.7),
+                hash(p.x * 269.5 + p.y * 183.3)
+              ) * 2.0 - 1.0;
+            }
+
+            // Voronoi/cellular noise for cell-based reflection
+            fn voronoi(uv: vec2f, cellSize: f32) -> vec2f {
+              let scaledUV = uv / cellSize;
+              let cellUV = floor(scaledUV);
+              let fractUV = vec2f(fract(scaledUV.x), fract(scaledUV.y));
+
+              var minDist = 8.0;
+              var cellPoint = vec2f(0.0, 0.0);
+              var cellCenter = vec2f(0.0, 0.0);
+
+              // Check surrounding cells (3x3 grid)
+              for (var y = -1.0; y <= 1.0; y += 1.0) {
+                for (var x = -1.0; x <= 1.0; x += 1.0) {
+                  let cell = cellUV + vec2f(x, y);
+
+                  // Get random point within this cell
+                  let cellRandom = random2D(cell);
+                  let pointPos = vec2f(x, y) + 0.5 + 0.5 * cellRandom;
+
+                  // Calculate distance to this point
+                  let diff = pointPos - fractUV;
+                  let dist = length(diff);
+
+                  if (dist < minDist) {
+                    minDist = dist;
+                    cellPoint = cell + pointPos;
+                    cellCenter = cell + vec2f(0.5, 0.5);
+                  }
+                }
+              }
+
+              return vec2f(minDist, distance(cellPoint, cellCenter));
+            }
+
+            // Apply cell reflection/refraction effect
+            fn applyCellEffect(coord: vec2f, center: vec2f, cellEffect: f32, cellSize: f32) -> vec2f {
+              if (cellEffect <= 0.0) {
+                return coord;
+              }
+
+              let voronoiResult = voronoi(coord, cellSize);
+              let cellDistance = voronoiResult.x;
+              let centerDistance = voronoiResult.y;
+
+              // Create a refraction-like effect at cell boundaries
+              let distortionStrength = smoothstep(0.0, 0.4, cellDistance) * (1.0 - smoothstep(0.4, 0.5, cellDistance));
+              let distortionDirection = normalize(coord - center) * (centerDistance * 0.5 + 0.5);
+
+              // Apply the distortion
+              return coord + distortionDirection * distortionStrength * cellEffect * 0.1;
+            }
+
+            // Generic distortion function
+            fn applyDistortion(coord: vec2f, center: vec2f, distortionAmount: f32) -> vec2f {
+              if (distortionAmount <= 0.0) {
+                return coord;
+              }
+
+              let offset = coord - center;
+              let distance = length(offset);
+              let angle = atan2(offset.y, offset.x);
+
+              // Apply wave distortion
+              let wave = sin(distance * 10.0 * distortionAmount) * distortionAmount * 0.1;
+              let distortedDistance = distance * (1.0 + wave);
+
+              // Apply twirl distortion
+              let twirl = distortionAmount * 5.0 * (1.0 - smoothstep(0.0, 0.5, distance));
+              let distortedAngle = angle + twirl;
+
+              return vec2f(
+                center.x + cos(distortedAngle) * distortedDistance,
+                center.y + sin(distortedAngle) * distortedDistance
+              );
+            }
+
+            // Spiral transform
+            fn spiralTransform(coord: vec2f, center: vec2f, complexity: f32, rotation: f32) -> vec2f {
+              let offset = coord - center;
+              let distance = length(offset);
+              let angle = atan2(offset.y, offset.x) + rotation;
+
+              // Apply logarithmic spiral transformation
+              let spiralFactor = 0.1 + complexity * 0.4;
+              let spiralAngle = angle + distance * spiralFactor * 10.0;
+
+              return vec2f(
+                center.x + cos(spiralAngle) * distance,
+                center.y + sin(spiralAngle) * distance
+              );
+            }
+
+            // Fractal transform using simplified Julia set approach
+            fn fractalTransform(coord: vec2f, center: vec2f, complexity: f32, iterations: i32) -> vec2f {
+              let z = (coord - center) * 2.0; // Scale to make patterns more visible
+              let c = vec2f(
+                -0.8 + complexity * 0.6,
+                0.156
+              );
+
+              var result = z;
+              for (var i = 0; i < iterations; i++) {
+                if (length(result) > 2.0) {
+                  break;
+                }
+
+                // z = z^2 + c (complex number math)
+                result = vec2f(
+                  result.x * result.x - result.y * result.y,
+                  2.0 * result.x * result.y
+                ) + c;
+              }
+
+              return center + result * 0.25; // Scale back down
+            }
+
+            // Apply triangular kaleidoscope pattern
+            fn triangularPattern(uv: vec2f, center: vec2f, segments: i32, rotation: f32) -> vec2f {
+              let rotatedUV = rotate2D(uv, center, rotation);
+              let offset = rotatedUV - center;
+
+              // Convert to polar coordinates
+              let angle = atan2(offset.y, offset.x);
+              let distance = length(offset);
+
+              // Segment the angle
+              let segmentAngle = 2.0 * 3.14159265359 / f32(segments);
+              let segmentIndex = floor(angle / segmentAngle);
+              let segmentPosition = angle - segmentAngle * segmentIndex;
+
+              // Mirror alternate segments
+              let isEven = segmentIndex % 2.0;
+              let finalAngle = select(segmentAngle - segmentPosition, segmentPosition, isEven < 0.5);
+
+              // Convert back to cartesian coordinates
+              let finalOffset = vec2f(
+                cos(finalAngle) * distance,
+                sin(finalAngle) * distance
+              );
+
+              return finalOffset + center;
+            }
+
+            // Apply square kaleidoscope pattern
+            fn squarePattern(uv: vec2f, center: vec2f, rotation: f32) -> vec2f {
+              let rotatedUV = rotate2D(uv, center, rotation);
+              let offset = rotatedUV - center;
+
+              // Mirror across both axes
+              let mirroredOffset = vec2f(abs(offset.x), abs(offset.y));
+
+              return mirroredOffset + center;
+            }
+
+            // Apply hexagonal kaleidoscope pattern
+            fn hexagonalPattern(uv: vec2f, center: vec2f, segments: i32, rotation: f32) -> vec2f {
+              // Hexagonal is a variant of triangular with some adjustments
+              let segmentCount = segments * 2; // Double segments for hexagonal effect
+              return triangularPattern(uv, center, segmentCount, rotation);
+            }
+
+            // Apply octagonal kaleidoscope pattern
+            fn octagonalPattern(uv: vec2f, center: vec2f, rotation: f32) -> vec2f {
+              let rotatedUV = rotate2D(uv, center, rotation);
+              let offset = rotatedUV - center;
+
+              // Convert to polar coordinates
+              let angle = atan2(offset.y, offset.x);
+              let distance = length(offset);
+
+              // Segment the angle into 8 parts
+              let segmentAngle = 2.0 * 3.14159265359 / 8.0;
+              let segmentIndex = floor(angle / segmentAngle);
+              let segmentPosition = angle - segmentAngle * segmentIndex;
+
+              // Mirror every second segment
+              let isEven = segmentIndex % 2.0;
+              let finalAngle = select(segmentAngle - segmentPosition, segmentPosition, isEven < 0.5);
+
+              // Convert back to cartesian coordinates
+              let finalOffset = vec2f(
+                cos(finalAngle) * distance,
+                sin(finalAngle) * distance
+              );
+
+              return finalOffset + center;
+            }
+
+            // Apply circular kaleidoscope pattern
+            fn circularPattern(uv: vec2f, center: vec2f, segments: i32, rotation: f32) -> vec2f {
+              let rotatedUV = rotate2D(uv, center, rotation);
+              let offset = rotatedUV - center;
+
+              // Convert to polar coordinates
+              let angle = atan2(offset.y, offset.x);
+              let distance = length(offset);
+
+              // Segment the radial distance
+              let segmentWidth = 0.1; // Adjust based on desired effect
+              let segmentIndex = floor(distance / segmentWidth);
+              let isEven = segmentIndex % 2.0;
+
+              // Mirror every second circular ring
+              let finalDistance = select(distance,
+                segmentWidth * (segmentIndex + 1.0) - (distance - segmentWidth * segmentIndex),
+                isEven < 0.5);
+
+              // Convert back to cartesian coordinates
+              let finalOffset = vec2f(
+                cos(angle) * finalDistance,
+                sin(angle) * finalDistance
+              );
+
+              return finalOffset + center;
+            }
+
+            // Composite pattern that combines multiple patterns
+            fn compositePattern(uv: vec2f, center: vec2f, segments: i32, rotation: f32, complexity: f32) -> vec2f {
+              // First apply triangular pattern
+              let pattern1 = triangularPattern(uv, center, segments, rotation);
+
+              // Then apply circular pattern with slight modification
+              let pattern2 = circularPattern(pattern1, center, segments, rotation + 0.3);
+
+              // Mix based on complexity
+              let mix = smoothstep(0.3, 0.7, complexity);
+              return mix * pattern2 + (1.0 - mix) * pattern1;
+            }
+
+            // Blend two coordinates based on blend mode
+            fn blendCoordinates(coord1: vec2f, coord2: vec2f, blendMode: i32, factor: f32) -> vec2f {
+              if (blendMode == 0) { // Normal
+                return coord1;
+              } else if (blendMode == 1) { // Kaleidoscope
+                return mix(coord1, coord2, factor);
+              } else if (blendMode == 2) { // Mirror
+                let dist1 = length(coord1);
+                let dist2 = length(coord2);
+                return select(coord1, coord2, dist1 > dist2);
+              } else { // Rotational
+                let angle = factor * 6.28318;
+                let c = cos(angle);
+                let s = sin(angle);
+                return c * coord1 + s * coord2;
+              }
+            }
+
+            // Helper function for float fraction part
+            fn fract(x: f32) -> f32 {
+              return x - floor(x);
+            }
+
+            // Apply HSV color shift
+            fn shiftColor(color: vec4f, shift: f32) -> vec4f {
+              if (shift <= 0.0) {
+                return color;
+              }
+
+              // Simple HSV shift (hue rotation)
+              // Convert RGB to HSV-like space
+              let maxC = max(max(color.r, color.g), color.b);
+              let minC = min(min(color.r, color.g), color.b);
+              let delta = maxC - minC;
+
+              var h: f32 = 0.0;
+              if (delta > 0.0) {
+                if (maxC == color.r) {
+                  h = 6.0 + (color.g - color.b) / delta;
+                } else if (maxC == color.g) {
+                  h = 2.0 + (color.b - color.r) / delta;
+                } else {
+                  h = 4.0 + (color.r - color.g) / delta;
+                }
+                h = h % 6.0;
+              }
+
+              // Apply hue shift
+              h = (h + shift * 6.0) % 6.0;
+
+              // Convert back to RGB
+              let sector = floor(h);
+              let f = h - sector;
+
+              let p = minC;
+              let q = minC + (maxC - minC) * (1.0 - f);
+              let t = minC + (maxC - minC) * f;
+
+              var newColor: vec3f;
+
+              if (sector == 0.0) {
+                newColor = vec3f(maxC, t, p);
+              } else if (sector == 1.0) {
+                newColor = vec3f(q, maxC, p);
+              } else if (sector == 2.0) {
+                newColor = vec3f(p, maxC, t);
+              } else if (sector == 3.0) {
+                newColor = vec3f(p, q, maxC);
+              } else if (sector == 4.0) {
+                newColor = vec3f(t, p, maxC);
+              } else {
+                newColor = vec3f(maxC, p, q);
+              }
+
+              return vec4f(newColor, color.a);
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+                let dims = vec2f(textureDimensions(inputTexture));
+                let texCoord = vec2f(id.xy) / dims;
+
+                // Fixed kaleidoscope center at image center
+                let kaleidoscopeCenter = vec2f(0.5, 0.5);
+
+                // Sample position based on centerX/Y parameters
+                let samplePosition = vec2f(params.centerX, params.centerY);
+
+                // Calculate texture coordinate offset from sample position
+                let sampleOffset = kaleidoscopeCenter - samplePosition;
+
+                // Apply zoom and offset to the texture coordinates
+                let offsetCoord = (texCoord - kaleidoscopeCenter) / params.zoom + sampleOffset + kaleidoscopeCenter;
+
+                // Apply cellular effect (refraction through cells)
+                let cellCoord = applyCellEffect(offsetCoord, kaleidoscopeCenter, params.cellEffect, params.cellSize);
+
+                // Apply distortion if enabled
+                let distortedCoord = applyDistortion(cellCoord, kaleidoscopeCenter, params.distortion);
+
+                // Apply appropriate kaleidoscope pattern based on the selected type
+                var finalCoord1: vec2f;
+                var finalCoord2: vec2f;
+
+                // Generate two different coordinates for blending
+                if (params.patternType == 0) {
+                    // Triangular
+                    finalCoord1 = triangularPattern(distortedCoord, kaleidoscopeCenter, params.segments, degToRad(params.rotation));
+                    finalCoord2 = triangularPattern(distortedCoord, kaleidoscopeCenter, params.segments * 2, degToRad(params.rotation + 30.0));
+                } else if (params.patternType == 1) {
+                    // Square
+                    finalCoord1 = squarePattern(distortedCoord, kaleidoscopeCenter, degToRad(params.rotation));
+                    finalCoord2 = squarePattern(distortedCoord, kaleidoscopeCenter, degToRad(params.rotation + 45.0));
+                } else if (params.patternType == 2) {
+                    // Hexagonal
+                    finalCoord1 = hexagonalPattern(distortedCoord, kaleidoscopeCenter, params.segments, degToRad(params.rotation));
+                    finalCoord2 = hexagonalPattern(distortedCoord, kaleidoscopeCenter, params.segments + 2, degToRad(params.rotation + 15.0));
+                } else if (params.patternType == 3) {
+                    // Octagonal
+                    finalCoord1 = octagonalPattern(distortedCoord, kaleidoscopeCenter, degToRad(params.rotation));
+                    finalCoord2 = octagonalPattern(distortedCoord, kaleidoscopeCenter, degToRad(params.rotation + 22.5));
+                } else if (params.patternType == 4) {
+                    // Circular
+                    finalCoord1 = circularPattern(distortedCoord, kaleidoscopeCenter, params.segments, degToRad(params.rotation));
+                    finalCoord2 = circularPattern(distortedCoord, kaleidoscopeCenter, params.segments + 1, degToRad(params.rotation));
+                } else if (params.patternType == 5) {
+                    // Spiral
+                    finalCoord1 = spiralTransform(distortedCoord, kaleidoscopeCenter, params.complexity, degToRad(params.rotation));
+                    finalCoord2 = spiralTransform(distortedCoord, kaleidoscopeCenter, params.complexity * 0.7, degToRad(params.rotation + 30.0));
+                } else if (params.patternType == 6) {
+                    // Fractal
+                    let iterations = 2 + i32(params.complexity * 8.0);
+                    finalCoord1 = fractalTransform(distortedCoord, kaleidoscopeCenter, params.complexity, iterations);
+                    finalCoord2 = fractalTransform(distortedCoord, kaleidoscopeCenter, params.complexity * 1.1, iterations - 1);
+                } else {
+                    // Composite
+                    finalCoord1 = compositePattern(distortedCoord, kaleidoscopeCenter, params.segments, degToRad(params.rotation), params.complexity);
+                    finalCoord2 = compositePattern(distortedCoord, kaleidoscopeCenter, params.segments + 1, degToRad(params.rotation + 10.0), params.complexity * 0.8);
+                }
+
+                // Blend the two coordinates based on blend mode
+                let blendedCoord = blendCoordinates(finalCoord1, finalCoord2, params.blendMode, params.complexity);
+
+                // Loop coordinates to create seamless tiling effect
+                let loopedCoord = vec2f(
+                    blendedCoord.x - floor(blendedCoord.x),
+                    blendedCoord.y - floor(blendedCoord.y)
+                );
+
+                // Apply one final cell effect for refraction at seams
+                let finalCellCoord = applyCellEffect(loopedCoord, kaleidoscopeCenter, params.cellEffect * 0.5, params.cellSize * 0.5);
+
+                // Sample the original texture at the transformed coordinates
+                let sampledColor = textureSampleLevel(inputTexture, textureSampler, finalCellCoord, 0.0);
+
+                // Apply color shifting if enabled
+                let finalColor = shiftColor(sampledColor, params.colorShift);
+
+                textureStore(resultTexture, id.xy, finalColor);
+            }
+          `;
+          const shader = device.createShaderModule({
+            label: "Kaleidoscope Shader",
+            code
+          });
+          const pipelineDef = makeShaderDataDefinitions5(code);
+          device.addEventListener("lost", (e) => {
+            console.error(e);
+          });
+          device.addEventListener("uncapturederror", (e) => {
+            console.error(e.error);
+          });
+          const pipeline = device.createComputePipeline({
+            label: "Kaleidoscope Pipeline",
+            layout: "auto",
+            compute: {
+              module: shader,
+              entryPoint: "computeMain"
+            }
+          });
+          return { device, pipeline, pipelineDef };
+        }
+      );
+    },
+    goLiveEffect: async ({
+      /* RMIT: return value from initLiveEffect -> */
+      device,
+      pipeline,
+      pipelineDef
+    }, params, imgData, { dpi, baseDpi }) => {
+      console.log("Kaleidoscope Effect", params);
+      imgData = await paddingImageData(imgData, params.padding);
+      const outputWidth = imgData.width, outputHeight = imgData.height;
+      imgData = await addWebGPUAlignmentPadding(imgData);
+      const inputWidth = imgData.width, inputHeight = imgData.height;
+      const texture = device.createTexture({
+        label: "Input Texture",
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
+      });
+      const resultTexture = device.createTexture({
+        label: "Result Texture",
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
+      });
+      const sampler = device.createSampler({
+        label: "Texture Sampler",
+        magFilter: "linear",
+        minFilter: "linear"
+      });
+      const uniformValues = makeStructuredView5(pipelineDef.uniforms.params);
+      const uniformBuffer = device.createBuffer({
+        label: "Params Buffer",
+        size: uniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      const patternTypeMap = {
+        triangular: 0,
+        square: 1,
+        hexagonal: 2,
+        octagonal: 3,
+        circular: 4,
+        spiral: 5,
+        fractal: 6,
+        composite: 7
+      };
+      const blendModeMap = {
+        normal: 0,
+        kaleidoscope: 1,
+        mirror: 2,
+        rotational: 3
+      };
+      uniformValues.set({
+        inputDpi: dpi,
+        baseDpi,
+        segments: params.segments,
+        patternType: patternTypeMap[params.pattern] || 0,
+        rotation: params.rotation,
+        centerX: params.centerX,
+        centerY: params.centerY,
+        zoom: params.zoom,
+        distortion: params.distortion,
+        complexity: params.complexity,
+        colorShift: params.colorShift,
+        cellEffect: params.cellEffect,
+        cellSize: params.cellSize,
+        blendMode: blendModeMap[params.blendMode] || 0
+      });
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const bindGroup = device.createBindGroup({
+        label: "Main Bind Group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: texture.createView()
+          },
+          {
+            binding: 1,
+            resource: resultTexture.createView()
+          },
+          {
+            binding: 2,
+            resource: sampler
+          },
+          {
+            binding: 3,
+            resource: { buffer: uniformBuffer }
+          }
+        ]
+      });
+      const stagingBuffer = device.createBuffer({
+        label: "Staging Buffer",
+        size: inputWidth * inputHeight * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeTexture(
+        { texture },
+        imgData.data,
+        { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
+        [inputWidth, inputHeight]
+      );
+      const commandEncoder = device.createCommandEncoder({
+        label: "Main Command Encoder"
+      });
+      const computePass = commandEncoder.beginComputePass({
+        label: "Kaleidoscope Compute Pass"
+      });
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      computePass.dispatchWorkgroups(
+        Math.ceil(inputWidth / 16),
+        Math.ceil(inputHeight / 16)
+      );
+      computePass.end();
+      commandEncoder.copyTextureToBuffer(
+        { texture: resultTexture },
+        { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
+        [inputWidth, inputHeight]
+      );
+      device.queue.submit([commandEncoder.finish()]);
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const copyArrayBuffer = stagingBuffer.getMappedRange();
+      const resultData = new Uint8Array(copyArrayBuffer.slice(0));
+      stagingBuffer.unmap();
+      const resultImageData = new ImageData(
+        new Uint8ClampedArray(resultData),
+        inputWidth,
+        inputHeight
+      );
+      return await removeWebGPUAlignmentPadding(
+        resultImageData,
+        outputWidth,
+        outputHeight
+      );
+    }
+  }
+});
+
 // src/js/src/main.ts
 var EFFECTS_DIR = new URL(toFileUrl2(join2(homedir(), ".ai-deno/effects")));
 var allPlugins = [
@@ -3885,6 +4789,7 @@ var allPlugins = [
   glitch,
   halftone,
   // innerGlow,
+  kaleidoscope,
   kirakiraGlow,
   outlineEffect,
   // pixelSort,
@@ -3895,9 +4800,6 @@ var effectInits = /* @__PURE__ */ new Map();
 var allEffectPlugins = Object.fromEntries(
   allPlugins.filter((p) => !!p.liveEffect).map((p) => [p.id, p])
 );
-var adapter = await navigator.gpu.requestAdapter();
-var device = await adapter.requestDevice();
-console.log("device", device, device.lost);
 try {
   await Promise.all(
     Object.values(allEffectPlugins).map(
@@ -4047,7 +4949,7 @@ function attachNodeIds(node) {
 function liveEffectAdjustColors(id, params, adjustCallback) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
-  params = getParams(id, params);
+  params = structuredClone(getParams(id, params));
   const result = effect.liveEffect.onAdjustColors(params, adjustCallback);
   return {
     hasChanged: !isEqual(result, params),
@@ -4064,12 +4966,12 @@ function liveEffectScaleParameters(id, params, scaleFactor) {
     params: result ?? params
   };
 }
-function liveEffectInterpolate(id, params, params2, t8) {
+function liveEffectInterpolate(id, params, params2, t9) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
   params = getParams(id, params);
   params2 = getParams(id, params2);
-  return effect.liveEffect.onInterpolate(params, params2, t8);
+  return effect.liveEffect.onInterpolate(params, params2, t9);
 }
 var doLiveEffect = async (id, params, env, width, height, data) => {
   const effect = findEffect(id);
@@ -4092,7 +4994,7 @@ var doLiveEffect = async (id, params, env, width, height, data) => {
       width * dpiScale,
       height * dpiScale
     );
-    const result = await effect.liveEffect.doLiveEffect(
+    const result = await effect.liveEffect.goLiveEffect(
       init,
       {
         ...defaultParams,

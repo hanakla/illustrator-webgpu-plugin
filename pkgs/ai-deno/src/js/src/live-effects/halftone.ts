@@ -38,7 +38,7 @@ export const halftone = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {
@@ -312,7 +312,7 @@ export const halftone = definePlugin({
 
       return { device, pipeline };
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData, env) => {
+    goLiveEffect: async ({ device, pipeline }, params, imgData, env) => {
       console.log("Halftone Effect", params);
 
       const outputWidth = imgData.width,

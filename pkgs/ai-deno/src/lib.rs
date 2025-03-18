@@ -464,19 +464,28 @@ pub extern "C" fn live_effect_adjust_colors(
                 let adjust_color_fn_ref = v8::Local::<v8::External>::try_from(args.data()).unwrap();
                 let adjust_color_fn_ptr = unsafe { adjust_color_fn_ref.value() as *mut c_void };
 
+                dai_println!("Calling adjust_color_fn: {}", color);
+
                 let result_json = unsafe {
                     ai_deno_trampoline_adjust_color_callback(
                         adjust_color_fn_ptr,
-                        CString::new(color).unwrap().as_ptr(),
+                        CString::new(color).unwrap().into_raw(),
                     )
                 }
                 .to_owned();
                 let result_json = unsafe { CStr::from_ptr(result_json).to_string_lossy() };
+                dai_println!(result_json);
+
+                dai_println!("Called adjust_color_fn: {}", result_json);
 
                 // Parse json to ColorRGBA
-                let result = v8::String::new(scope, result_json.to_string().as_str()).unwrap();
-                let result = v8::json::parse(scope, result).unwrap();
-                let result = v8::Local::<v8::Object>::try_from(result).unwrap();
+                let Some(result) = v8::String::new(scope, result_json.to_string().as_str())
+                    .and_then(|s| v8::json::parse(scope, s))
+                    .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok())
+                else {
+                    throw_v8_exception(scope, "Failed to parse adjust_color_fn result");
+                    return;
+                };
 
                 // Set return value
                 ret.set(result.into());
@@ -692,6 +701,12 @@ where
         success: true,
         json: CString::new(result).unwrap().into_raw(),
     }
+}
+
+fn throw_v8_exception(scope: &mut v8::HandleScope, message: &str) {
+    let error = v8::String::new(scope, message).unwrap();
+    let error = v8::Exception::error(scope, error);
+    scope.throw_exception(error);
 }
 
 pub fn c_char_to_string(c_char: *mut c_char) -> String {

@@ -19,6 +19,8 @@ extern "C" AIPathSuite*          sAIPath          = nullptr;
 extern "C" AIPathStyleSuite*     sAIPathStyle     = nullptr;
 extern "C" AILayerSuite*         sAILayer         = nullptr;
 extern "C" AIPreferenceSuite*    sAIPref          = nullptr;
+extern "C" AIMaskSuite*          sAIMask          = nullptr;
+extern "C" AIGradientSuite*      sAIGradient      = nullptr;
 
 // Import suites
 ImportSuite gImportSuites[] = {
@@ -38,5 +40,7 @@ ImportSuite gImportSuites[] = {
     {kAIPathStyleSuite, kAIPathStyleSuiteVersion, &sAIPathStyle},
     {kAILayerSuite, kAILayerSuiteVersion, &sAILayer},
     {kAIPreferenceSuite, kAIPreferenceSuiteVersion, &sAIPref},
+    {kAIMaskSuite, kAIMaskSuiteVersion, &sAIMask},
+    {kAIGradientSuite, kAIGradientSuiteVersion, &sAIGradient},
     {nil, 0, nil}
 };

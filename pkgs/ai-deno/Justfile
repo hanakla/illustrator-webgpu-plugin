@@ -13,6 +13,9 @@ watch:
 watch-example:
     cargo watch --clear  -x "run example"
 
+[macos]
+show-externs:
+    nm -m target/release/libai_deno.a
 
 watch-js:
     yarn tsup src/js/src/main.ts --outDir src/js/dist --format esm --watch

@@ -47,7 +47,7 @@ export const directionalBlur = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {
@@ -320,7 +320,7 @@ export const directionalBlur = definePlugin({
         return { device, pipeline, defs };
       });
     },
-    doLiveEffect: async ({ device, pipeline, defs }, params, imgData) => {
+    goLiveEffect: async ({ device, pipeline, defs }, params, imgData) => {
       try {
         // Make padding for blur overflow
         imgData = await paddingImageData(imgData, Math.ceil(params.strength));

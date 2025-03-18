@@ -35,7 +35,7 @@ export const innerGlow = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {
@@ -231,7 +231,7 @@ export const innerGlow = definePlugin({
 
       return { device, pipeline };
     },
-    doLiveEffect: async ({ device, pipeline }, params, imgData) => {
+    goLiveEffect: async ({ device, pipeline }, params, imgData) => {
       logger.log("Glow Effect V1", params);
 
       imgData = await paddingImageData(imgData, params.weight);

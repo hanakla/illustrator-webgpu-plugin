@@ -2,6 +2,7 @@
 #define __HelloWorldSuites_H__
 
 #include <AIBlock.h>
+#include <AIGradient.h>
 #include <AIRasterize.h>
 #include "IllustratorSDK.h"
 #include "Suites.hpp"
@@ -24,5 +25,7 @@ extern "C" AIPathSuite*          sAIPath;
 extern "C" AIPathStyleSuite*     sAIPathStyle;
 extern "C" AILayerSuite*         sAILayer;
 extern "C" AIPreferenceSuite*    sAIPref;
+extern "C" AIMaskSuite*          sAIMask;
+extern "C" AIGradientSuite*      sAIGradient;
 
 #endif

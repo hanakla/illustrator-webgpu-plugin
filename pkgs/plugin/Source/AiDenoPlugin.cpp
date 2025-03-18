@@ -4,11 +4,11 @@
 #include <numeric>
 #include <regex>
 
+#include "./AiDenoPlugin.h"
+#include "./AiDenoSuites.h"
+#include "./consts.h"
 #include "./libs/regex.h"
 #include "./views/ImgUIEditModal.h"
-#include "AiDenoPlugin.h"
-#include "AiDenoSuites.h"
-#include "consts.h"
 
 #include "debugHelper.h"
 
@@ -88,6 +88,11 @@ ASErr HelloWorldPlugin::ShutdownPlugin(SPInterfaceMessage* message) {
   return error;
 }
 
+ASErr HelloWorldPlugin::Message(char* caller, char* selector, void* message) {
+  csl("Message: %s -> %s", caller, selector);
+  return Plugin::Message(caller, selector, message);
+}
+
 ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
   ASErr error       = kNoErr;
   short filterIndex = 0;
@@ -127,7 +132,9 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
     effect.minorVersion   = effectDef["version"]["minor"].get<int>();
     effect.prefersAsInput = AIStyleFilterPreferredInputArtType::kInputArtDynamic;
     // effect.prefersAsInput   = AIStyleFilterPreferredInputArtType::kRasterInputArt;
-    effect.styleFilterFlags = AIStyleFilterFlags::kPostEffectFilter;
+    effect.styleFilterFlags = AIStyleFilterFlags::kPostEffectFilter |
+                              AIStyleFilterFlags::kHasScalableParams |
+                              AIStyleFilterFlags::kHandlesAdjustColorsMsg;
 
     csl(" creating menu data");
     AddLiveEffectMenuData menu;
@@ -166,6 +173,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   auto        artType = suai::art::getArtType(art);
   print_AIArt(art, "art");
 
+  csl("art JSON: %s", suai::art::serialize::ArtToJSON(art).dump(2).c_str());
+
   ASErr error = kNoErr;
 
   PluginParams params;
@@ -203,22 +212,18 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     CHKERR();
 
     AIArtHandle rasterArt;
-    if (suai::art::getArtType(art) == AIArtType::kRasterArt) {
-      rasterArt = art;
-    } else {
-      error = sAIArt->NewArt(
-          AIArtType::kRasterArt, AIPaintOrder::kPlaceAbove, art, &rasterArt
-      );
-      CHKERR();
+    error =
+        sAIArt->NewArt(AIArtType::kRasterArt, AIPaintOrder::kPlaceAbove, art, &rasterArt);
+    CHKERR();
 
-      timeStart("Rasterize");
-      error = sAIRasterize->Rasterize(
-          artSet->ToAIArtSet(), &settings, &bounds, AIPaintOrder::kPlaceAbove, art,
-          &rasterArt, NULL
-      );
-      timeEnd();
-      CHKERR();
-    }
+    // Rasterizing
+    timeStart("Rasterize");
+    error = sAIRasterize->Rasterize(
+        artSet->ToAIArtSet(), &settings, &bounds, AIPaintOrder::kPlaceAbove, art,
+        &rasterArt, NULL
+    );
+    timeEnd();
+    CHKERR();
 
     AIRasterRecord info;
     sAIRaster->GetRasterInfo(rasterArt, &info);
@@ -235,26 +240,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     float dpiDescaleFactor = baseDpi / dpi;   // DPIで解像度が何倍にされているか
     csl("DPI: %d (%.5f %.5f)", dpi, sourceMatrix.a, sourceMatrix.d);
 
-    // この変数を用いて動的なdpiに対応する
-    // int   baseDpi        = 72;
-    // float scaleFactor    = fabs(sourceMatrix.a);
-    // int   dpi            = baseDpi / scaleFactor;
-    // float dpiScaleFactor = scaleFactor;  // DPIを調整するためのスケーリング係数
-    // int   baseDpi        = 72;  // Illustratorの標準DPI
-    // float scaleRatio     = fabs(sourceMatrix.a);  // スケール比率
-    // int   actualDpi      = (int)(baseDpi / scaleRatio);  // 実際のDPI値を計算
-
-    // 72dpiのスケーリング係数（72dpiに戻すための係数）
-    // 例: 300dpiなら72/300=0.24倍するための係数
-    // float dpiAdjustFactor = (float)baseDpi / actualDpi;
-
     print_AIRasterRecord(info, "rasterArt");
-
-    AIDocumentSetup docSetup;
-    error = sAIDocument->GetDocumentSetup(&docSetup);
-    CHKERR();
-
-    print_AIDocumentSetup(docSetup);
 
     AIRealRect bbox;
     sAIRaster->GetRasterBoundingBox(rasterArt, &bbox);
@@ -363,7 +349,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         error = sAIRaster->SetRasterInfo(newRasterArt, &newInfo);
         CHKERR();
 
-        // 元のラスターの変換マトリックスを取得
+        // Positioning new image basis of center of original image
         AIRealMatrix matrix;
         error = sAIRaster->GetRasterMatrix(rasterArt, &matrix);
         CHKERR();
@@ -653,37 +639,34 @@ ASErr HelloWorldPlugin::LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage* 
   ASErr error = kNoErr;
 
   // Exposing adjustColorCallback to Deno
-  auto adjustColorCallback = [this, message, &error](const char* color) -> const char* {
-    // std::string colorStr(color->data, color->len);
-    std::string aa;
-    json        input = json::parse(aa);
+  AdjustColorCallbackLambda adjustColorCallback = [this, message](const char* color
+                                                  ) -> const char* {
+    json input = json::parse(color);
 
     AIColor aiColor;
+    aiColor.Init();
     aiColor.kind        = kThreeColor;
-    aiColor.c.rgb.red   = (int)(input["r"].get<float>() * 255.0);
-    aiColor.c.rgb.green = (int)(input["g"].get<float>() * 255.0);
-    aiColor.c.rgb.blue  = (int)(input["b"].get<float>() * 255.0);
+    aiColor.c.rgb.red   = (double)input["r"];
+    aiColor.c.rgb.green = (double)input["g"];
+    aiColor.c.rgb.blue  = (double)input["b"];
 
     AIBoolean altered = false;
-    message->adjustColorCallback(&aiColor, nullptr, &error, &altered);
+    AIErr     err     = kNoErr;
+    message->adjustColorCallback(&aiColor, message->clientData, &err, &altered);
 
     json res({
-        {"r", (double)(aiColor.c.rgb.red / 255.0)},
-        {"g", (double)(aiColor.c.rgb.green / 255.0)},
-        {"b", (double)(aiColor.c.rgb.blue / 255.0)},
+        {"r", (double)aiColor.c.rgb.red},
+        {"g", (double)aiColor.c.rgb.green},
+        {"b", (double)aiColor.c.rgb.blue},
+        {"a", input["a"]},
     });
 
-    return res.dump().c_str();
+    return strdup(res.dump().c_str());
   };
 
   PluginParams params;
-  this->getDictionaryValues(
-      message->parameters, &params,
-      PluginParams{
-          .effectName = "__FAILED_TO_GET_EFFECT_NAME__",
-          .params     = json(),
-      }
-  );
+  error = this->getDictionaryValues(message->parameters, &params, defaultPluginParams);
+  CHKERR();
 
   ai_deno::JsonFunctionResult* result = ai_deno::live_effect_adjust_colors(
       aiDenoMain, params.effectName.c_str(), params.params.dump().c_str(),
@@ -700,8 +683,9 @@ ASErr HelloWorldPlugin::LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage* 
 
   if (!res["hasChanged"].get<bool>()) { return error; }
 
-  message->modifiedSomething = true;
+  params.params = res["params"];
   this->putParamsToDictionaly(message->parameters, params);
+  message->modifiedSomething = true;
 
   return error;
 }

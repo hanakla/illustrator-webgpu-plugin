@@ -8,11 +8,11 @@ export const randomNoiseEffect = definePlugin({
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     paramSchema: {},
-    doLiveEffect: async (init, params, input, env) => {
+    goLiveEffect: async (init, params, input, env) => {
       const buffer = input.data;
       console.log("Deno code running", buffer.byteLength / 4, buffer);
 

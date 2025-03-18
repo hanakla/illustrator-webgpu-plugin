@@ -21,24 +21,15 @@
 
 using json = nlohmann::json;
 
-struct PluginParams {
-  std::string effectName;
-  json        params;
-};
-
-struct PluginPreferences {
-  AIPoint* windowPosition = nullptr;
-};
-
 Plugin* AllocatePlugin(SPPluginRef pluginRef);
 void    FixupReload(Plugin* plugin);
 
-using AdjustColorCallbackLambda = const char* (*)(const char*);
+using AdjustColorCallbackLambda = std::function<const char*(const char*)>;
 
 extern "C" {
   const char* ai_deno_trampoline_adjust_color_callback(void* ptr, const char* color);
 
-  void                 ai_deno_alert(const char* message);
+  void        ai_deno_alert(const char* message);
   const char* ai_deno_get_user_locale();
 }
 
@@ -59,6 +50,8 @@ class HelloWorldPlugin : public Plugin {
   ASInt32            fNumEffects;
 
   ai_deno::OpaqueAiMain aiDenoMain;
+
+  ASErr Message(char* caller, char* selector, void* message);
 
   ASErr InitMenus(SPInterfaceMessage*);
   ASErr InitLiveEffect(SPInterfaceMessage*);

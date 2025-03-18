@@ -19,8 +19,10 @@ import { imageReverb } from "~ext/live-effects/image-reverb.ts";
 import { outlineEffect } from "~ext/live-effects/outline.ts";
 import { compressor } from "~ext/live-effects/compressor.ts";
 import { fluidDistortion } from "~ext/live-effects/fluid-distortion.ts";
+import { kaleidoscope } from "~ext/live-effects/kaleidoscope.ts";
 
 const plugins = [
+  kaleidoscope,
   fluidDistortion,
   coastic,
   compressor,
@@ -82,6 +84,7 @@ function Controls({
   const dpiRef = useThroughRef(dpi);
   const sourceImgData = useRef<ImageData | null>(null);
   const scaledImgData = useRef<ImageData | null>(null);
+  const resultImgData = useRef<ImageData | null>(null);
 
   const nodeMap = new Map<string, any>();
 
@@ -137,11 +140,32 @@ function Controls({
 
   useStableEvent(() => {
     const sizeLabel = document.getElementById("size-label")!;
+    const colorLabel = document.getElementById("color-label")!;
     const canvas: HTMLCanvasElement = document.getElementById("canvas")!;
     const ctx = canvas.getContext("2d")!;
 
     const abort = new AbortController();
     const signal = abort.signal;
+
+    canvas.addEventListener(
+      "mousemove",
+      (e) => {
+        if (!resultImgData.current) return;
+
+        // Get pixel color under mouse from resultImgData
+        const x = (e.offsetX * resultImgData.current!.width) / canvas.width;
+        const y = (e.offsetY * resultImgData.current!.height) / canvas.height;
+        const index = (y | 0) * resultImgData.current!.width + (x | 0);
+        const i = index * 4;
+        const r = resultImgData.current!.data[i];
+        const g = resultImgData.current!.data[i + 1];
+        const b = resultImgData.current!.data[i + 2];
+        const a = resultImgData.current!.data[i + 3];
+        colorLabel.innerHTML = `rgba(${r}, ${g}, ${b}, ${a})
+          <span style="background-color: rgba(${r}, ${g}, ${b}, ${a})">&nbsp;&nbsp;&nbsp;&nbsp;</span>`;
+      },
+      { signal }
+    );
 
     let animId = requestAnimationFrame(async function loop() {
       const init = effectInits.get(currentPlugin.id);
@@ -179,6 +203,7 @@ function Controls({
         result.height
       );
       const image = await createImageBitmap(resultData);
+      resultImgData.current = resultData;
       // const sourceImage = await createImageBitmap(scaledImgData);
 
       sizeLabel.textContent = `${resultData.width}x${resultData.height} <= input: ${input.width}x${input.height} @ ${dpi}dpi / Source: ${sourceImgData.width}x${sourceImgData.height}`;
@@ -239,6 +264,17 @@ function Controls({
       setDpi(value);
     }
   );
+
+  function scaleImageForDpi(imageData: ImageData, dpi: number) {
+    const scale = dpi / 72;
+    const scaledWidth = imageData.width * scale;
+    const scaledHeight = imageData.height * scale;
+    scaledImgData.current = resizeImageData(
+      imageData,
+      scaledWidth,
+      scaledHeight
+    );
+  }
 
   const renderUI = (params: any) => {
     const setParamFn = (patch: object | ((params: any) => any)) => {
@@ -419,17 +455,6 @@ function Controls({
         return null;
     }
   };
-
-  function scaleImageForDpi(imageData: ImageData, dpi: number) {
-    const scale = dpi / 72;
-    const scaledWidth = imageData.width * scale;
-    const scaledHeight = imageData.height * scale;
-    scaledImgData.current = resizeImageData(
-      imageData,
-      scaledWidth,
-      scaledHeight
-    );
-  }
 
   const tree = renderUI(params, nodeMap);
 

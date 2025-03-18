@@ -48,13 +48,13 @@ export const testBlueFill = definePlugin({
       },
     },
     styleFilterFlags: {
-      main: StyleFilterFlag.kPostEffectFilter,
+      type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
     onInterpolate: (paramsA, paramsB, t) => paramsA,
-    doLiveEffect: async (init, params, input) => {
+    goLiveEffect: async (init, params, input) => {
       let width = input.width;
       let height = input.height;
       let len = input.data.length;

@@ -7,6 +7,10 @@ run-ai:
 watch:
     sudo deno run -A ./watch-sync.ts
 
+[macos]
+show-externs:
+    nm -m output/mac/release/IllustratorDeno.aip/Contents/MacOS/IllustratorDeno
+
 cpp-sandbox:
     clear
     clang++ -std=c++23 ./Sandbox/main.cpp -o /tmp/sandbox_bin
