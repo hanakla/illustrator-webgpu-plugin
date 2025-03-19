@@ -59,7 +59,7 @@ impl JsonFunctionResult {
 }
 
 #[repr(C)]
-pub struct DoLiveEffectResult {
+pub struct GoLiveEffectResult {
     pub success: bool,
     pub data: *mut ImageDataPayload,
 }
@@ -187,13 +187,13 @@ pub extern "C" fn get_live_effect_view_tree(
 }
 
 #[no_mangle]
-extern "C" fn do_live_effect(
+extern "C" fn go_live_effect(
     ai_main_ref: OpaqueAiMain,
     effect_id: *const c_char,
     params: *const c_char,
     env_json: *const c_char,
     image_data: *mut ImageDataPayload,
-) -> *mut DoLiveEffectResult {
+) -> *mut GoLiveEffectResult {
     let ai_main = unsafe { &mut *(ai_main_ref as *mut AiMain) };
 
     let effect_id = unsafe { CStr::from_ptr(effect_id).to_string_lossy() };
@@ -203,9 +203,9 @@ extern "C" fn do_live_effect(
     let source_buffer_ptr = (*image_data).data_ptr;
 
     let t = Instant::now();
-    dai_println!("do_live_effect: effect_id = {}", effect_id);
+    dai_println!("go_live_effect: effect_id = {}", effect_id);
 
-    let result = execute_export_function_and_raw_return(ai_main, "doLiveEffect", move |scope| {
+    let result = execute_export_function_and_raw_return(ai_main, "goLiveEffect", move |scope| {
         let effect_id = v8::String::new(scope, effect_id.to_string().as_str()).unwrap();
         let effect_id = v8::Local::new(scope, effect_id);
 
@@ -251,8 +251,8 @@ extern "C" fn do_live_effect(
     let result = match result {
         Some(result) => result,
         None => {
-            dai_println!("do_live_effect: error: result is None");
-            return Box::into_raw(Box::new(DoLiveEffectResult {
+            dai_println!("go_live_effect: error: result is None");
+            return Box::into_raw(Box::new(GoLiveEffectResult {
                 success: false,
                 data: std::ptr::null_mut(),
             }));
@@ -278,13 +278,13 @@ extern "C" fn do_live_effect(
     let result = v8::Local::<v8::Value>::new(scope, result);
 
     if !result.is_object() {
-        return Box::into_raw(Box::new(DoLiveEffectResult {
+        return Box::into_raw(Box::new(GoLiveEffectResult {
             success: false,
             data: std::ptr::null_mut(),
         }));
     }
 
-    let returned = (|| -> Result<DoLiveEffectResult, anyhow::Error> {
+    let returned = (|| -> Result<GoLiveEffectResult, anyhow::Error> {
         let obj = v8::Local::<v8::Value>::try_from(result)?;
         let obj = v8::Local::<v8::Object>::try_from(obj)?;
 
@@ -317,7 +317,7 @@ extern "C" fn do_live_effect(
         dai_println!("source_ptr: {:p}", source_buffer_ptr);
         dai_println!("data_ptr: {:p}", data_ptr);
 
-        Ok(DoLiveEffectResult {
+        Ok(GoLiveEffectResult {
             success: true,
             data: Box::into_raw(Box::new(ImageDataPayload {
                 width: width as u32,
@@ -328,13 +328,13 @@ extern "C" fn do_live_effect(
         })
     })();
 
-    dai_println!("do_live_effect: elapsed = {:?}", t.elapsed());
+    dai_println!("go_live_effect: elapsed = {:?}", t.elapsed());
 
     match returned {
         Ok(result) => Box::into_raw(Box::new(result)),
         Err(e) => {
-            eprintln!("do_live_effect: error: {}", e);
-            Box::into_raw(Box::new(DoLiveEffectResult {
+            eprintln!("go_live_effect: error: {}", e);
+            Box::into_raw(Box::new(GoLiveEffectResult {
                 success: false,
                 data: std::ptr::null_mut(),
             }))
@@ -343,7 +343,7 @@ extern "C" fn do_live_effect(
 }
 
 #[no_mangle]
-pub extern "C" fn dispose_do_live_effect_result(result: *mut DoLiveEffectResult) {
+pub extern "C" fn dispose_go_live_effect_result(result: *mut GoLiveEffectResult) {
     if result.is_null() {
         return;
     }

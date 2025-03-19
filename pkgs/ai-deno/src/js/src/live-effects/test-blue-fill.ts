@@ -34,6 +34,10 @@ export const testBlueFill = definePlugin({
         type: "bool",
         default: false,
       },
+      passThrough: {
+        type: "bool",
+        default: false,
+      },
       padding: {
         type: "int",
         default: 0,
@@ -51,6 +55,7 @@ export const testBlueFill = definePlugin({
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],
     },
+    onAdjustColors: (params, adjustColor) => params,
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
     onInterpolate: (paramsA, paramsB, t) => paramsA,
@@ -59,7 +64,11 @@ export const testBlueFill = definePlugin({
       let height = input.height;
       let len = input.data.length;
 
-      global.lastInput = input;
+      global.lastInput = {
+        data: Uint8ClampedArray.from(input.data),
+        width,
+        height,
+      };
       global.inputSize = { width, height };
 
       const alpha = Math.round(255 * (params.opacity / 100));
@@ -82,6 +91,14 @@ export const testBlueFill = definePlugin({
         len = buffer.length;
         width = data.width;
         height = data.height;
+      }
+
+      if (params.passThrough) {
+        return {
+          data: buffer,
+          width,
+          height,
+        };
       }
 
       if (params.fillOtherChannels) {
@@ -111,6 +128,22 @@ export const testBlueFill = definePlugin({
       };
     },
     renderUI: (params, setParam) => {
+      const onClickSaveInputAsPng = async () => {
+        if (!global.lastInput) {
+          _AI_DENO_.op_ai_alert("No input data");
+          return;
+        }
+
+        const path = new URL(
+          "./test-blue-fill.png",
+          toFileUrl(join(Deno.cwd(), "./"))
+        );
+        const png = await toPng(global.lastInput);
+        Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
+
+        _AI_DENO_.op_ai_alert(`Saved to ${path}`);
+      };
+
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
           ui.button({
@@ -124,20 +157,7 @@ export const testBlueFill = definePlugin({
 
           ui.button({
             text: "Save input as PNG",
-            onClick: async () => {
-              if (!global.lastInput) {
-                console.log("No input data");
-                return;
-              }
-
-              const path = new URL(
-                "./test-blue-fill.png",
-                toFileUrl(join(Deno.cwd(), "./"))
-              );
-              const png = await toPng(global.lastInput);
-              Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
-              console.log(`Saved to ${path}`);
-            },
+            onClick: onClickSaveInputAsPng,
           }),
 
           ui.button({
@@ -165,9 +185,15 @@ export const testBlueFill = definePlugin({
 
         // ui.text({ text: "Fill other channels" }),
         ui.checkbox({
-          label: "Fill other channels",
           key: "fillOtherChannels",
+          label: "Fill other channels",
           value: params.fillOtherChannels,
+        }),
+
+        ui.checkbox({
+          key: "passThrough",
+          label: "Pass through",
+          value: params.passThrough,
         }),
 
         ui.text({ text: "Color" }),

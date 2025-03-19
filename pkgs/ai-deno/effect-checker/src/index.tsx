@@ -22,13 +22,13 @@ import { fluidDistortion } from "~ext/live-effects/fluid-distortion.ts";
 import { kaleidoscope } from "~ext/live-effects/kaleidoscope.ts";
 
 const plugins = [
+  halftone,
   kaleidoscope,
   fluidDistortion,
   coastic,
   compressor,
   imageReverbGPU,
   kirakiraGlow,
-  halftone,
   glitch,
   pixelSort,
   outlineEffect,
@@ -175,7 +175,7 @@ function Controls({
       if (pausedRef.current || !sourceImgData.current || !scaledImgData.current)
         return (animId = requestAnimationFrame(loop));
 
-      const timeLabel = `doLiveEffect (${currentPlugin.title})`;
+      const timeLabel = `goLiveEffect (${currentPlugin.title})`;
       console.time(timeLabel);
       const input = {
         width: scaledImgData.current.width,
@@ -183,7 +183,7 @@ function Controls({
         data: Uint8ClampedArray.from(scaledImgData.current.data),
       };
 
-      const result = await currentPlugin.liveEffect.doLiveEffect(
+      const result = await currentPlugin.liveEffect.goLiveEffect(
         init,
         params,
         input,
@@ -206,7 +206,9 @@ function Controls({
       resultImgData.current = resultData;
       // const sourceImage = await createImageBitmap(scaledImgData);
 
-      sizeLabel.textContent = `${resultData.width}x${resultData.height} <= input: ${input.width}x${input.height} @ ${dpi}dpi / Source: ${sourceImgData.width}x${sourceImgData.height}`;
+      sizeLabel.textContent =
+        `${resultData.width}x${resultData.height} <= input: ${input.width}x${input.height} @ ${dpi}dpi` +
+        ` / Source: ${sourceImgData.current.width}x${sourceImgData.current.height}`;
       canvas.style.width = `${(result.width * currentDpiScale) | 0}px`;
       canvas.style.height = `${(result.height * currentDpiScale) | 0}px`;
       canvas.width = result.width;

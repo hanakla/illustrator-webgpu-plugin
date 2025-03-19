@@ -13,7 +13,6 @@
 		2A9235D70E2FB5D2001EA6E3 /* Suites.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2A9235D10E2FB5D2001EA6E3 /* Suites.cpp */; };
 		2A9235DD0E2FB5EC001EA6E3 /* IAIUnicodeString.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2A9235DA0E2FB5EC001EA6E3 /* IAIUnicodeString.cpp */; };
 		2AE03E3E0CF6F76A00C6B585 /* IllustratorSDK.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2AE03E3D0CF6F76A00C6B585 /* IllustratorSDK.cpp */; };
-		6868C925150BA192003DAAF2 /* AiDenoID.h in Headers */ = {isa = PBXBuildFile; fileRef = 6868C920150BA192003DAAF2 /* AiDenoID.h */; };
 		6868C926150BA192003DAAF2 /* AiDenoPlugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6868C921150BA192003DAAF2 /* AiDenoPlugin.cpp */; };
 		6868C927150BA192003DAAF2 /* AiDenoPlugin.h in Headers */ = {isa = PBXBuildFile; fileRef = 6868C922150BA192003DAAF2 /* AiDenoPlugin.h */; };
 		6868C928150BA192003DAAF2 /* AiDenoSuites.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6868C923150BA192003DAAF2 /* AiDenoSuites.cpp */; };
@@ -89,7 +88,6 @@
 		2A9235D10E2FB5D2001EA6E3 /* Suites.cpp */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.cpp.cpp; name = Suites.cpp; path = ../../sdk/samplecode/common/source/Suites.cpp; sourceTree = SOURCE_ROOT; };
 		2A9235DA0E2FB5EC001EA6E3 /* IAIUnicodeString.cpp */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.cpp.cpp; name = IAIUnicodeString.cpp; path = ../../sdk/illustratorapi/illustrator/IAIUnicodeString.cpp; sourceTree = SOURCE_ROOT; };
 		2AE03E3D0CF6F76A00C6B585 /* IllustratorSDK.cpp */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.cpp.cpp; name = IllustratorSDK.cpp; path = ../../sdk/samplecode/common/source/IllustratorSDK.cpp; sourceTree = SOURCE_ROOT; };
-		6868C920150BA192003DAAF2 /* AiDenoID.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AiDenoID.h; path = Source/AiDenoID.h; sourceTree = "<group>"; };
 		6868C921150BA192003DAAF2 /* AiDenoPlugin.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = AiDenoPlugin.cpp; path = Source/AiDenoPlugin.cpp; sourceTree = "<group>"; };
 		6868C922150BA192003DAAF2 /* AiDenoPlugin.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AiDenoPlugin.h; path = Source/AiDenoPlugin.h; sourceTree = "<group>"; };
 		6868C923150BA192003DAAF2 /* AiDenoSuites.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = AiDenoSuites.cpp; path = Source/AiDenoSuites.cpp; sourceTree = "<group>"; };
@@ -444,7 +442,6 @@
 				A5F9AB372D63A3DE007EE38C /* super-illustrator.h */,
 				A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */,
 				A5F9AB442D645B6C007EE38C /* debugHelper.h */,
-				6868C920150BA192003DAAF2 /* AiDenoID.h */,
 				6868C921150BA192003DAAF2 /* AiDenoPlugin.cpp */,
 				6868C922150BA192003DAAF2 /* AiDenoPlugin.h */,
 				6868C923150BA192003DAAF2 /* AiDenoSuites.cpp */,
@@ -1288,7 +1285,6 @@
 			files = (
 				A5F9AB3A2D63AC6A007EE38C /* consts.h in Headers */,
 				A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */,
-				6868C925150BA192003DAAF2 /* AiDenoID.h in Headers */,
 				A591675F2D660DEE00B4709A /* spectrum-tokens.hpp in Headers */,
 				6868C927150BA192003DAAF2 /* AiDenoPlugin.h in Headers */,
 				6868C929150BA192003DAAF2 /* AiDenoSuites.h in Headers */,

@@ -23,9 +23,9 @@ void ImGuiSetSpectrumTheme() {
   // colors[ImGuiCol_Border]               = tokens.colorAreaBorderColor;
   // colors[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
   style.FramePadding              = ImVec2(5, 5);
-  colors[ImGuiCol_FrameBg]        = tokens.gray50;
-  colors[ImGuiCol_FrameBgHovered] = tokens.gray50;
-  colors[ImGuiCol_FrameBgActive]  = tokens.gray50;
+  colors[ImGuiCol_FrameBg]        = tokens.gray75;
+  colors[ImGuiCol_FrameBgHovered] = tokens.gray75;
+  colors[ImGuiCol_FrameBgActive]  = tokens.gray75;
   // colors[ImGuiCol_TitleBg]              = tokens.backgroundLayer1Color;
   // colors[ImGuiCol_TitleBgActive]        = tokens.backgroundLayer2Color;
   // colors[ImGuiCol_MenuBarBg]            = tokens.backgroundLayer1Color;

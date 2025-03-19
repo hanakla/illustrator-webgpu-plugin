@@ -167,15 +167,21 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
 // }
 
 ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
-  csl("* GO LIVE!! EFFECT!!!");
+  ASErr error = kNoErr;
+
+  csl("**");
+  csl("** GO LIVE!! EFFECT!!!");
+  csl("**");
 
   AIArtHandle art     = message->art;
   auto        artType = suai::art::getArtType(art);
-  print_AIArt(art, "art");
 
-  csl("art JSON: %s", suai::art::serialize::ArtToJSON(art).dump(2).c_str());
+  // It is must be 72, if it changed, illustrator will be crash
+  int baseDpi = 72;
 
-  ASErr error = kNoErr;
+  // csl("art JSON: %s", suai::art::serialize::ArtToJSON(art).dump(2).c_str());
+  // Test calling for checking it works
+  suai::art::serialize::ArtToJSON(art);
 
   PluginParams params;
   error = this->getDictionaryValues(
@@ -187,19 +193,21 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   );
   CHKERR();
 
-  //  print_PluginParams(&params);
+  AIDocumentSetup docSetup;
+  error = sAIDocument->GetDocumentSetup(&docSetup);
+  CHKERR();
 
   AIRasterizeSettings settings = suai::createAIRasterSetting(
       {.type               = suai::RasterType::ARGB,
        .antiAlias          = 4,
        .colorConvert       = suai::RasterSettingColorConvert::Standard,
        .preserveSpotColors = true,
-       .resolution         = 72,  // Keep document resolution
-       .preserveSpotColors = true,
+       .resolution         = (double)300,
        .options =
            suai::RasterSettingOption{
                .useMinTiles   = true,
                .useEffectsRes = true,
+               .doLayers      = true,
            }}
   );
 
@@ -225,31 +233,25 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     timeEnd();
     CHKERR();
 
-    AIRasterRecord info;
-    sAIRaster->GetRasterInfo(rasterArt, &info);
-    unsigned char bytes = info.bitsPerPixel / 8;
+    return error;
+
+    AIRasterRecord sourceRasterRecord;
+    sAIRaster->GetRasterInfo(rasterArt, &sourceRasterRecord);
+    unsigned char bytes = sourceRasterRecord.bitsPerPixel / 8;
 
     AIRealMatrix sourceMatrix;
     AIRealRect   rasterBounds;
     sAIRaster->GetRasterBoundingBox(rasterArt, &rasterBounds);
     sAIRaster->GetRasterMatrix(rasterArt, &sourceMatrix);
 
-    int   baseDpi          = 72;
-    int   dpi              = baseDpi * (1 / sourceMatrix.a);
-    float dpiScaledFactor  = sourceMatrix.a;  // DPIを調整するためのスケーリング係数
-    float dpiDescaleFactor = baseDpi / dpi;   // DPIで解像度が何倍にされているか
-    csl("DPI: %d (%.5f %.5f)", dpi, sourceMatrix.a, sourceMatrix.d);
-
-    print_AIRasterRecord(info, "rasterArt");
-
-    AIRealRect bbox;
-    sAIRaster->GetRasterBoundingBox(rasterArt, &bbox);
+    int   dpi             = baseDpi * (1 / sourceMatrix.a);
+    float dpiScaledFactor = sourceMatrix.a;
 
     AISlice artSlice = {0}, workSlice = {0};
-    workSlice.top = artSlice.top = info.bounds.top;
-    workSlice.bottom = artSlice.bottom = info.bounds.bottom;
-    workSlice.left = artSlice.left = info.bounds.left;
-    workSlice.right = artSlice.right = info.bounds.right;
+    workSlice.top = artSlice.top = sourceRasterRecord.bounds.top;
+    workSlice.bottom = artSlice.bottom = sourceRasterRecord.bounds.bottom;
+    workSlice.left = artSlice.left = sourceRasterRecord.bounds.left;
+    workSlice.right = artSlice.right = sourceRasterRecord.bounds.right;
     workSlice.back = artSlice.back = bytes;
 
     AITile workTile   = {0};
@@ -262,19 +264,24 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     workTile.data     = new unsigned char[dataSize];
     workTile.rowBytes = sourceWidth * bytes;
 
-    print_AITile(&workTile, "workTile(before)");
+    // print_AITile(&workTile, "workTile(before)");
 
     // to RGBA
     workTile.channelInterleave[0] = 3;
     workTile.channelInterleave[1] = 0;
     workTile.channelInterleave[2] = 1;
     workTile.channelInterleave[3] = 2;
-
-    workTile.bounds = artSlice;
+    workTile.bounds               = artSlice;
 
     error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
     CHKERR();
 
+    csl("LiveEffect Input:");
+    csl("  DPI: %d (%.5f %.5f)", dpi, sourceMatrix.a, sourceMatrix.d);
+    print_AIRealRect(&rasterBounds, "rasterBounds", "  ");
+    print_AIDocumentSetup(docSetup, "", "  ");
+    print_AIArt(art, "art", "  ");
+    print_AIRasterRecord(sourceRasterRecord, "rasterArt", "  ");
     print_AITile(&workTile, "workTile(after)");
 
     const ai::uint32 totalPixels = sourceWidth * sourceHeight;
@@ -282,7 +289,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
 
-    json                      env({{"dpi", 72}, {"baseDpi", baseDpi}});
+    json                      env({{"dpi", dpi}, {"baseDpi", baseDpi}});
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
         .width       = sourceWidth,
         .height      = sourceHeight,
@@ -290,7 +297,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         .byte_length = byteLength,
     };
 
-    ai_deno::DoLiveEffectResult* result = ai_deno::do_live_effect(
+    ai_deno::GoLiveEffectResult* result = ai_deno::go_live_effect(
         aiDenoMain, params.effectName.c_str(), params.params.dump().c_str(),
         env.dump().c_str(), &input
     );
@@ -301,7 +308,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
       csl("  Result bytes: %d", result->data->byte_length);
       csl("  Source size: %d x %d", sourceWidth, sourceHeight);
       csl("  Result size: %d x %d", result->data->width, result->data->height);
-      csl("    dpi: %d (dpi unscaling to: %.3f)", dpi, dpiScaledFactor);
+      csl("    dpi: %d (%.3f, input %.3f %.3f)", dpi, dpiScaledFactor, sourceMatrix.a,
+          sourceMatrix.d);
       csl("  Source data_ptr: %p", pixelData);
       csl("  Result data_ptr: %p", result->data->data_ptr);
       csl("  Result byte length: %d", result->data->byte_length);
@@ -326,23 +334,22 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         csl("  widthDiff: %d, heightDiff: %d", widthDiff, heightDiff);
         timeStart("Renew artset");
 
-        // 新しいラスターアートを作成
         AIArtHandle newRasterArt;
         error = sAIArt->NewArt(
             AIArtType::kRasterArt, AIPaintOrder::kPlaceAbove, art, &newRasterArt
         );
         CHKERR();
 
-        // 新しいラスターレコードを設定
         AIRasterRecord newInfo;
-        newInfo.colorSpace         = info.colorSpace;
-        newInfo.bitsPerPixel       = info.bitsPerPixel;
-        newInfo.flags              = info.flags;
-        newInfo.originalColorSpace = info.originalColorSpace;
+        newInfo.colorSpace         = sourceRasterRecord.colorSpace;
+        newInfo.bitsPerPixel       = sourceRasterRecord.bitsPerPixel;
+        newInfo.flags              = sourceRasterRecord.flags;
+        newInfo.originalColorSpace = sourceRasterRecord.originalColorSpace;
         newInfo.bounds.left        = 0;  // Illustrator specific
         newInfo.bounds.top         = 0;  // Illustrator specific
         newInfo.bounds.right       = result->data->width;
         newInfo.bounds.bottom      = result->data->height;
+        newInfo.byteWidth          = 4;
 
         print_AIRasterRecord(newInfo, "newInfo");
 
@@ -350,38 +357,33 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         CHKERR();
 
         // Positioning new image basis of center of original image
-        AIRealMatrix matrix;
-        error = sAIRaster->GetRasterMatrix(rasterArt, &matrix);
+        AIRealMatrix newMatrix;
+        error = sAIRaster->GetRasterMatrix(rasterArt, &newMatrix);
         CHKERR();
 
-        // ピクセル単位とポイント単位の関係を調査
         AIRealRect artBoundsPts;
         error = sAIArt->GetArtBounds(rasterArt, &artBoundsPts);
 
-        // ラスターのピクセルサイズ - 演算子優先順位の問題を修正
-        ai::int32 widthPx  = info.bounds.right - info.bounds.left;
-        ai::int32 heightPx = info.bounds.bottom - info.bounds.top;
+        ai::int32 widthPx =
+            sourceRasterRecord.bounds.right - sourceRasterRecord.bounds.left;
+        ai::int32 heightPx =
+            sourceRasterRecord.bounds.bottom - sourceRasterRecord.bounds.top;
 
-        // 実際の出力画像と比率を計算して出力
-        float ratioX = (artBoundsPts.right - artBoundsPts.left) / widthPx;
-        float ratioY = (artBoundsPts.bottom - artBoundsPts.top) / heightPx;
-
-        // csl("実際の変換比率: X=%.6f, Y=%.6f", ratioX, ratioY);
+        float expandedRatioX = (artBoundsPts.right - artBoundsPts.left) / widthPx;
+        float expandedRatioY = (artBoundsPts.bottom - artBoundsPts.top) / heightPx;
 
         // Centering image
-        matrix.tx -= (widthDiff * dpiScaledFactor / 2.0) * ratioX;
-        matrix.ty -= (heightDiff * dpiScaledFactor / 2.0) * ratioY;
-
-        // DPIに合わせてスケーリング係数を調整
-        matrix.a = 1;  // dpiScaledFactor;
-        matrix.d = 1;  // dpiScaledFactor;
+        newMatrix.a = sourceMatrix.a;
+        newMatrix.d = sourceMatrix.d;
+        newMatrix.tx -= (widthDiff / 2.0) * expandedRatioX;
+        newMatrix.ty -= (heightDiff / 2.0) * expandedRatioY;
 
         // Restore DPI
-        csl("DPI: %d, Scale factors: (%.5f %.5f)", dpi, matrix.a, matrix.d);
+        csl("DPI: %d, Scale factors: (%.5f %.5f)", dpi, newMatrix.a, newMatrix.d);
         print_AIRealMatrix(&sourceMatrix, "source matrix");
-        print_AIRealMatrix(&matrix, "new matrix");
+        print_AIRealMatrix(&newMatrix, "new matrix");
 
-        error = sAIRaster->SetRasterMatrix(newRasterArt, &matrix);
+        error = sAIRaster->SetRasterMatrix(newRasterArt, &newMatrix);
         CHKERR();
 
         AISlice newArtSlice = {0}, newWorkSlice = {0};
@@ -406,18 +408,15 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
         );
         CHKERR();
 
-        // 元のラスターを削除
         error = sAIArt->DisposeArt(rasterArt);
         CHKERR();
 
-        timeEnd();  // Renew artset
+        timeEnd();
 
-        // 新しいラスターを返す
         message->art = newRasterArt;
 
         return error;
       } else {
-        // サイズ変更がない場合は元のタイルにデータを設定
         error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
         CHKERR();
 
@@ -425,6 +424,9 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
         return error;
       }
+
+      csl("GoLiveEffect: Completed");
+      ai_deno::dispose_go_live_effect_result(result);
     }
   } catch (const ai::Error& ex) {
     std::cout << (AIErr)ex << ":" << ex.what() << std::endl;
@@ -511,7 +513,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
             currentParams       = res["params"];
             pluginParams.params = currentParams;
 
-            csl("eventCallbackResult: %s", res.dump(2).c_str());
+            csl("eventCallbackResult: %s", res.dump().c_str());
 
             nodeTree = res["tree"];
             modal->updateRenderTree(nodeTree);
@@ -634,7 +636,9 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
 }
 
 ASErr HelloWorldPlugin::LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage* message) {
-  std::cout << "ADJUSTING COLORS LIVE!! EFFECT!!!" << std::endl;
+  csl("**");
+  csl("ADJUSTING COLORS LIVE!! EFFECT!!!");
+  csl("**");
 
   ASErr error = kNoErr;
 

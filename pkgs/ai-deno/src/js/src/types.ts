@@ -109,7 +109,7 @@ export enum StyleFilterFlag {
   kParallelExecutionFilter = 1 << 23,
 }
 
-export type DoLiveEffectPayload = {
+export type GoLiveEffectPayload = {
   width: number;
   height: number;
   data: Uint8ClampedArray;
@@ -134,7 +134,7 @@ export type AIPlugin<
 
     /** map to styleFilterFlags */
     styleFilterFlags: {
-      main:
+      type:
         | StyleFilterFlag.kPreEffectFilter
         | StyleFilterFlag.kPostEffectFilter
         | StyleFilterFlag.kFillFilter
@@ -144,12 +144,12 @@ export type AIPlugin<
 
     /** Called once at first effect use */
     initLiveEffect?(): Promise<TInit> | TInit;
-    doLiveEffect: (
+    goLiveEffect: (
       init: NoInfer<TInit>,
       params: Params,
-      input: DoLiveEffectPayload,
+      input: GoLiveEffectPayload,
       env: LiveEffectEnv
-    ) => Promise<DoLiveEffectPayload>;
+    ) => Promise<GoLiveEffectPayload>;
 
     /**
      * Called when the EditLiveEffect callback is triggered.

@@ -16,7 +16,7 @@ import { glitch } from "./live-effects/glitch.ts";
 import { logger } from "./logger.ts";
 import { outlineEffect } from "./live-effects/outline.ts";
 import { innerGlow } from "./live-effects/inner-glow.ts";
-import { resizeImageData } from "./live-effects/_utils.ts";
+import { cropImageData, resizeImageData } from "./live-effects/_utils.ts";
 import { halftone } from "./live-effects/halftone.ts";
 import { fluidDistortion } from "./live-effects/fluid-distortion.ts";
 import { kaleidoscope } from "./live-effects/kaleidoscope.ts";
@@ -62,28 +62,31 @@ try {
               (await effect.liveEffect.initLiveEffect?.()) ?? {}
             );
           } catch (e) {
-            throw new Error(`Failed to initialize effect: ${effect.id}`, {
-              cause: e,
-            });
+            throw new Error(
+              `[effect: ${effect.id}] Failed to initialize effect`,
+              {
+                cause: e,
+              }
+            );
           }
         });
       }
     )
   );
 } catch (e) {
-  logger.error(e);
-  _AI_DENO_.op_ai_alert(
-    "[AiDeno] Failed to initialize effects\n\n" + e.toString()
-  );
+  console.error(e);
+
+  if (e instanceof AggregateError) {
+    const _e: AggregateError = e as unknown as AggregateError;
+    const logs = _e.errors.map((e: Error) => `${e.message}`).join("\n");
+    _AI_DENO_.op_ai_alert("[AiDeno] Failed to initialize effects\n\n" + logs);
+  }
 }
 
 export async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
 
-  logger.log(
-    "[deno_ai(js)] loadEffects",
-    `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
-  );
+  logger.log("loadEffects", `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`);
   const metas = [
     ...expandGlobSync(`${fromFileUrl(EFFECTS_DIR)}/*/meta.json`, {
       followSymlinks: true,
@@ -91,7 +94,7 @@ export async function loadEffects() {
     }),
   ];
 
-  logger.log("[deno_ai(js)] loadEffects metas", metas);
+  logger.log("loadEffects metas", metas);
 
   await Promise.allSettled(
     metas.map((dir) => {
@@ -106,7 +109,7 @@ export function getLiveEffects(): Array<{
   title: string;
   version: { major: number; minor: number };
 }> {
-  logger.log("[deno_ai(js)] allEffectPlugins", allEffectPlugins);
+  logger.log("allEffectPlugins", allEffectPlugins);
 
   return Object.values(allEffectPlugins).map((effect) => ({
     id: effect.id,
@@ -303,7 +306,7 @@ export function liveEffectInterpolate(
   return effect.liveEffect.onInterpolate(params, params2, t);
 }
 
-export const doLiveEffect = async (
+export const goLiveEffect = async (
   id: string,
   params: any,
   env: LiveEffectEnv,
@@ -321,7 +324,8 @@ export const doLiveEffect = async (
     return null;
   }
 
-  logger.log("[deno_ai(js)] doLiveEffect", id, params, env, width, height);
+  logger.log("goLiveEffect", { id, input: { width, height }, env, params });
+  logger.log("--- LiveEffect Logs ---");
   try {
     const dpiScale = env.dpi / env.baseDpi;
     const input = await resizeImageData(
@@ -334,6 +338,20 @@ export const doLiveEffect = async (
       height * dpiScale
     );
 
+    // await cropImageData(
+    //   ,
+    //   0,
+    //   0,
+    //   width,
+    //   height
+    // );
+
+    // const input = {
+    //   data,
+    //   width,
+    //   height,
+    // };
+
     const result = await effect.liveEffect.goLiveEffect(
       init,
       {
@@ -343,7 +361,6 @@ export const doLiveEffect = async (
       input,
       {
         ...env,
-        baseDpi: 72,
       }
     );
 
@@ -352,7 +369,7 @@ export const doLiveEffect = async (
       typeof result.height !== "number" ||
       !(result.data instanceof Uint8ClampedArray)
     ) {
-      throw new Error("Invalid result from doLiveEffect");
+      throw new Error("Invalid result from goLiveEffect");
     }
 
     return result;

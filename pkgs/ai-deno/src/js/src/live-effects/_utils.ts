@@ -171,6 +171,37 @@ export async function resizeImageData(
   return resizedCtx.getImageData(0, 0, width, height);
 }
 
+export async function cropImageData(
+  data: ImageDataLike,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): Promise<ImageDataLike> {
+  x = Math.round(x);
+  y = Math.round(y);
+  width = Math.round(width);
+  height = Math.round(height);
+
+  const canvas = await createCanvasImpl(data.width, data.height);
+  const ctx = canvas.getContext("2d")!;
+  const imgData = await createImageDataImpl(
+    data.data,
+    data.width,
+    data.height,
+    {
+      colorSpace: "srgb",
+    }
+  );
+  ctx.putImageData(imgData, 0, 0);
+
+  const croppedCanvas = await createCanvasImpl(width, height);
+  const croppedCtx = croppedCanvas.getContext("2d")!;
+  croppedCtx.drawImage(canvas, x, y, width, height, 0, 0, width, height);
+
+  return croppedCtx.getImageData(0, 0, width, height);
+}
+
 export async function paddingImageData(
   data: ImageDataLike,
   padding: number

@@ -6,6 +6,7 @@
 #include <AIDictionary.h>
 #include <AIRasterize.h>
 #include <IllustratorSDK.h>
+#include "./consts.h"
 #include "./libs/format.h"
 #include "Plugin.hpp"
 #include "SDKErrors.h"
@@ -13,7 +14,6 @@
 #include "libai_deno.h"
 
 #include "./views/ImgUIEditModal.h"
-#include "AiDenoId.h"
 #include "debugHelper.h"
 #include "super-illustrator.h"
 

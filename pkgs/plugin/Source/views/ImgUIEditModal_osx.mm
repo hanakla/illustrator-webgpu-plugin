@@ -205,7 +205,6 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 
 - (void) updateRenderTree:(json)renderTree {
   // if (imGuiView == nullptr) return;
-  std::cout << "updateRenderTree: " << renderTree.dump() << std::endl;
   [self->imGuiView setRenderTree:renderTree];
 }
 

@@ -734,6 +734,10 @@ var testBlueFill = definePlugin({
         type: "bool",
         default: false
       },
+      passThrough: {
+        type: "bool",
+        default: false
+      },
       padding: {
         type: "int",
         default: 0
@@ -751,6 +755,7 @@ var testBlueFill = definePlugin({
       type: 2 /* kPostEffectFilter */,
       features: []
     },
+    onAdjustColors: (params, adjustColor) => params,
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
     onInterpolate: (paramsA, paramsB, t9) => paramsA,
@@ -758,7 +763,11 @@ var testBlueFill = definePlugin({
       let width = input.width;
       let height = input.height;
       let len = input.data.length;
-      global.lastInput = input;
+      global.lastInput = {
+        data: Uint8ClampedArray.from(input.data),
+        width,
+        height
+      };
       global.inputSize = { width, height };
       const alpha = Math.round(255 * (params.opacity / 100));
       let buffer = params.useNewBuffer ? Uint8ClampedArray.from(input.data) : input.data;
@@ -775,6 +784,13 @@ var testBlueFill = definePlugin({
         len = buffer.length;
         width = data.width;
         height = data.height;
+      }
+      if (params.passThrough) {
+        return {
+          data: buffer,
+          width,
+          height
+        };
       }
       if (params.fillOtherChannels) {
         for (let i = 0; i < len; i += 4) {
@@ -797,6 +813,19 @@ var testBlueFill = definePlugin({
     },
     renderUI: (params, setParam) => {
       var _a, _b;
+      const onClickSaveInputAsPng = async () => {
+        if (!global.lastInput) {
+          _AI_DENO_.op_ai_alert("No input data");
+          return;
+        }
+        const path = new URL(
+          "./test-blue-fill.png",
+          toFileUrl(join(Deno.cwd(), "./"))
+        );
+        const png = await toPng(global.lastInput);
+        Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
+        _AI_DENO_.op_ai_alert(`Saved to ${path}`);
+      };
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
           ui.button({
@@ -809,19 +838,7 @@ var testBlueFill = definePlugin({
           }),
           ui.button({
             text: "Save input as PNG",
-            onClick: async () => {
-              if (!global.lastInput) {
-                console.log("No input data");
-                return;
-              }
-              const path = new URL(
-                "./test-blue-fill.png",
-                toFileUrl(join(Deno.cwd(), "./"))
-              );
-              const png = await toPng(global.lastInput);
-              Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
-              console.log(`Saved to ${path}`);
-            }
+            onClick: onClickSaveInputAsPng
           }),
           ui.button({
             text: "Alert",
@@ -844,9 +861,14 @@ var testBlueFill = definePlugin({
         }),
         // ui.text({ text: "Fill other channels" }),
         ui.checkbox({
-          label: "Fill other channels",
           key: "fillOtherChannels",
+          label: "Fill other channels",
           value: params.fillOtherChannels
+        }),
+        ui.checkbox({
+          key: "passThrough",
+          label: "Pass through",
+          value: params.passThrough
         }),
         ui.text({ text: "Color" }),
         ui.colorInput({
@@ -4812,33 +4834,35 @@ try {
               await ((_b = (_a = effect.liveEffect).initLiveEffect) == null ? void 0 : _b.call(_a)) ?? {}
             );
           } catch (e) {
-            throw new Error(`Failed to initialize effect: ${effect.id}`, {
-              cause: e
-            });
+            throw new Error(
+              `[effect: ${effect.id}] Failed to initialize effect`,
+              {
+                cause: e
+              }
+            );
           }
         });
       }
     )
   );
 } catch (e) {
-  logger.error(e);
-  _AI_DENO_.op_ai_alert(
-    "[AiDeno] Failed to initialize effects\n\n" + e.toString()
-  );
+  console.error(e);
+  if (e instanceof AggregateError) {
+    const _e = e;
+    const logs = _e.errors.map((e2) => `${e2.message}`).join("\n");
+    _AI_DENO_.op_ai_alert("[AiDeno] Failed to initialize effects\n\n" + logs);
+  }
 }
 async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
-  logger.log(
-    "[deno_ai(js)] loadEffects",
-    `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`
-  );
+  logger.log("loadEffects", `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`);
   const metas = [
     ...expandGlobSync(`${fromFileUrl(EFFECTS_DIR)}/*/meta.json`, {
       followSymlinks: true,
       includeDirs: false
     })
   ];
-  logger.log("[deno_ai(js)] loadEffects metas", metas);
+  logger.log("loadEffects metas", metas);
   await Promise.allSettled(
     metas.map((dir) => {
       logger.log("dir", dir);
@@ -4846,7 +4870,7 @@ async function loadEffects() {
   );
 }
 function getLiveEffects() {
-  logger.log("[deno_ai(js)] allEffectPlugins", allEffectPlugins);
+  logger.log("allEffectPlugins", allEffectPlugins);
   return Object.values(allEffectPlugins).map((effect) => ({
     id: effect.id,
     title: effect.title,
@@ -4973,7 +4997,7 @@ function liveEffectInterpolate(id, params, params2, t9) {
   params2 = getParams(id, params2);
   return effect.liveEffect.onInterpolate(params, params2, t9);
 }
-var doLiveEffect = async (id, params, env, width, height, data) => {
+var goLiveEffect = async (id, params, env, width, height, data) => {
   const effect = findEffect(id);
   if (!effect) return null;
   const defaultParams = getDefaultValus(id);
@@ -4982,7 +5006,8 @@ var doLiveEffect = async (id, params, env, width, height, data) => {
     logger.error("Effect not initialized", id);
     return null;
   }
-  logger.log("[deno_ai(js)] doLiveEffect", id, params, env, width, height);
+  logger.log("goLiveEffect", { id, input: { width, height }, env, params });
+  logger.log("--- LiveEffect Logs ---");
   try {
     const dpiScale = env.dpi / env.baseDpi;
     const input = await resizeImageData(
@@ -5002,12 +5027,11 @@ var doLiveEffect = async (id, params, env, width, height, data) => {
       },
       input,
       {
-        ...env,
-        baseDpi: 72
+        ...env
       }
     );
     if (typeof result.width !== "number" || typeof result.height !== "number" || !(result.data instanceof Uint8ClampedArray)) {
-      throw new Error("Invalid result from doLiveEffect");
+      throw new Error("Invalid result from goLiveEffect");
     }
     return result;
   } catch (e) {
@@ -5054,11 +5078,11 @@ async function retry(maxRetries, fn) {
   throw new AggregateError(errors, "All retries failed");
 }
 export {
-  doLiveEffect,
   editLiveEffectFireCallback,
   editLiveEffectParameters,
   getEffectViewNode,
   getLiveEffects,
+  goLiveEffect,
   liveEffectAdjustColors,
   liveEffectInterpolate,
   liveEffectScaleParameters,

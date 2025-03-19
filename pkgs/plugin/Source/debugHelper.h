@@ -10,6 +10,24 @@
 
 using json = nlohmann::json;
 
+std::string indentLines(std::string str, std::string indent) {
+  std::vector<std::string> lines;
+  std::string              line;
+  std::istringstream       ss(str);
+
+  while (std::getline(ss, line, '\n')) {
+    lines.push_back(line);
+  }
+
+  std::string result = "";
+  for (size_t i = 0; i < lines.size(); i++) {
+    result += indent + lines[i];
+    if (i < lines.size() - 1) result += "\n";
+  }
+
+  return result;
+}
+
 template <typename T, size_t N>
 std::string arrayToString(T (&arr)[N]) {
   std::string str = "";
@@ -24,7 +42,10 @@ template <typename... Args>
 void csl(const char* format, Args... args) {
   if (!AI_DENO_DEBUG) return;
 
-  std::cout << "[deno_ai(C)] " << string_format(format, args...) << std::endl;
+  std::ostringstream ss;
+  ss << string_format(format, args...) << std::endl;
+
+  std::cout << indentLines(ss.str(), "\033[1m[deno_ai(C)]\033[0m ") << std::endl;
 }
 
 // print as hex binary json array
@@ -38,7 +59,8 @@ void csb(const char* label, const char* value) {
     ss << std::hex << std::uppercase << (int)value[i];
     if (i < len - 1) ss << ", ";
   }
-  std::cout << "[deno_ai(C)] " << label << " [" << ss.str() << "]" << std::endl;
+  std::cout << "\033[1m[deno_ai(C)]\033[0m " << label << " [" << ss.str() << "]"
+            << std::endl;
 }
 
 class dbg__Measuring {
@@ -149,17 +171,18 @@ void print_AIRealMatrix(const AIRealMatrix* matrix, std::string label) {
   std::stringstream ss;
 
   ss << "AIMatrix (" << label << "): " << std::endl;
-  ss << "  a: " << matrix->a << std::endl;
-  ss << "  b: " << matrix->b << std::endl;
-  ss << "  c: " << matrix->c << std::endl;
-  ss << "  d: " << matrix->d << std::endl;
-  ss << "  tx: " << matrix->tx << std::endl;
-  ss << "  ty: " << matrix->ty << std::flush;
+  ss << "  a: " << matrix->a << "  b: " << matrix->b << "  c: " << matrix->c
+     << "  d: " << matrix->d << "  tx: " << matrix->tx << "  ty: " << matrix->ty
+     << std::flush;
 
   csl(ss.str().c_str());
 }
 
-void print_AIRealRect(const AIRealRect* rect, std::string label) {
+void print_AIRealRect(
+    const AIRealRect* rect,
+    std::string       label,
+    std::string       indent = ""
+) {
   if (!AI_DENO_DEBUG) return;
 
   std::stringstream ss;
@@ -170,7 +193,7 @@ void print_AIRealRect(const AIRealRect* rect, std::string label) {
   ss << "  right: " << rect->right << std::endl;
   ss << "  bottom: " << rect->bottom << std::flush;
 
-  csl(ss.str().c_str());
+  csl(indentLines(ss.str(), indent).c_str());
 }
 
 std::string stringify_ASErr(ASErr& err) {
@@ -186,29 +209,46 @@ std::string stringify_ASErr(ASErr& err) {
   }
 }
 
-void print_AIDocumentSetup(AIDocumentSetup& setup) {
-  if (!AI_DENO_DEBUG) return;
-
+std::string stringify_AIDocumentSetup(
+    AIDocumentSetup& setup,
+    std::string      label  = "",
+    std::string      indent = ""
+) {
   std::ostringstream oss;
 
-  oss << "AIDocumentSetup: " << std::endl;
-  oss << "  width: " << setup.width << std::endl;
-  oss << "  height: " << setup.height << std::endl;
-  oss << "  showPlacedImages: " << std::boolalpha << !!setup.showPlacedImages
+  oss << indent << "AIDocumentSetup: " << std::endl;
+  oss << indent << "  width: " << setup.width << std::endl;
+  oss << indent << "  height: " << setup.height << std::endl;
+  oss << indent << "  showPlacedImages: " << std::boolalpha << !!setup.showPlacedImages
       << std::endl;
-  oss << "  outputResolution: " << setup.outputResolution << std::endl;
-  oss << "  splitLongPaths: " << std::boolalpha << !!setup.splitLongPaths << std::endl;
-  oss << "  useDefaultScreen: " << std::boolalpha << !!setup.useDefaultScreen
+  oss << indent << "  outputResolution: " << setup.outputResolution << std::endl;
+  oss << indent << "  splitLongPaths: " << std::boolalpha << !!setup.splitLongPaths
       << std::endl;
-  oss << "  compatibleGradients: " << std::boolalpha << !!setup.compatibleGradients
+  oss << indent << "  useDefaultScreen: " << std::boolalpha << !!setup.useDefaultScreen
       << std::endl;
-  oss << "  printTiles: " << std::boolalpha << !!setup.printTiles << std::endl;
-  oss << "  tileFullPages: " << std::boolalpha << !!setup.tileFullPages << std::endl;
+  oss << indent << "  compatibleGradients: " << std::boolalpha
+      << !!setup.compatibleGradients << std::endl;
+  oss << indent << "  printTiles: " << std::boolalpha << !!setup.printTiles << std::endl;
+  oss << indent << "  tileFullPages: " << std::boolalpha << !!setup.tileFullPages
+      << std::flush;
 
-  csl(oss.str().c_str());
+  return oss.str();
 }
 
-void print_AIRasterRecord(AIRasterRecord& record, std::string label = "") {
+void print_AIDocumentSetup(
+    AIDocumentSetup& setup,
+    std::string      label  = "",
+    std::string      indent = ""
+) {
+  if (!AI_DENO_DEBUG) return;
+  csl(stringify_AIDocumentSetup(setup).c_str());
+}
+
+void print_AIRasterRecord(
+    AIRasterRecord& record,
+    std::string     label  = "",
+    std::string     indent = ""
+) {
   if (!AI_DENO_DEBUG) return;
 
   std::ostringstream oss;
@@ -222,10 +262,10 @@ void print_AIRasterRecord(AIRasterRecord& record, std::string label = "") {
       << ", left: " << record.bounds.left << ", right: " << record.bounds.right
       << ", bottom: " << record.bounds.bottom << " }" << std::flush;
 
-  csl(oss.str().c_str());
+  csl(indentLines(oss.str(), indent).c_str());
 }
 
-void print_AIArt(AIArtHandle& art, std::string title) {
+void print_AIArt(AIArtHandle& art, std::string title, std::string indent = "") {
   if (!AI_DENO_DEBUG) return;
 
   auto [name, isDefault] = suai::art::getName(art);
@@ -233,10 +273,10 @@ void print_AIArt(AIArtHandle& art, std::string title) {
 
   std::ostringstream oss;
 
-  oss << "AIArt (" << title << "): " << std::endl;
-  oss << "  type: " << suai::art::getTypeName(art) << std::endl;
-  oss << "  name: " << name << " (isDefault: " << isDefault << ")" << std::endl;
-  oss << "  userAttr: " << userAttr.toJSONOnlyFlagged() << std::flush;
+  oss << indent << "AIArt (" << title << "): " << std::endl;
+  oss << indent << "  type: " << suai::art::getTypeName(art) << std::endl;
+  oss << indent << "  name: " << name << " (isDefault: " << isDefault << ")" << std::endl;
+  oss << indent << "  userAttr: " << userAttr.toJSONOnlyFlagged() << std::flush;
 
   csl(oss.str().c_str());
 }
@@ -257,19 +297,20 @@ void print_AISlice(AISlice* slice, std::string title) {
   csl(oss.str().c_str());
 }
 
-void print_AITile(AITile* tile, std::string title) {
+void print_AITile(AITile* tile, std::string title, std::string indent = "") {
   if (!AI_DENO_DEBUG) return;
 
   std::ostringstream oss;
 
-  oss << "AITile (" << title << "): " << std::endl;
-  oss << "  bounds: { " << "top: " << tile->bounds.top << ", left: " << tile->bounds.left
-      << ", right: " << tile->bounds.right << ", bottom: " << tile->bounds.bottom << " }"
+  oss << indent << "AITile (" << title << "): " << std::endl;
+  oss << indent << "  bounds: { " << "top: " << tile->bounds.top
+      << ", left: " << tile->bounds.left << indent << ", right: " << tile->bounds.right
+      << ", bottom: " << tile->bounds.bottom << " }" << indent << std::endl;
+  oss << indent << "  chnnelInterleave: " << arrayToString(tile->channelInterleave)
       << std::endl;
-  oss << "  chnnelInterleave: " << arrayToString(tile->channelInterleave) << std::endl;
-  oss << "  rowBytes: " << tile->rowBytes << std::endl;
-  oss << "  colBytes: " << tile->colBytes << std::endl;
-  oss << "  planeBytes: " << tile->planeBytes << std::flush;
+  oss << indent << "  rowBytes: " << tile->rowBytes << std::endl;
+  oss << indent << "  colBytes: " << tile->colBytes << std::endl;
+  oss << indent << "  planeBytes: " << tile->planeBytes << std::flush;
 
   csl(oss.str().c_str());
 }

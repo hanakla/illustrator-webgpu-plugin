@@ -114,10 +114,10 @@ namespace suai {
     bool cmykWhiteMatting  = false;
     bool spotColorRasterOk = false;
     bool nChannelOk        = false;
-    /** [Internal] */
-    bool fillBlackAndIgnoreTransparancy = false;
-    /** [Internal] */
-    bool raterizeSharedSpace = false;
+    // /** [Internal] */
+    // bool fillBlackAndIgnoreTransparancy = false;
+    // /** [Internal] */
+    // bool raterizeSharedSpace = false;
   };
 
   struct RasterRecord {
@@ -312,10 +312,10 @@ namespace suai {
     if (options.spotColorRasterOk)
       optionVal |= AIRasterizeOptions::kRasterizeOptionsSpotColorRasterOk;
     if (options.nChannelOk) optionVal |= AIRasterizeOptions::kRasterizeOptionsNChannelOk;
-    if (options.fillBlackAndIgnoreTransparancy)
-      optionVal |= AIRasterizeOptions::kFillBlackAndIgnoreTransparancy;
-    if (options.raterizeSharedSpace)
-      optionVal |= AIRasterizeOptions::kRaterizeSharedSpace;
+    // if (options.fillBlackAndIgnoreTransparancy)
+    //   optionVal |= AIRasterizeOptions::kFillBlackAndIgnoreTransparancy;
+    // if (options.raterizeSharedSpace)
+    //   optionVal |= AIRasterizeOptions::kRaterizeSharedSpace;
 
     settings.options = (AIRasterizeOptions)optionVal;
 
@@ -511,6 +511,271 @@ namespace suai {
       return suai::getErrorName(error);
     }
 
+    namespace deserialize {
+      void _AssertTypeName(const json& obj, const std::string& typeName) {
+        if (!obj["__typename"].is_string()) {
+          throw std::invalid_argument("Missing __typename");
+        }
+
+        if (obj["__typename"] != typeName) {
+          throw std::invalid_argument(
+              "Incorrect type, expected: " + typeName +
+              ", actual: " + obj["__typename"].get<std::string>()
+          );
+        }
+      }
+
+      AIRealRect toAIRealRect(const json& j) {
+        _AssertTypeName(j, "AIRealRect");
+        return AIRealRect(j["left"], j["top"], j["right"], j["bottom"]);
+      }
+
+      AIRealPoint toAIRealPoint(const json& j) {
+        _AssertTypeName(j, "AIRealPoint");
+        return AIRealPoint{j["x"], j["y"]};
+      }
+
+      AIRealMatrix toAIRealMatrix(const json& j) {
+        _AssertTypeName(j, "AIRealMatrix");
+        return AIRealMatrix{j["a"], j["b"], j["c"], j["d"], j["tx"], j["ty"]};
+      }
+
+      AIGradientStyle toAIGradientStyle(const json& gradient);
+
+      AIColor toAIColor(const json& j) {
+        _AssertTypeName(j, "AIColor");
+
+        AIColor color;
+        color.Init();
+
+        if (j["type"] == "gray") {
+          color.kind     = AIColorTag::kGrayColor;
+          color.c.g.gray = j["color"]["gray"];
+        } else if (j["type"] == "rgb") {
+          color.kind        = AIColorTag::kThreeColor;
+          color.c.rgb.red   = j["color"]["red"];
+          color.c.rgb.green = j["color"]["green"];
+          color.c.rgb.blue  = j["color"]["blue"];
+        } else if (j["type"] == "cmyk") {
+          color.kind        = AIColorTag::kFourColor;
+          color.c.f.cyan    = j["color"]["cyan"];
+          color.c.f.magenta = j["color"]["magenta"];
+          color.c.f.yellow  = j["color"]["yellow"];
+          color.c.f.black   = j["color"]["black"];
+        } else if (j["type"] == "pattern") {
+          color.kind = AIColorTag::kPattern;
+          std::cout << "suai::art::desrialice: Pattern color not supported yet"
+                    << std::endl;
+        } else if (j["type"] == "gradient") {
+          color.kind = AIColorTag::kGradient;
+          color.c.b  = toAIGradientStyle(j["gradient"]);
+        } else {
+          color.kind = AIColorTag::kNoneColor;
+        }
+
+        return color;
+      }
+
+      AIGradientStyle toAIGradientStyle(const json& gradient) {
+        _AssertTypeName(gradient, "AIGradientStyle");
+
+        AIGradientStyle style;
+        style.gradientOrigin = toAIRealPoint(gradient["origin"]);
+        style.matrix         = toAIRealMatrix(gradient["matrix"]);
+        style.gradientAngle  = gradient["angle"];
+        style.gradientLength = gradient["length"];
+        style.hiliteAngle    = gradient["hilite"];
+        style.hiliteLength   = gradient["hiliteLength"];
+
+        ai::int16 stopCount = gradient["stops"].size();
+        sAIGradient->NewGradient(&style.gradient);
+        AIGradientStop stop;
+
+        for (ai::int16 i = 0; i < stopCount; i++) {
+          json stopJson  = gradient["stops"][i];
+          stop.color     = toAIColor(stopJson["color"]);
+          stop.midPoint  = stopJson["midPoint"];
+          stop.rampPoint = stopJson["rampPoint"];
+          stop.opacity   = stopJson["opacity"];
+          sAIGradient->InsertGradientStop(style.gradient, i, &stop);
+        }
+
+        return style;
+      }
+
+      AIDashStyle toAIDashStyle(const json& dash) {
+        _AssertTypeName(dash, "AIDashStyle");
+
+        if (!dash["array"].is_array() || dash["array"].size() != 6) {
+          throw std::invalid_argument("Invalid dash array");
+        }
+
+        AIDashStyle style;
+        style.length = dash["length"];
+        style.offset = dash["offset"];
+
+        float array[6] = {};
+        for (int i = 0; i < 6; i++) {
+          style.array[i] = (float)dash["array"][i];
+        }
+
+        return style;
+      }
+
+      AIStrokeStyle toAIStrokeStyle(const json& j) {
+        _AssertTypeName(j, "AIStrokeStyle");
+
+        AIStrokeStyle style;
+        style.color = toAIColor(j["color"]);
+        style.width = j["width"];
+        style.join  = mapValue(
+            j["join"], AILineJoin::kAIMiterJoin,
+            {
+                {"miter", AILineJoin::kAIMiterJoin},
+                {"round", AILineJoin::kAIRoundJoin},
+                {"bevel", AILineJoin::kAIBevelJoin},
+            }
+        );
+        style.cap = mapValue<std::string, AILineCap>(
+            j["cap"], AILineCap::kAIButtCap,
+            {
+                {"butt", AILineCap::kAIButtCap},
+                {"round", AILineCap::kAIRoundCap},
+                {"projecting", AILineCap::kAIProjectingCap},
+            }
+        );
+        style.dash       = toAIDashStyle(j["dash"]);
+        style.miterLimit = j["miterLimit"];
+        style.overprint  = j["overprint"];
+
+        return style;
+      }
+
+      AIFillStyle toAIFillStyle(const json& j) {
+        _AssertTypeName(j, "AIFillStyle");
+
+        AIFillStyle style;
+        style.color     = toAIColor(j["color"]);
+        style.overprint = j["overprint"];
+
+        return style;
+      }
+
+      AIRealBezier toAIRealBezier(const json& j) {
+        _AssertTypeName(j, "AIRealBezier");
+
+        AIRealBezier bezier;
+        bezier.p0 = toAIRealPoint(j["p0"]);
+        bezier.p1 = toAIRealPoint(j["p1"]);
+        bezier.p2 = toAIRealPoint(j["p2"]);
+        bezier.p3 = toAIRealPoint(j["p3"]);
+
+        return bezier;
+      }
+
+      AIPathSegment toAIPathSegmentList(const json& j) {
+        _AssertTypeName(j, "AIPathSegmentList");
+
+        AIPathSegment segment;
+        segment.p      = toAIRealPoint(j["p"]);
+        segment.in     = toAIRealPoint(j["in"]);
+        segment.out    = toAIRealPoint(j["out"]);
+        segment.corner = j["corner"];
+
+        return segment;
+      }
+
+      AIPathStyle toAIPathStyle(const json& j) {
+        _AssertTypeName(j, "AIPathStyle");
+
+        AIPathStyle style;
+        style.fill        = toAIFillStyle(j["fill"]);
+        style.fillPaint   = (bool)j["fillPaint"];
+        style.stroke      = toAIStrokeStyle(j["stroke"]);
+        style.strokePaint = (bool)j["strokePaint"];
+        style.clip        = (bool)j["clip"];
+        style.evenodd     = (bool)j["evenOdd"];
+        style.lockClip    = (bool)j["lockClip"];
+        style.resolution  = j["resolution"];
+
+        return style;
+      }
+
+      AIArtHandle toAIArtHandle(const json& j) {
+        _AssertTypeName(j, "AIArtHandle");
+
+        AIArtHandle art;
+        short       artType = j["artTypeCode"];
+        sAIArt->NewArt(artType, AIPaintOrder::kPlaceAbove, NULL, &art);
+
+        if (!j["isDefaultName"]) {
+          sAIArt->SetArtName(art, str::toAiUnicodeStringUtf8(j["name"]));
+        }
+
+        if (artType == AIArtType::kUnknownArt) { return art; }
+
+        // Apply user attributes
+        {
+          json      attrs     = j["attributes"];
+          ai::int32 attrValue = 0;
+
+          // Ignoring
+          // if (attrs["selected"]) {　attrValue |= AIArtUserAttr::kArtSelected; }
+
+          if (attrs["locked"]) { attrValue |= AIArtUserAttr::kArtLocked; }
+          if (attrs["hidden"]) { attrValue |= AIArtUserAttr::kArtHidden; }
+          // if (attrs["fullySelected"]) { attrValue |= AIArtUserAttr::kArtFullySelected;
+          // }
+          if (attrs["expanded"]) { attrValue |= AIArtUserAttr::kArtExpanded; }
+          // if (attrs["targeted"]) { attrValue |= AIArtUserAttr::kArtTargeted; }
+          if (attrs["isClipMask"]) { attrValue |= AIArtUserAttr::kArtIsClipMask; }
+          if (attrs["isTextWrap"]) { attrValue |= AIArtUserAttr::kArtIsTextWrap; }
+          // if (attrs["selectedTopLevelGroups"]) { attrValue |=
+          // AIArtUserAttr::kArtSelectedTopLevelGroups; } if (attrs["selectedLeaves"]) {
+          // attrValue |= AIArtUserAttr::kArtSelectedLeaves; } if
+          // (attrs["selectedTopLevelWithPaint"]) { attrValue |=
+          // AIArtUserAttr::kArtSelectedTopLevelWithPaint; }
+          if (attrs["hasSimpleStyle"]) { attrValue |= AIArtUserAttr::kArtHasSimpleStyle; }
+          if (attrs["hasActiveStyle"]) { attrValue |= AIArtUserAttr::kArtHasActiveStyle; }
+          if (attrs["partOfCompound"]) { attrValue |= AIArtUserAttr::kArtPartOfCompound; }
+          // if (attrs["matchDictionaryArt"]) { attrValue |=
+          // AIArtUserAttr::kMatchDictionaryArt; } if (attrs["matchArtInGraphs"]) {
+          // attrValue |= AIArtUserAttr::kMatchArtInGraphs; } if
+          // (attrs["matchArtInResultGroups"]) { attrValue |=
+          // AIArtUserAttr::kMatchArtInResultGroups; } if (attrs["matchTextPaths"]) {
+          // attrValue |= AIArtUserAttr::kMatchTextPaths; } if (attrs["styleIsDirty"]) {
+          // attrValue |= AIArtUserAttr::kArtStyleIsDirty; } if
+          // (attrs["matchArtNotIntoPluginGroups"]) { attrValue |=
+          // AIArtUserAttr::kMatchArtNotIntoPluginGroups; } if (attrs["matchArtInCharts"])
+          // { attrValue |= AIArtUserAttr::kMatchArtInCharts; } if
+          // (attrs["matchArtIntoRepeats"]) { attrValue |=
+          // AIArtUserAttr::kMatchArtIntoRepeats; }
+
+          sAIArt->SetArtUserAttr(
+              art,
+              AIArtUserAttr::kArtLocked | AIArtUserAttr::kArtHidden |
+                  AIArtUserAttr::kArtExpanded | AIArtUserAttr::kArtIsClipMask |
+                  AIArtUserAttr::kArtIsTextWrap | AIArtUserAttr::kArtHasSimpleStyle |
+                  AIArtUserAttr::kArtHasActiveStyle | AIArtUserAttr::kArtPartOfCompound,
+              attrValue
+          );
+        }
+
+        if (artType == AIArtType::kPathArt) {
+          //   pjb  sAIPathStyle->SetPathStyle(art, toAIPathStyle(j["style"]));
+
+          // Create paths
+          { toAIPathSegmentList(j["path"]["segments"]); }
+        }
+
+        //
+        // TODO
+        //
+
+        return art;
+      }
+    }  // namespace deserialize
+
     namespace serialize {
 
       // json __getChildrenAsJson(AIArtHandle parentArt, int depth, int maxDepth);
@@ -654,8 +919,12 @@ namespace suai {
             {"width", stroke.width},
             {"join", stroke.join == AILineJoin::kAIMiterJoin   ? "miter"
                      : stroke.join == AILineJoin::kAIRoundJoin ? "round"
+                     : stroke.join == AILineJoin::kAIBevelJoin ? "bevel"
                                                                : "bevel"},
-            {"cap", stroke.cap},
+            {"cap", stroke.cap == AILineCap::kAIButtCap         ? "butt"
+                    : stroke.cap == AILineCap::kAIRoundCap      ? "round"
+                    : stroke.cap == AILineCap::kAIProjectingCap ? "projecting"
+                                                                : "projecting"},
             {"dash", AIDashStyleToJSON(stroke.dash)},
             {"miterLimit", stroke.miterLimit},
             {"overprint", stroke.overprint},
@@ -748,6 +1017,7 @@ namespace suai {
         // error =
 
         return {
+            {"__typename", "AIPathSegmentList"},
             {"segments", segmentsJson},
             {"length", length},
             {"selectedSegments", selectedSegments},
@@ -808,17 +1078,19 @@ namespace suai {
         artJson["name"]          = artName;
         artJson["isDefaultName"] = isDefaultName != 0;
 
-        std::cout << "Got Art: " << getTypeName(art) << std::endl;
         if (artType == AIArtType::kUnknownArt) { return artJson; }
 
         // Bounding box
         AIRealRect bounds;
         error = sAIArt->GetArtBounds(art, &bounds);
         aisdk::check_ai_error(error);
+        artJson["bounds"] = AIRectOrRealRectToJSON(bounds);
 
-        std::cout << "Got Art Bounds" << std::endl;
+        // Matrix
+        // AIRealMatrix matrix;
+        // error = sAIArt->GetArtTransformBounds();
 
-        artJson["bounds"]     = AIRectOrRealRectToJSON(bounds);
+        // Attributes
         artJson["attributes"] = attrs.toJson();
 
         if (artType == AIArtType::kPathArt) {

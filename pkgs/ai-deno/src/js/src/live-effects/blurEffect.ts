@@ -1,6 +1,6 @@
 import {
   StyleFilterFlag,
-  DoLiveEffectPayload,
+  GoLiveEffectPayload,
   definePlugin,
 } from "../types.ts";
 import { ui } from "../ui/nodes.ts";
@@ -19,7 +19,7 @@ export const blurEffect = definePlugin({
       default: 1.0,
     },
   },
-  initDoLiveEffect: async () => {
+  initLiveEffect: async () => {
     const device = await navigator.gpu
       .requestAdapter()
       .then((adapter) => adapter!.requestDevice());
@@ -96,7 +96,7 @@ export const blurEffect = definePlugin({
     };
   },
 
-  doLiveEffect: async (
+  goLiveEffect: async (
     {
       device,
       createCanvas,
@@ -114,7 +114,7 @@ export const blurEffect = definePlugin({
     return result;
 
     async function gaussianBlurWebGPU(
-      input: DoLiveEffectPayload,
+      input: GoLiveEffectPayload,
       radius: number
     ): Promise<ImageData> {
       const { width, height, data } = input;
