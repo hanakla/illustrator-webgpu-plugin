@@ -715,6 +715,10 @@ var testBlueFill = definePlugin({
         type: "bool",
         default: false
       },
+      fullTransparent: {
+        type: "bool",
+        default: false
+      },
       padding: {
         type: "int",
         default: 0
@@ -763,6 +767,16 @@ var testBlueFill = definePlugin({
         height = data.height;
       }
       if (params.passThrough) {
+        return {
+          data: buffer,
+          width,
+          height
+        };
+      }
+      if (params.fullTransparent) {
+        for (let i = 0; i < len; i += 4) {
+          buffer[i + 3] = 0;
+        }
         return {
           data: buffer,
           width,
@@ -830,23 +844,32 @@ var testBlueFill = definePlugin({
           }),
           ui.text({ text: `Count: ${params.count}` })
         ]),
-        // ui.text({ text: "Use new buffer" }),
-        ui.checkbox({
-          label: "Use new buffer",
-          key: "useNewBuffer",
-          value: params.useNewBuffer
-        }),
-        // ui.text({ text: "Fill other channels" }),
-        ui.checkbox({
-          key: "fillOtherChannels",
-          label: "Fill other channels",
-          value: params.fillOtherChannels
-        }),
-        ui.checkbox({
-          key: "passThrough",
-          label: "Pass through",
-          value: params.passThrough
-        }),
+        ui.group({ direction: "row" }, [
+          // ui.text({ text: "Use new buffer" }),
+          ui.checkbox({
+            label: "Use new buffer",
+            key: "useNewBuffer",
+            value: params.useNewBuffer
+          }),
+          // ui.text({ text: "Fill other channels" }),
+          ui.checkbox({
+            key: "fillOtherChannels",
+            label: "Fill other channels",
+            value: params.fillOtherChannels
+          })
+        ]),
+        ui.group({ direction: "row" }, [
+          ui.checkbox({
+            key: "passThrough",
+            label: "Pass through",
+            value: params.passThrough
+          }),
+          ui.checkbox({
+            key: "fullTransparent",
+            label: "Full transparent",
+            value: params.fullTransparent
+          })
+        ]),
         ui.text({ text: "Color" }),
         ui.colorInput({
           key: "color",
@@ -1178,6 +1201,7 @@ var directionalBlur = definePlugin({
         const shader = device.createShaderModule({
           code
         });
+        console.log({ shader });
         const defs = makeShaderDataDefinitions2(code);
         const pipeline = device.createComputePipeline({
           layout: "auto",
@@ -3333,7 +3357,8 @@ var t7 = createTranslator({
     scale: "Scale",
     turbulence: "Turbulence",
     colorShift: "Color Shift",
-    timeSeed: "Flow Seed"
+    timeSeed: "Flow Seed",
+    padding: "Padding"
   },
   ja: {
     title: "\u30D5\u30EB\u30A4\u30C9 \u30C7\u30A3\u30B9\u30C8\u30FC\u30B7\u30E7\u30F3 V11",
@@ -3342,7 +3367,8 @@ var t7 = createTranslator({
     scale: "\u30B9\u30B1\u30FC\u30EB",
     turbulence: "\u4E71\u6D41",
     colorShift: "\u8272\u30B7\u30D5\u30C8",
-    timeSeed: "\u30D5\u30ED\u30FC\u30B7\u30FC\u30C9"
+    timeSeed: "\u30D5\u30ED\u30FC\u30B7\u30FC\u30C9",
+    padding: "\u30D1\u30C7\u30A3\u30F3\u30B0"
   }
 });
 var fluidDistortion = definePlugin({
@@ -3374,6 +3400,10 @@ var fluidDistortion = definePlugin({
       colorShift: {
         type: "real",
         default: 0.1
+      },
+      padding: {
+        type: "int",
+        default: 0
       },
       timeSeed: {
         type: "real",
@@ -3513,6 +3543,23 @@ var fluidDistortion = definePlugin({
               key: "timeSeed",
               dataType: "float",
               value: params.timeSeed
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t7("padding") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "padding",
+              dataType: "int",
+              min: 0,
+              max: 600,
+              value: params.padding
+            }),
+            ui.numberInput({
+              key: "padding",
+              dataType: "int",
+              value: params.padding
             })
           ])
         ])

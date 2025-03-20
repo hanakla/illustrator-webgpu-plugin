@@ -265,7 +265,7 @@ impl Runtime {
 
         let js_runtime = self.deno_runtime();
 
-        println!("is main: {}", main);
+        deno_println!("is main: {}", main);
         let module_id: deno_runtime::deno_core::ModuleId = if main {
             js_runtime
                 .load_main_es_module_from_code(&module_specifier, code)

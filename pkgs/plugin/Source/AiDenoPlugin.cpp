@@ -23,25 +23,6 @@ void FixupReload(Plugin* plugin) {
   HelloWorldPlugin::FixupVTable((HelloWorldPlugin*)plugin);
 }
 
-extern "C" {
-  const char* ai_deno_trampoline_adjust_color_callback(void* ptr, const char* color) {
-    auto* lambda_ptr = static_cast<AdjustColorCallbackLambda*>(ptr);
-    return (*lambda_ptr)(color);
-  }
-
-  void ai_deno_alert(const char* message) {
-    auto msgStr = suai::str::toAiUnicodeStringUtf8(message);
-    sAIUser->MessageAlert(msgStr);
-  }
-
-  const char* ai_deno_get_user_locale() {
-    ai::UnicodeString locale;
-    sAIUser->GetAILanguageCode(locale);
-
-    return suai::str::toUtf8StdString(locale).c_str();
-  }
-}
-
 HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef)
     : Plugin(pluginRef), aiDenoMain(nullptr) {
   strncpy(fPluginName, kPluginName, kMaxStringLength);
@@ -655,11 +636,12 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     );
 
     if (lastPosition != nullptr) {
-      csl("Saving window position");
       pref.windowPosition    = new AIPoint();
       pref.windowPosition->h = std::get<0>(*lastPosition);
       pref.windowPosition->v = std::get<1>(*lastPosition);
       this->putPreferences(pref, &error);
+      csl("Saving window position: %d, %d", pref.windowPosition->h,
+          pref.windowPosition->v);
       CHKERR();
     }
 
@@ -924,77 +906,3 @@ void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult
     std::cerr << "Unknown request: " << req.dump() << std::endl;
   }
 }
-
-// void HelloWorldPlugin::HandleDenoAiAlert(ai_deno::JsonFunctionResult *request)
-//{
-// }
-
-// ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage *message)
-//{
-//     ASErr error = kNoErr;
-//     PluginParams params;
-//     this->getDictionaryValues(message->parameters, params);
-//
-//     try {
-//         AIArtHandle art = message->art;
-//
-//         AIArtSet artSet;
-//         error = sAIArtSet->NewArtSet(&artSet); CHKERR();
-//         error = sAIArtSet->AddArtToArtSet(artSet, art); CHKERR();
-//
-//         AIRasterizeSettings settings;
-//         settings.type = kRasterizeARGB;
-//         settings.resolution = 300.0;
-//         settings.antialiasing = 4;
-//         settings.options = kRasterizeOptionsNone;
-//         settings.preserveSpotColors = false;
-//
-//         AIRealRect bounds;
-//         error = sAIRasterize->ComputeArtBounds(artSet, &bounds, false);
-//         CHKERR();
-//
-//         AIArtHandle rasterArt;
-//         AIRasterRecord rasterRecord;
-//
-//         error = sAIRasterize->Rasterize(artSet, &settings, &bounds,
-//                                       kPlaceAbove, art, &rasterArt, NULL);
-//                                       CHKERR();
-//         error = sAIRaster->GetRasterInfo(rasterArt, &rasterRecord); CHKERR();
-//
-//         std::cout << rasterRecord.bounds.top << " "
-//             << rasterRecord.bounds.right << " "
-//             << rasterRecord.bounds.bottom << " "
-//             << rasterRecord.bounds.left << std::endl;
-//
-//         ai::uint32 width = rasterRecord.bounds.right -
-//         rasterRecord.bounds.left;
-//         ai::uint32 height =
-//         rasterRecord.bounds.bottom - rasterRecord.bounds.top;
-//
-//         AISlice artSlice = {0, 0, static_cast<ai::int32>(width),
-//         static_cast<ai::int32>(height), 0, 4}; AISlice workSlice = artSlice;
-//
-//         // !! THIS IS NOT WORKING (No any appearance changed) !! //
-//         AITile workTile;
-//         error = sAIRaster->GetRasterTile(rasterArt, &artSlice, &workTile,
-//         &workSlice); CHKERR();
-//
-//         for(ai::uint32 i = 0; i < width * height * 4; i += 4) {
-//            static_cast<ai::uint8*>(workTile.data)[i] = 255;     // Red
-//            static_cast<ai::uint8*>(workTile.data)[i+1] = 0;     // Green
-//            static_cast<ai::uint8*>(workTile.data)[i+2] = 0;     // Blue
-//            static_cast<ai::uint8*>(workTile.data)[i+3] = 255;   // Alpha
-//         }
-//
-//         error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile,
-//         &workSlice); delete[] static_cast<ai::uint8*>(workTile.data);
-//         message->art = rasterArt;
-//         // !! THIS IS NOT WORKING (No any appearance changed) !! //
-//
-//         sAIArtSet->DisposeArtSet(&artSet);
-//     } catch (...) {
-//
-//     }
-//
-//     return error;
-// }

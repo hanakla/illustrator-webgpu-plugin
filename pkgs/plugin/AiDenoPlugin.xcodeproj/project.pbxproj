@@ -22,7 +22,6 @@
 		9E9C47171423A25E004EA572 /* FlashUIController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47151423A25E004EA572 /* FlashUIController.cpp */; };
 		9E9C47181423A25E004EA572 /* SDKPlugPlug.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47161423A25E004EA572 /* SDKPlugPlug.cpp */; };
 		9E9C475A1423AD0C004EA572 /* IAIFilePath.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C47591423AD0C004EA572 /* IAIFilePath.cpp */; };
-		A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */ = {isa = PBXBuildFile; fileRef = A51B63322D5AA19E00BC41CA /* libai_dino.h */; };
 		A51B65E12D5F5A7D00BC41CA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E02D5F5A7D00BC41CA /* Metal.framework */; };
 		A51B65E32D5F5ACD00BC41CA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */; };
 		A591675F2D660DEE00B4709A /* spectrum-tokens.hpp in Headers */ = {isa = PBXBuildFile; fileRef = A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */; };
@@ -102,7 +101,6 @@
 		A190BBD325E3F5FB0001DF18 /* AIPluginDebug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = AIPluginDebug.xcconfig; path = xcconfig/AIPluginDebug.xcconfig; sourceTree = "<group>"; };
 		A190BBD425E3F5FB0001DF18 /* AIPluginRelease.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = AIPluginRelease.xcconfig; path = xcconfig/AIPluginRelease.xcconfig; sourceTree = "<group>"; };
 		A51B63302D5A9A2B00BC41CA /* libai_deno.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libai_deno.dylib; path = "../ai-deno/target/release/libai_deno.dylib"; sourceTree = "<group>"; };
-		A51B63322D5AA19E00BC41CA /* libai_dino.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = libai_dino.h; path = "../ai-deno/target/release/includes/libai_dino.h"; sourceTree = SOURCE_ROOT; };
 		A51B65E02D5F5A7D00BC41CA /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		A51B65E22D5F5ACD00BC41CA /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		A58518E62D872603007D381B /* librusty_v8.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = librusty_v8.a; path = "../ai-deno/target/release/gn_out/obj/librusty_v8.a"; sourceTree = "<group>"; };
@@ -374,18 +372,11 @@
 			);
 			target = A59DB55F2D821FDD00C7BD59 /* Sandbox */;
 		};
-		A5F9AB352D637CF9007EE38C /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				ImgUIEditModal_osx.mm,
-			);
-			target = 508817D309F0C9AD0071BF1A /* AiDenoPlugin */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A59DB5562D821FBB00C7BD59 /* Sandbox */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A59DB56D2D82213B00C7BD59 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Sandbox; sourceTree = "<group>"; };
-		A5F9AB252D637919007EE38C /* views */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A5F9AB352D637CF9007EE38C /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); name = views; path = Source/views; sourceTree = "<group>"; };
+		A5F9AB252D637919007EE38C /* views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = views; path = Source/views; sourceTree = "<group>"; };
 		A5F9AB3D2D63E44A007EE38C /* libs */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = libs; path = Source/libs; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -419,7 +410,6 @@
 		2A7772AA0BE6387700A9D493 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
-				A51B63322D5AA19E00BC41CA /* libai_dino.h */,
 				9E9C47591423AD0C004EA572 /* IAIFilePath.cpp */,
 				9E9C47151423A25E004EA572 /* FlashUIController.cpp */,
 				9E9C47161423A25E004EA572 /* SDKPlugPlug.cpp */,
@@ -1284,7 +1274,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A5F9AB3A2D63AC6A007EE38C /* consts.h in Headers */,
-				A51B63332D5AA19E00BC41CA /* libai_dino.h in Headers */,
 				A591675F2D660DEE00B4709A /* spectrum-tokens.hpp in Headers */,
 				6868C927150BA192003DAAF2 /* AiDenoPlugin.h in Headers */,
 				6868C929150BA192003DAAF2 /* AiDenoSuites.h in Headers */,

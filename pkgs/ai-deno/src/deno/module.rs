@@ -23,7 +23,6 @@ impl Module {
         let filename = MaybePathBuf::Owned(filename.as_ref().to_path_buf());
         let contents = Cow::Owned(contents.to_string());
 
-        println!("Module::from_string: {:?}", filename.to_str());
         Self { filename, contents }
     }
 

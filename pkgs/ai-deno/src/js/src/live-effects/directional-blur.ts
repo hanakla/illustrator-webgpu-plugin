@@ -307,6 +307,8 @@ export const directionalBlur = definePlugin({
           code,
         });
 
+        console.log({ shader });
+
         const defs = makeShaderDataDefinitions(code);
 
         const pipeline = device.createComputePipeline({

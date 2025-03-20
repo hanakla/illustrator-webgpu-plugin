@@ -15,6 +15,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use sys_traits::impls::RealSys;
 
+use crate::deno_println;
+
 use super::cache_db::CacheDBHash;
 use super::npm_package_manager::NpmPackageManager;
 
@@ -46,14 +48,15 @@ impl AiDenoCjsCodeAnalyzer {
     ) -> Result<CjsAnalysis<'b>, JsErrorBox> {
         let analysis = self.inner_cjs_analysis(specifier, &source)?;
 
-        println!("analyze_cjs: {:?}", analysis);
+        deno_println!("analyze_cjs: {:?}", analysis);
 
         match analysis {
             CliCjsAnalysis::Esm => Ok(CjsAnalysis::<'b>::Esm(source)),
             CliCjsAnalysis::Cjs { exports, reexports } => {
-                println!(
+                deno_println!(
                     "cjs analysis: exports: {:?}, reexports: {:?}",
-                    exports, reexports
+                    exports,
+                    reexports
                 );
                 Ok(CjsAnalysis::Cjs(CjsAnalysisExports { exports, reexports }))
             }

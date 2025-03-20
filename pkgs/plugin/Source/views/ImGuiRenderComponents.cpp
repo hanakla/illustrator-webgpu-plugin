@@ -308,6 +308,8 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
   ui::keyStack.reset();
 
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { resultStatus = ModalStatusCode::Cancel; }
+
   ImGui::End();
 
   return resultStatus;

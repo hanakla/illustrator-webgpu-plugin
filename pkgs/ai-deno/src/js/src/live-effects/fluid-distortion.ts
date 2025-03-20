@@ -25,6 +25,7 @@ const t = createTranslator({
     turbulence: "Turbulence",
     colorShift: "Color Shift",
     timeSeed: "Flow Seed",
+    padding: "Padding",
   },
   ja: {
     title: "フルイド ディストーション V11",
@@ -34,6 +35,7 @@ const t = createTranslator({
     turbulence: "乱流",
     colorShift: "色シフト",
     timeSeed: "フローシード",
+    padding: "パディング",
   },
 });
 
@@ -66,6 +68,10 @@ export const fluidDistortion = definePlugin({
       colorShift: {
         type: "real",
         default: 0.1,
+      },
+      padding: {
+        type: "int",
+        default: 0,
       },
       timeSeed: {
         type: "real",
@@ -206,6 +212,23 @@ export const fluidDistortion = definePlugin({
               key: "timeSeed",
               dataType: "float",
               value: params.timeSeed,
+            }),
+          ]),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("padding") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "padding",
+              dataType: "int",
+              min: 0,
+              max: 600,
+              value: params.padding,
+            }),
+            ui.numberInput({
+              key: "padding",
+              dataType: "int",
+              value: params.padding,
             }),
           ]),
         ]),

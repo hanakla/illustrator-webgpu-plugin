@@ -38,6 +38,10 @@ export const testBlueFill = definePlugin({
         type: "bool",
         default: false,
       },
+      fullTransparent: {
+        type: "bool",
+        default: false,
+      },
       padding: {
         type: "int",
         default: 0,
@@ -94,6 +98,18 @@ export const testBlueFill = definePlugin({
       }
 
       if (params.passThrough) {
+        return {
+          data: buffer,
+          width,
+          height,
+        };
+      }
+
+      if (params.fullTransparent) {
+        for (let i = 0; i < len; i += 4) {
+          buffer[i + 3] = 0;
+        }
+
         return {
           data: buffer,
           width,
@@ -176,25 +192,35 @@ export const testBlueFill = definePlugin({
           ui.text({ text: `Count: ${params.count}` }),
         ]),
 
-        // ui.text({ text: "Use new buffer" }),
-        ui.checkbox({
-          label: "Use new buffer",
-          key: "useNewBuffer",
-          value: params.useNewBuffer,
-        }),
+        ui.group({ direction: "row" }, [
+          // ui.text({ text: "Use new buffer" }),
+          ui.checkbox({
+            label: "Use new buffer",
+            key: "useNewBuffer",
+            value: params.useNewBuffer,
+          }),
 
-        // ui.text({ text: "Fill other channels" }),
-        ui.checkbox({
-          key: "fillOtherChannels",
-          label: "Fill other channels",
-          value: params.fillOtherChannels,
-        }),
+          // ui.text({ text: "Fill other channels" }),
+          ui.checkbox({
+            key: "fillOtherChannels",
+            label: "Fill other channels",
+            value: params.fillOtherChannels,
+          }),
+        ]),
 
-        ui.checkbox({
-          key: "passThrough",
-          label: "Pass through",
-          value: params.passThrough,
-        }),
+        ui.group({ direction: "row" }, [
+          ui.checkbox({
+            key: "passThrough",
+            label: "Pass through",
+            value: params.passThrough,
+          }),
+
+          ui.checkbox({
+            key: "fullTransparent",
+            label: "Full transparent",
+            value: params.fullTransparent,
+          }),
+        ]),
 
         ui.text({ text: "Color" }),
         ui.colorInput({

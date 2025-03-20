@@ -3,7 +3,7 @@
 using json = nlohmann::json;
 
 #import "../consts.h"
-#import "./ImgUIEditModal_osx.mm"
+#import "./ImgUIEditModal_osx.h"
 
 ImGuiModal::IModalImpl *ImGuiModal::createModal() {
   std::cout << "Creating OSX modal" << std::endl;
