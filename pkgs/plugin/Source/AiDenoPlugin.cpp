@@ -202,10 +202,10 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
        .antiAlias          = 4,
        .colorConvert       = suai::RasterSettingColorConvert::Standard,
        .preserveSpotColors = true,
-       .resolution         = (double)300,
+       .resolution         = (double)72,
        .options =
-           suai::RasterSettingOption{
-               .useMinTiles   = true,
+           {
+               .useMinTiles   = false,
                .useEffectsRes = true,
                .doLayers      = true,
            }}
@@ -215,16 +215,51 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     suai::ArtSet* artSet = new suai::ArtSet();
     artSet->AddArt(art);
 
-    AIRealRect bounds;
-    error = sAIRasterize->ComputeArtBounds(artSet->ToAIArtSet(), &bounds, false);
-    CHKERR();
-
     AIArtHandle rasterArt;
     error =
         sAIArt->NewArt(AIArtType::kRasterArt, AIPaintOrder::kPlaceAbove, art, &rasterArt);
     CHKERR();
 
+    AIRealRect bounds;
+    error = sAIRasterize->ComputeArtBounds(artSet->ToAIArtSet(), &bounds, false);
+    CHKERR();
+
+    // get dpi
+    int dpi;
+    {
+      AIRealRect getDpiBounds;
+      getDpiBounds.left   = bounds.left * 0.01;
+      getDpiBounds.top    = bounds.top * 0.01;
+      getDpiBounds.right  = bounds.right * 0.01;
+      getDpiBounds.bottom = bounds.bottom * 0.01;
+
+      print_AIRealRect(&getDpiBounds, "bounds (source)");
+
+      error = sAIRasterize->Rasterize(
+          artSet->ToAIArtSet(), &settings, &getDpiBounds, AIPaintOrder::kPlaceAbove, art,
+          &rasterArt, NULL
+      );
+      CHKERR();
+
+      AIRealMatrix tmpMatrix;
+      error = sAIRaster->GetRasterMatrix(rasterArt, &tmpMatrix);
+      CHKERR();
+
+      print_AIRealMatrix(&tmpMatrix, "tmpMatrix");
+
+      dpi   = baseDpi * (1 / tmpMatrix.a);
+      error = sAIArt->DisposeArt(rasterArt);
+      CHKERR();
+    };
+
+    csl("dpi: %d", dpi);
+
+    error =
+        sAIArt->NewArt(AIArtType::kRasterArt, AIPaintOrder::kPlaceAbove, art, &rasterArt);
+    CHKERR();
+
     // Rasterizing
+    settings.resolution = (double)dpi;
     timeStart("Rasterize");
     error = sAIRasterize->Rasterize(
         artSet->ToAIArtSet(), &settings, &bounds, AIPaintOrder::kPlaceAbove, art,
@@ -232,8 +267,6 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     );
     timeEnd();
     CHKERR();
-
-    return error;
 
     AIRasterRecord sourceRasterRecord;
     sAIRaster->GetRasterInfo(rasterArt, &sourceRasterRecord);
@@ -244,7 +277,6 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     sAIRaster->GetRasterBoundingBox(rasterArt, &rasterBounds);
     sAIRaster->GetRasterMatrix(rasterArt, &sourceMatrix);
 
-    int   dpi             = baseDpi * (1 / sourceMatrix.a);
     float dpiScaledFactor = sourceMatrix.a;
 
     AISlice artSlice = {0}, workSlice = {0};
@@ -277,19 +309,27 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     CHKERR();
 
     csl("LiveEffect Input:");
+    csl("  Width: %d, Height: %d", sourceWidth, sourceHeight);
     csl("  DPI: %d (%.5f %.5f)", dpi, sourceMatrix.a, sourceMatrix.d);
     print_AIRealRect(&rasterBounds, "rasterBounds", "  ");
-    print_AIDocumentSetup(docSetup, "", "  ");
     print_AIArt(art, "art", "  ");
     print_AIRasterRecord(sourceRasterRecord, "rasterArt", "  ");
     print_AITile(&workTile, "workTile(after)");
+    print_AIDocumentSetup(docSetup, "", "  ");
+
+    // check
+    {
+      // message->art = rasterArt;
+      // return kNoErr;
+    }
 
     const ai::uint32 totalPixels = sourceWidth * sourceHeight;
     const ai::uint32 pixelStride = workTile.colBytes;
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
 
-    json                      env({{"dpi", dpi}, {"baseDpi", baseDpi}});
+    json env({{"dpi", dpi}, {"baseDpi", baseDpi}});
+
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
         .width       = sourceWidth,
         .height      = sourceHeight,
@@ -315,7 +355,23 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
       csl("  Result byte length: %d", result->data->byte_length);
     }
 
-    if (result->success && result->data != nullptr) {
+    if (!result->success) {
+      // Fill region as blue
+      for (int i = 0; i < totalPixels; i++) {
+        pixelData[i * pixelStride + 0] = 0;
+        pixelData[i * pixelStride + 1] = 0;
+        pixelData[i * pixelStride + 2] = 255;
+        pixelData[i * pixelStride + 3] = 255;
+      }
+
+      error = sAIRaster->SetRasterTile(rasterArt, &artSlice, &workTile, &workSlice);
+      CHKERR();
+
+      message->art = rasterArt;
+      return kCantHappenErr;
+    }
+
+    if (result->data != nullptr) {
       csl("Setting pointer");
       workTile.rowBytes = result->data->width * 4;
       workTile.colBytes = 4;

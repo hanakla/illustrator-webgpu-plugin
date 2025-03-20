@@ -150,29 +150,6 @@ async function removeWebGPUAlignmentPadding(imageDataLike, originalWidth, origin
   ctx.putImageData(imgData, 0, 0);
   return ctx.getImageData(0, 0, originalWidth, originalHeight);
 }
-async function resizeImageData(data, width, height) {
-  console.log("resizeImageData", data.width, data.height, width, height);
-  width = Math.round(width);
-  height = Math.round(height);
-  if (data.width === width && data.height === height) {
-    return data;
-  }
-  const canvas = await createCanvasImpl(data.width, data.height);
-  const ctx = canvas.getContext("2d");
-  const imgData = await createImageDataImpl(
-    data.data,
-    data.width,
-    data.height,
-    {
-      colorSpace: "srgb"
-    }
-  );
-  ctx.putImageData(imgData, 0, 0);
-  const resizedCanvas = await createCanvasImpl(width, height);
-  const resizedCtx = resizedCanvas.getContext("2d");
-  resizedCtx.drawImage(canvas, 0, 0, width, height);
-  return resizedCtx.getImageData(0, 0, width, height);
-}
 async function paddingImageData(data, padding) {
   padding = Math.ceil(padding);
   const width = data.width + padding * 2;
@@ -5010,15 +4987,11 @@ var goLiveEffect = async (id, params, env, width, height, data) => {
   logger.log("--- LiveEffect Logs ---");
   try {
     const dpiScale = env.dpi / env.baseDpi;
-    const input = await resizeImageData(
-      {
-        data,
-        width,
-        height
-      },
-      width * dpiScale,
-      height * dpiScale
-    );
+    const input = {
+      data,
+      width,
+      height
+    };
     const result = await effect.liveEffect.goLiveEffect(
       init,
       {

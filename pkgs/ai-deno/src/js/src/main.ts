@@ -328,15 +328,15 @@ export const goLiveEffect = async (
   logger.log("--- LiveEffect Logs ---");
   try {
     const dpiScale = env.dpi / env.baseDpi;
-    const input = await resizeImageData(
-      {
-        data,
-        width,
-        height,
-      },
-      width * dpiScale,
-      height * dpiScale
-    );
+    // const input = await resizeImageData(
+    //   {
+    //     data,
+    //     width,
+    //     height,
+    //   },
+    //   width * dpiScale,
+    //   height * dpiScale
+    // );
 
     // await cropImageData(
     //   ,
@@ -346,11 +346,11 @@ export const goLiveEffect = async (
     //   height
     // );
 
-    // const input = {
-    //   data,
-    //   width,
-    //   height,
-    // };
+    const input = {
+      data,
+      width,
+      height,
+    };
 
     const result = await effect.liveEffect.goLiveEffect(
       init,
