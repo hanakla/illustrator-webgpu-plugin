@@ -1,4 +1,5 @@
 // import { } from 'react'
+import "./mocks.ts";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { useEventCallback, useStableEvent, useThroughRef } from "./hooks.ts";
@@ -16,12 +17,23 @@ import { testBlueFill } from "~ext/live-effects/test-blue-fill.ts";
 import { innerGlow } from "~ext/live-effects/inner-glow.ts";
 import { imageReverbGPU } from "~ext/live-effects/image-reverb-gpu.ts";
 import { imageReverb } from "~ext/live-effects/image-reverb.ts";
-import { outlineEffect } from "~ext/live-effects/outline.ts";
+import { outline } from "~ext/live-effects/outline.ts";
 import { compressor } from "~ext/live-effects/compressor.ts";
 import { fluidDistortion } from "~ext/live-effects/fluid-distortion.ts";
 import { kaleidoscope } from "~ext/live-effects/kaleidoscope.ts";
+import { downsampler } from "~ext/live-effects/downsampler.ts";
+import { vhsInterlace } from "~ext/live-effects/vhs-interlace.ts";
+import { dataMosh } from "~ext/live-effects/data-mosh.ts";
+import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
+import { selectiveColorCorrection } from "~ext/live-effects/selective-color-correction.ts";
 
 const plugins = [
+  dithering,
+  selectiveColorCorrection,
+  vhsInterlace,
+  waveDistortion,
+  dataMosh,
+  downsampler,
   halftone,
   kaleidoscope,
   fluidDistortion,
@@ -31,11 +43,11 @@ const plugins = [
   kirakiraGlow,
   glitch,
   pixelSort,
-  outlineEffect,
+  outline,
   // blurEffect,
   // innerGlow,
   testBlueFill,
-  dithering,
+
   chromaticAberration,
   directionalBlur,
 ];
@@ -292,7 +304,7 @@ function Controls({
     const nodeId = idPrefix + node.type;
     nodeMap.set(nodeId, node);
 
-    const onClickHandler = (node: any) => {
+    const onClickHandler = () => {
       node.onClick?.({ type: "click" });
     };
 
@@ -359,7 +371,7 @@ function Controls({
         const a = ((iC.a * 255) | 0).toString(16).padStart(2, "0");
 
         return (
-          <>
+          <div>
             <input
               type="color"
               value={`#${r}${g}${b}`}
@@ -370,11 +382,10 @@ function Controls({
                 const g = parseInt(value.slice(3, 5), 16) / 255;
                 const b = parseInt(value.slice(5, 7), 16) / 255;
 
-                if (node.ley) onParamChanged(node.key, { r, g, b, a: iC.a });
+                if (node.key) onParamChanged(node.key, { r, g, b, a: iC.a });
                 onChangeHandler(node, { r, g, b, a: iC.a });
               }}
             />
-            <br />
             <input
               type="range"
               min={0}
@@ -388,7 +399,7 @@ function Controls({
                 onChangeHandler(node, { ...iC, a: value });
               }}
             />
-          </>
+          </div>
         );
       }
       case "checkbox":
@@ -472,6 +483,7 @@ function Controls({
       <select value={dpi} onChange={onDpiChanged} style={{ width: "100%" }}>
         <option value="72">72 dpi</option>
         <option value="144">144 dpi</option>
+        <option value="200">200 dpi</option>
         <option value="300">300 dpi</option>
       </select>
       <label>

@@ -21,7 +21,7 @@ struct AlertRequest {
 
 extension!(
     ai_user_extension,
-    ops = [op_ai_alert, op_ai_deno_get_user_locale, op_aideno_debug_enabled],
+    ops = [op_ai_alert, op_ai_get_plugin_version, op_ai_deno_get_user_locale, op_aideno_debug_enabled],
     esm_entry_point = "ext:ai-deno/init",
     esm = [
         dir "src/ext",
@@ -34,6 +34,12 @@ extension!(
         state.put::<AiExtOptions>(options.aiExt);
     },
 );
+
+#[op2]
+#[string]
+fn op_ai_get_plugin_version(op: Rc<RefCell<OpState>>) -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
 
 #[op2(fast)]
 fn op_ai_alert(state: Rc<RefCell<OpState>>, #[string] message: String) -> Result<(), JsErrorBox> {
@@ -62,7 +68,7 @@ fn op_ai_deno_get_user_locale(state: Rc<RefCell<OpState>>) -> String {
 
 #[op2(fast)]
 fn op_aideno_debug_enabled(state: Rc<RefCell<OpState>>) -> Result<bool, JsErrorBox> {
-    if cfg!(feature = "debug_lib") {
+    if cfg!(feature = "debug_lib") || std::env::var("AI_DENO_DEBUG").is_ok() {
         Ok(true)
     } else {
         Ok(false)

@@ -5,7 +5,7 @@ import { copy } from "jsr:@std/fs";
 const AI_BIN =
   "/Applications/Adobe Illustrator 2025/Adobe Illustrator.app/Contents/MacOS/Adobe Illustrator";
 const BUILT_AIP = new URL(
-  "./output/mac/release/IllustratorDeno.aip",
+  "../output/mac/release/AiWebGPUPlugin.aip",
   import.meta.url
 );
 const AIP_DIST = new URL(

@@ -1,3 +1,4 @@
+/// <reference path="../../ext/js/ai_extension.mjs.d.ts" />
 import { AIEffectPlugin, AIPlugin, LiveEffectEnv, ColorRGBA } from "./types.ts";
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
@@ -7,7 +8,7 @@ import { homedir } from "node:os";
 // import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
-import { ChangeEventHandler, UINode } from "./ui/nodes.ts";
+import { ChangeEventHandler, ui, UINode } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/directional-blur.ts";
 import { kirakiraGlow } from "./live-effects/kirakira-glow.ts";
 import { dithering } from "./live-effects/dithering.ts";
@@ -17,17 +18,26 @@ import { logger } from "./logger.ts";
 import { outlineEffect } from "./live-effects/outline.ts";
 import { innerGlow } from "./live-effects/inner-glow.ts";
 import { cropImageData, resizeImageData } from "./live-effects/_utils.ts";
+import { coastic } from "./live-effects/coastic.ts";
 import { halftone } from "./live-effects/halftone.ts";
 import { fluidDistortion } from "./live-effects/fluid-distortion.ts";
 import { kaleidoscope } from "./live-effects/kaleidoscope.ts";
+import { vhsInterlace } from "./live-effects/vhs-interlace.ts";
+import { downsampler } from "./live-effects/downsampler.ts";
+import { waveDistortion } from "./live-effects/wave-distortion.ts";
+import { selectiveColorCorrection } from "./live-effects/selective-color-correction.ts";
+import { dataMosh } from "./live-effects/data-mosh.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allPlugins: AIPlugin<any, any>[] = [
   // blurEffect,
+  coastic,
   chromaticAberration,
+  dataMosh,
   directionalBlur,
   dithering,
+  downsampler,
   fluidDistortion,
   glitch,
   halftone,
@@ -37,7 +47,10 @@ const allPlugins: AIPlugin<any, any>[] = [
   outlineEffect,
   // pixelSort,
   // randomNoiseEffect,
+  selectiveColorCorrection,
   testBlueFill,
+  vhsInterlace,
+  waveDistortion,
 ];
 const effectInits = new Map<AIPlugin<any, any>, any>();
 
@@ -82,6 +95,9 @@ try {
     _AI_DENO_.op_ai_alert("[AiDeno] Failed to initialize effects\n\n" + logs);
   }
 }
+
+console.log(_AI_DENO_.op_ai_deno_get_user_locale());
+console.log(_AI_DENO_.op_ai_get_plugin_version());
 
 export async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
@@ -153,7 +169,21 @@ export function getEffectViewNode(id: string, params: any): UINode {
   };
 
   try {
-    const tree = effect.liveEffect.renderUI(params, setParam);
+    let tree = effect.liveEffect.renderUI(params, setParam);
+
+    tree = ui.group({ direction: "col" }, [
+      tree,
+      ui.group({ direction: "row" }, [
+        ui.separator(),
+        ui.text({
+          size: "sm",
+          text: `AiDeno: ${_AI_DENO_.op_ai_get_plugin_version()} Plugin: ${
+            effect.version.major
+          }.${effect.version.minor}`,
+        }),
+      ]),
+    ]);
+
     const nodeMap = attachNodeIds(tree);
     nodeState = localNodeState = {
       effectId: effect.id,

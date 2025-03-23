@@ -2,13 +2,17 @@ import { z } from "npm:zod@3.24.2";
 import { UINode } from "./ui/nodes.ts";
 
 export type ParameterSchema = {
-  [name: string]:
-    | SchemaRealNode
-    | SchemaIntNode
-    | SchemaBoolNode
-    | SchemaStringNode
-    | SchemaColorNode;
+  [name: string]: SchemaNodes;
 };
+
+type SchemaNodes =
+  | SchemaRealNode
+  | SchemaIntNode
+  | SchemaBoolNode
+  | SchemaStringNode
+  | SchemaColorNode
+  | SchemaObjectNode<any>
+  | SchemaArrayNode<any>;
 
 type SchemaRealNode = {
   type: "real";
@@ -40,6 +44,48 @@ type SchemaColorNode = {
   default: ColorRGBA;
 };
 
+type SchemaObjectNode<
+  T extends {
+    [name: string]: Omit<SchemaNodes, "default">;
+  }
+> = {
+  type: "object";
+  properties: T;
+  default: { [K in keyof T]: any };
+};
+
+type SchemaArrayNode<T extends Omit<SchemaNodes, "default">> = {
+  type: "array";
+  items: T;
+  default: any[];
+};
+
+type SchemaNodeToType<T extends SchemaNodes | Omit<SchemaNodes, "default">> =
+  T extends { type: "real" } | { type: "int" }
+    ? number
+    : T extends { type: "bool" }
+    ? boolean
+    : T extends { type: "string" }
+    ? string
+    : T extends { type: "color" }
+    ? ColorRGBA
+    : T extends { type: "object"; properties: infer P }
+    ? ObjectScemaToState<P>
+    : T extends { type: "array"; items: infer I }
+    ? SchemaNodeToType<I>[]
+    : never;
+
+export type ParameterSchemaToState<
+  T extends { [k: string]: Omit<SchemaNodes, "default"> }
+> = {
+  [K in keyof T]: SchemaNodeToType<T[K]>;
+};
+
+// ObjectScemaToStateはParameterSchemaToStateと同じロジックを使用
+type ObjectScemaToState<
+  T extends { [k: string]: Omit<SchemaNodes, "default"> }
+> = ParameterSchemaToState<T>;
+
 export type ColorRGBA = {
   /** 0 to 1 */
   r: number;
@@ -49,30 +95,6 @@ export type ColorRGBA = {
   b: number;
   /** 0 to 1 */
   a: number;
-};
-
-export type ParameterSchemaToState<T extends ParameterSchema> = {
-  [K in keyof T]: T[K]["type"] extends "real"
-    ? T[K]["enum"] extends number[]
-      ? T[K]["enum"][number]
-      : number
-    : T[K]["type"] extends "int"
-    ? T[K]["enum"] extends number[]
-      ? T[K]["enum"][number]
-      : number
-    : T[K]["type"] extends "bool"
-    ? T[K]["enum"] extends boolean[]
-      ? T[K]["enum"][number]
-      : boolean
-    : T[K]["type"] extends "string"
-    ? T[K]["enum"] extends string[]
-      ? T[K]["enum"][number]
-      : string
-    : T[K]["type"] extends "color"
-    ? T[K]["enum"] extends ColorRGBA[]
-      ? T[K]["enum"][number]
-      : ColorRGBA
-    : never;
 };
 
 export enum StyleFilterFlag {

@@ -11,7 +11,7 @@ import {
 
 const t = createTranslator({
   en: {
-    title: "Dynamic Range Compressor",
+    title: "[TODO] Dynamic Range Compressor",
     threshold: "Threshold",
     ratio: "Ratio",
     attack: "Attack (Radius)",
@@ -31,7 +31,7 @@ const t = createTranslator({
     colorSeed: "Color Variance",
   },
   ja: {
-    title: "ダイナミックレンジコンプレッサー",
+    title: "[TODO] ダイナミックレンジコンプレッサー",
     threshold: "スレッショルド",
     ratio: "レシオ",
     attack: "アタック（半径）",
@@ -387,11 +387,7 @@ export const compressor = definePlugin({
           },
         },
         async (device) => {
-          const code =
-            // 修正済みシェーダーコード（WGSLルールに準拠）
-            // 以下のコードを元のshader変数に代入してください
-
-            `
+          const code = `
             struct Params {
               threshold: f32,
               ratio: f32,
@@ -555,7 +551,15 @@ export const compressor = definePlugin({
             // Calculate the smooth envelope for compressor in the first pass
             @compute @workgroup_size(16, 16)
             fn computeLuminanceMap(@builtin(global_invocation_id) id: vec3u) {
-              let dim = vec2f(f32(params.width), f32(params.height));
+              let width = f32(params.width);
+              let height = f32(params.height);
+              let dim = vec2f(width, height);
+
+              // 画像の範囲内かチェック
+              if (id.x >= params.width || id.y >= params.height) {
+                return;
+              }
+
               let pixel = vec2f(id.xy);
               let uv = pixel / dim;
 
@@ -569,6 +573,11 @@ export const compressor = definePlugin({
             // Apply blur to the luminance map (attack time simulation)
             @compute @workgroup_size(16, 16)
             fn blurLuminanceMap(@builtin(global_invocation_id) id: vec3u) {
+              // 画像の範囲内かチェック
+              if (id.x >= params.width || id.y >= params.height) {
+                return;
+              }
+
               let radius = max(1.0, params.attack);
               let dim = vec2f(f32(params.width), f32(params.height));
               let pixel = vec2f(id.xy);
@@ -576,7 +585,7 @@ export const compressor = definePlugin({
 
               var sum = 0.0;
               var weight = 0.0;
-              let samples = i32(min(40.0, radius * 2.0));
+              let samples = i32(min(20.0, radius)); // サンプル数を減らして効率化
 
               // Gaussian-like blur
               for (var dy = -samples; dy <= samples; dy++) {
@@ -586,11 +595,13 @@ export const compressor = definePlugin({
 
                   if (sampleUv.x >= 0.0 && sampleUv.x <= 1.0 && sampleUv.y >= 0.0 && sampleUv.y <= 1.0) {
                     let dist = length(offset);
-                    let kernelWeight = exp(-dist * dist / (2.0 * radius * radius));
+                    if (dist <= f32(samples)) { // 半径チェックを追加
+                      let kernelWeight = exp(-dist * dist / (2.0 * radius * radius));
 
-                    let sampleValue = textureSampleLevel(tempReadTexture, textureSampler, sampleUv, 0.0).r;
-                    sum += sampleValue * kernelWeight;
-                    weight += kernelWeight;
+                      let sampleValue = textureSampleLevel(tempReadTexture, textureSampler, sampleUv, 0.0).r;
+                      sum += sampleValue * kernelWeight;
+                      weight += kernelWeight;
+                    }
                   }
                 }
               }
@@ -608,6 +619,11 @@ export const compressor = definePlugin({
             // Apply compression based on the luminance envelope
             @compute @workgroup_size(16, 16)
             fn applyCompression(@builtin(global_invocation_id) id: vec3u) {
+              // 画像の範囲内かチェック
+              if (id.x >= params.width || id.y >= params.height) {
+                return;
+              }
+
               let dim = vec2f(f32(params.width), f32(params.height));
               let pixel = vec2f(id.xy);
               let uv = pixel / dim;
@@ -638,13 +654,14 @@ export const compressor = definePlugin({
                 processedColor = multibandColorProcess(withMakeup, gainReduction);
               }
 
-              // Mix with original - 三項演算子の代わりにmix関数の展開
+              // Mix with original
               let mixFactor = params.mix;
               let finalColor = vec4f(
                 originalColor.rgb * (1.0 - mixFactor) + processedColor.rgb * mixFactor,
                 originalColor.a
               );
 
+              // 出力結果を保存
               textureStore(outputTexture, id.xy, finalColor);
             }
           `;
@@ -718,21 +735,26 @@ export const compressor = definePlugin({
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC,
       });
 
+      // 中間処理用テクスチャ
+      const tempTexture = device.createTexture({
+        label: "ImageCompressor_TempTexture",
+        size: [inputWidth, inputHeight],
+        format: "rgba8unorm",
+        usage:
+          GPUTextureUsage.STORAGE_BINDING |
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_SRC,
+      });
+
       // 2つ目の中間処理用テクスチャ（2つ目のパス用）
       const tempTexture2 = device.createTexture({
         label: "ImageCompressor_TempTexture2",
         size: [inputWidth, inputHeight],
         format: "rgba8unorm",
         usage:
-          GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
-      });
-
-      const tempTexture = device.createTexture({
-        label: "ImageCompressor_TempTexture",
-        size: [inputWidth, inputHeight],
-        format: "rgba8unorm",
-        usage:
-          GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+          GPUTextureUsage.STORAGE_BINDING |
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_SRC,
       });
 
       const sampler = device.createSampler({
@@ -803,6 +825,7 @@ export const compressor = definePlugin({
         layout: luminanceMapPipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: inputTexture.createView() },
+          { binding: 1, resource: outputTexture.createView() },
           { binding: 2, resource: tempTexture.createView() },
           { binding: 3, resource: { buffer: uniformBuffer } },
           { binding: 4, resource: sampler },
@@ -814,6 +837,8 @@ export const compressor = definePlugin({
         label: "ImageCompressor_BlurBindGroup",
         layout: blurPipeline.getBindGroupLayout(0),
         entries: [
+          { binding: 0, resource: inputTexture.createView() },
+          { binding: 1, resource: outputTexture.createView() },
           { binding: 2, resource: tempTexture2.createView() },
           { binding: 3, resource: { buffer: uniformBuffer } },
           { binding: 4, resource: sampler },
@@ -834,6 +859,7 @@ export const compressor = definePlugin({
         entries: [
           { binding: 0, resource: inputTexture.createView() },
           { binding: 1, resource: outputTexture.createView() },
+          { binding: 2, resource: tempTexture.createView() }, // この行を追加
           { binding: 3, resource: { buffer: uniformBuffer } },
           { binding: 4, resource: sampler },
         ],
@@ -865,7 +891,7 @@ export const compressor = definePlugin({
         passEncoder.end();
       }
 
-      // Step 2: Apply blur (read from tempTexture, write to tempTexture2)
+      // Step 2: Apply blur (read from tempTexture, write to tempTexture)
       {
         const passEncoder = commandEncoder.beginComputePass({
           label: "ImageCompressor_BlurPass",
@@ -910,7 +936,11 @@ export const compressor = definePlugin({
       );
 
       // Submit commands
-      device.queue.submit([commandEncoder.finish()]);
+      const commandBuffer = commandEncoder.finish();
+      device.queue.submit([commandBuffer]);
+
+      // コマンドが完了するのを待つ
+      await device.queue.onSubmittedWorkDone();
 
       // Read data from staging buffer
       await stagingBuffer.mapAsync(GPUMapMode.READ);

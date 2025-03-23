@@ -17,7 +17,10 @@ export async function createGPUDevice<
   let inits: Awaited<ReturnType<T>> | null = null;
 
   const init = async () => {
-    const adapter = await navigator.gpu.requestAdapter(options.adapter);
+    const adapter = await navigator.gpu.requestAdapter({
+      powerPreference: "high-performance",
+      ...options.adapter,
+    });
     if (!adapter) {
       throw new Error("No adapter found");
     }

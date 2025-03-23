@@ -1,9 +1,9 @@
-[submodule "pkgs/rustyscript"]
-	path = pkgs/rustyscript
-	url = git@github.com:rscarson/rustyscript.git
 [submodule "pkgs/plugin/deps/--depth=1"]
 	path = pkgs/plugin/deps/--depth=1
 	url = git@github.com:ocornut/imgui.git
 [submodule "pkgs/plugin/deps/imgui"]
 	path = pkgs/plugin/deps/imgui
 	url = git@github.com:ocornut/imgui.git
+[submodule "cep"]
+	path = cep
+	url = git@github.com:Adobe-CEP/CEP-Resources.git

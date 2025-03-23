@@ -482,7 +482,8 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
   suai::LiveEffect* effect = new suai::LiveEffect(message->effect);
 
   try {
-    std::string effectName = effect->getName();
+    std::string effectName  = effect->getName();
+    std::string effectTitle = effect->getTitle();
 
     std::string normalizeEffectId = std::regex_replace(
         effectName, std::regex("^" + escapeStringRegexp(EFFECT_PREFIX)), ""
@@ -632,7 +633,8 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     isModalOpened = true;
     csl("Opening modal: %s", nodeTree.dump().c_str());
     ModalStatusCode dialogResult = modal->runModal(
-        nodeTree, lastPosition, modaloOnChangeCallback, modalOnFireEventCallback
+        nodeTree, effectTitle, lastPosition, modaloOnChangeCallback,
+        modalOnFireEventCallback
     );
 
     if (lastPosition != nullptr) {

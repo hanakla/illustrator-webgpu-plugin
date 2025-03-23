@@ -27,6 +27,7 @@ const t = createTranslator(
       blendeUnder: "Under",
       debuggingParameters: "Debugging parameters",
       padding: "Padding",
+      pastelMode: "Pastel",
     },
     ja: {
       title: "色収差 V1",
@@ -39,6 +40,7 @@ const t = createTranslator(
       blendeUnder: "下に合成",
       debuggingParameters: "デバッグパラメータ",
       padding: "パディング",
+      pastelMode: "パステル",
     },
   })
 );
@@ -56,7 +58,7 @@ export const chromaticAberration = definePlugin({
     paramSchema: {
       colorMode: {
         type: "string",
-        enum: ["rgb", "cmyk"],
+        enum: ["rgb", "cmyk", "pastel"],
         default: "rgb",
       },
       strength: {
@@ -101,6 +103,7 @@ export const chromaticAberration = definePlugin({
           ui.select({ key: "colorMode", value: params.colorMode, options: [
             {value: 'rgb', label: "RGB"},
             {value: 'cmyk', label: "CMYK"},
+            {value: 'pastel', label: t("pastelMode")},
           ] }),
         ]),
         ui.group({ direction: "col" }, [
@@ -139,7 +142,7 @@ export const chromaticAberration = definePlugin({
             baseDpi: f32,
             strength: f32,
             angle: f32,
-            colorMode: u32,
+            colorMode: u32,  // 0: RGB, 1: CMYK, 2: Pastel
             opacity: f32,
             blendMode: u32,  // 0: over, 1: under
           }
@@ -192,6 +195,35 @@ export const chromaticAberration = definePlugin({
               return vec3f(r, g, b);
           }
 
+          // RGB各チャンネルをパステルカラーに変換する関数
+          fn rgbChannelToPastel(r: f32, g: f32, b: f32) -> vec3f {
+              // R -> パステルピンク (赤+少し青)
+              let pastelPink = vec3f(min(r * 1.2, 1.0), r * 0.6, r * 0.8);
+
+              // G -> パステルイエロー (緑+赤)
+              let pastelYellow = vec3f(g * 0.8, min(g * 1.2, 1.0), g * 0.2);
+
+              // B -> パステルシアン (青+緑)
+              let pastelCyan = vec3f(b * 0.2, b * 0.8, min(b * 1.2, 1.0));
+
+              return pastelPink + pastelYellow + pastelCyan;
+          }
+
+          // チャンネルの重なり具合を検出する関数
+          fn detectChannelOverlap(r: f32, g: f32, b: f32) -> f32 {
+              // 各チャンネルの存在を確認 (しきい値0.15以上で存在とみなす)
+              let threshold = 0.15;
+              let hasR = select(0.0, 1.0, r > threshold);
+              let hasG = select(0.0, 1.0, g > threshold);
+              let hasB = select(0.0, 1.0, b > threshold);
+
+              // 存在するチャンネルの数
+              let channelCount = hasR + hasG + hasB;
+
+              // 3チャンネルすべてが存在する場合は1.0、そうでなければ0.0
+              return select(0.0, 1.0, channelCount >= 2.5);
+          }
+
           @compute @workgroup_size(16, 16)
           fn computeMain(@builtin(global_invocation_id) id: vec3u) {
               let dims = vec2f(textureDimensions(inputTexture));
@@ -223,51 +255,104 @@ export const chromaticAberration = definePlugin({
                   let a = screenBlend(screenBlend(a_red, a_green), a_blue);
 
                   effectColor = vec4f(r, g, b, a);
-              } else { // CMYK mode
+              }               else if (params.colorMode == 1u) { // CMYK mode
+                  // オフセットを計算（元のオフセット計算を使用）
                   let cyanOffset = texCoord + texOffset;
                   let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
-                  let yellowOffset = texCoord + vec2f(-texOffset.x, -texOffset.y);
-                  let blackOffset = texCoord - vec2f(-texOffset.y, texOffset.x) * 0.866;
+                  let yellowOffset = texCoord - texOffset;
 
+                  // 各色のサンプリング
                   let cyanSample = textureSampleLevel(inputTexture, textureSampler, cyanOffset, 0.0);
                   let magentaSample = textureSampleLevel(inputTexture, textureSampler, magentaOffset, 0.0);
                   let yellowSample = textureSampleLevel(inputTexture, textureSampler, yellowOffset, 0.0);
-                  let blackSample = textureSampleLevel(inputTexture, textureSampler, blackOffset, 0.0);
+                  let originalSample = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
 
-                  // 各サンプルをCMYKに変換
-                  let cyanCmyk = rgbToCmyk(cyanSample.rgb);
-                  let magentaCmyk = rgbToCmyk(magentaSample.rgb);
-                  let yellowCmyk = rgbToCmyk(yellowSample.rgb);
-                  let blackCmyk = rgbToCmyk(blackSample.rgb);
+                  // より鮮やかな色分解（各チャンネルの強調）
+                  // シアン(青緑)：赤を抑制し、青と緑を強調
+                  let cyanColor = vec3f(
+                      cyanSample.r * 0.3,    // 赤を抑制
+                      cyanSample.g * 1.1,    // 緑を強調
+                      cyanSample.b * 1.1     // 青を強調
+                  );
 
-                  // CMYK各チャンネルの分離
-                  let c = cyanCmyk.x;        // シアンのみを使用
-                  let m = magentaCmyk.y;     // マゼンタのみを使用
-                  let y = yellowCmyk.z;      // イエローのみを使用
-                  let k = blackCmyk.w;       // ブラックのみを使用
+                  // マゼンタ(赤紫)：緑を抑制し、赤と青を強調
+                  let magentaColor = vec3f(
+                      magentaSample.r * 1.1,  // 赤を強調
+                      magentaSample.g * 0.3,  // 緑を抑制
+                      magentaSample.b * 1.1   // 青を強調
+                  );
 
-                  // 合成CMYK値を作成
-                  let finalCmyk = vec4f(c, m, y, k);
+                  // イエロー(黄)：青を抑制し、赤と緑を強調
+                  let yellowColor = vec3f(
+                      yellowSample.r * 1.1,   // 赤を強調
+                      yellowSample.g * 1.1,   // 緑を強調
+                      yellowSample.b * 0.3    // 青を抑制
+                  );
 
-                  // CMYKからRGBに変換
-                  let result = cmykToRgb(finalCmyk);
+                  // 各色を合成
+                  let combinedColor = vec3f(
+                      max(max(cyanColor.r, magentaColor.r), yellowColor.r),
+                      max(max(cyanColor.g, magentaColor.g), yellowColor.g),
+                      max(max(cyanColor.b, magentaColor.b), yellowColor.b)
+                  );
 
-                  // アルファ値の計算
+                  // アルファ値の計算（他のモードと同様に各サンプルのアルファをブレンド）
                   let a_cyan = cyanSample.a;
                   let a_magenta = magentaSample.a;
                   let a_yellow = yellowSample.a;
-                  let a_black = blackSample.a;
+                  let a = screenBlend(screenBlend(a_cyan, a_magenta), a_yellow);
 
-                  let a = screenBlend(screenBlend(screenBlend(a_cyan, a_magenta), a_yellow), a_black);
+                  // 強度0でも元の色を保持
+                  let strengthFactor = params.strength / 5.0;  // 強度の効果を調整
+                  let blendRatio = clamp(strengthFactor, 0.0, 1.0);
+                  let result = mix(originalSample.rgb, combinedColor, blendRatio);
+
+                  effectColor = vec4f(result, a);
+
+                  effectColor = vec4f(result, a);
+              } else { // Pastel mode (2u)
+                  // 元のサンプルを取得
+                  let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+
+                  // RGB色収差と同様に、各チャンネルをずらしてサンプリング
+                  let redOffset = texCoord + texOffset;
+                  let greenOffset = texCoord;
+                  let blueOffset = texCoord - texOffset;
+
+                  let redSample = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0);
+                  let greenSample = textureSampleLevel(inputTexture, textureSampler, greenOffset, 0.0);
+                  let blueSample = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0);
+
+                  // 各サンプルから対応するRGBチャンネルを抽出
+                  let r = redSample.r;
+                  let g = greenSample.g;
+                  let b = blueSample.b;
+
+                  // 各チャンネルを単独のパステルカラーに変換
+                  let pastelColor = rgbChannelToPastel(r, g, b);
+
+                  // チャンネルの重なり具合を検出
+                  let overlapFactor = detectChannelOverlap(r, g, b);
+
+                  // 重なっている部分(overlapFactor=1.0)では元画像の色を使用
+                  // そうでない部分ではパステルカラーを使用
+                  // let result = mix(pastelColor, originalColor.rgb, overlapFactor);
+                  let result = pastelColor;
+
+                  // アルファ値の計算
+                  let a_red = redSample.a;
+                  let a_green = greenSample.a;
+                  let a_blue = blueSample.a;
+                  let a = screenBlend(screenBlend(a_red, a_green), a_blue);
 
                   effectColor = vec4f(result, a);
               }
 
               var finalColor: vec4f;
               if (params.blendMode == 0u) {
-                  finalColor = mix(originalColor, effectColor, params.opacity);
+                  finalColor = mix(originalColor, effectColor, params.opacity / 100.0);
               } else {
-                  finalColor = mix(effectColor, originalColor, 1.0 - params.opacity);
+                  finalColor = mix(effectColor, originalColor, 1.0 - params.opacity / 100.0);
               }
 
               textureStore(resultTexture, id.xy, finalColor);
@@ -351,13 +436,21 @@ export const chromaticAberration = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
+      // カラーモードのマッピング: rgb=0, cmyk=1, pastel=2
+      let colorModeValue = 0;
+      if (params.colorMode === "cmyk") {
+        colorModeValue = 1;
+      } else if (params.colorMode === "pastel") {
+        colorModeValue = 2;
+      }
+
       uniformValues.set({
         dpi: env.dpi,
         baseDpi: env.baseDpi,
         strength: params.strength,
         angle: params.angle,
-        colorMode: params.colorMode === "rgb" ? 0 : 1,
-        opacity: params.opacity / 100,
+        colorMode: colorModeValue,
+        opacity: params.opacity,
         blendMode: params.blendMode === "over" ? 0 : 1,
       });
 

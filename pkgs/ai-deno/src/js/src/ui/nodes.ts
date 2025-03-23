@@ -1,6 +1,6 @@
 export const ui = {
   group: (
-    { direction = "row" }: { direction?: "row" | "col" },
+    { direction = "row" }: Omit<UINodeGroup, "type" | "children">,
     children: UINode[]
   ): UINode => ({
     type: "group",
@@ -31,8 +31,9 @@ export const ui = {
     ...props,
     type: "colorInput",
   }),
-  text: (props: Omit<UINodeText, "type">): UINode => ({
+  text: (props: MakeOptional<Omit<UINodeText, "type">, "size">): UINode => ({
     ...props,
+    size: props.size || "normal",
     type: "text",
   }),
   select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect => ({
@@ -56,6 +57,10 @@ type ClickEvent = {
   type: "click";
 };
 
+type MakeOptional<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]?: T[P];
+};
+
 export type ChangeEventHandler<T = any> = (
   event: ChangeEvent<T>
 ) => void | Promise<void>;
@@ -65,6 +70,7 @@ export type ClickEventHandler = (event: ClickEvent) => void | Promise<void>;
 export type UINodeGroup = {
   type: "group";
   direction: "col" | "row";
+  disabled?: boolean;
   children: UINode[];
 };
 
@@ -125,6 +131,7 @@ export type UINodeColorInput = {
 export type UINodeText = {
   type: "text";
   text: string;
+  size: "sm" | "normal";
 };
 
 export type UINodeButton = {

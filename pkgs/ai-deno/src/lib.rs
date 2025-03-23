@@ -94,6 +94,13 @@ fn package_root_dir() -> PathBuf {
     }
 }
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+#[no_mangle]
+pub extern "C" fn get_version() -> *const c_char {
+    CString::new(VERSION).unwrap().into_raw()
+}
+
 #[no_mangle]
 pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)) -> OpaqueAiMain {
     // let alert_fn = move |req: &str| alert_function(req, _ai_alert);

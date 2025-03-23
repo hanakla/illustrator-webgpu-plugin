@@ -1,15 +1,18 @@
 [macos]
 run-ai:
     echo '' > illustrator.log
-    RUST_BACKTRACE=full /Applications/Adobe\ Illustrator\ 2025/Adobe\ Illustrator.app/Contents/MacOS/Adobe\ Illustrator 2>&1 | tee -a illustrator.log
+    AI_DENO_DEBUG=1 RUST_BACKTRACE=full /Applications/Adobe\ Illustrator\ 2025/Adobe\ Illustrator.app/Contents/MacOS/Adobe\ Illustrator 2>&1 | tee -a illustrator.log
 
 [macos]
 watch:
-    sudo deno run -A ./watch-sync.ts
+    sudo deno run -A ./scripts/watch-sync.ts
 
 [macos]
 show-externs:
     nm -m output/mac/release/IllustratorDeno.aip/Contents/MacOS/IllustratorDeno
+
+generate-color-tokens:
+    deno run -A ./scripts/generate-color-tokens.ts
 
 cpp-sandbox:
     clear

@@ -1,5 +1,7 @@
+/sdk
+/zxptmp
+/dist
+/rust-sandbox
+
 .DS_Store
-sdk/
-input.bmp.json
-output.png
-rust-sandbox/
+.env

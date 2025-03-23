@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<macromedia-extension name="la.hanak.csxs.ai-deno" requires-restart="true" version="1.2.0.0">
+    <author name="Hanakla"/>
+    <description><![CDATA[AiWebGPUPlugin is a plug-in for Adobe Illustrator.]]></description>
+    <license-agreement><![CDATA[The author grants permission to use AiWebGPUPlugin.aip (hereafter, this plug-in) as long as the following is agreed.
+The author makes no guarantee, including the accuracy and reliability of this plug-in. The author is not responsible for any damages caused by using this plug-in.
+Redistribution of this plug-in on networks accessible by unspecified majority is prohibited. Redistributions by other means shall accompany the documents distributed with this plug-in.]]></license-agreement>
+    <products>
+        <product familyname="Illustrator" maxversion="" version="26.0" platform="mac"/>
+    </products>
+    <files>
+        <file destination="$plugin" platform="mac" products="Illustrator" source="./AiWebGPUPlugin.aip" maxVersion="" minVersion="26.0"/>
+    </files>
+</macromedia-extension>

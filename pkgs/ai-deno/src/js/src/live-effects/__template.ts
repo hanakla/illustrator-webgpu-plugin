@@ -13,6 +13,8 @@ import {
   removeWebGPUAlignmentPadding,
   parseColorCode,
   toColorCode,
+  // RMIT: Import createCanvas if needed
+  createCanvas,
 } from "./_utils.ts";
 import { createGPUDevice } from "./_shared.ts";
 
@@ -74,6 +76,17 @@ export const pluginTemplate = definePlugin({
       //   type: "string",
       //   enum: ["over", "under"],
       //   default: "under",
+      // },
+      // array: {
+      //   type: "array",
+      //   items: {
+      //   type: "object",
+      //     properties: {
+      //       a: { type: "int"  },
+      //       b: { type: "int"  },
+      //     },
+      //   },
+      //   default: [],
       // },
     },
     onEditParameters: (params) => {
@@ -157,8 +170,8 @@ export const pluginTemplate = definePlugin({
         (device) => {
           const code = `
             struct Params {
-              inputDpi: i32,
-              baseDpi: i32,
+              outputSize: vec2i,
+              dpiScale: f32,
               // TODO
             }
 
@@ -169,35 +182,34 @@ export const pluginTemplate = definePlugin({
 
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-                let dims = vec2f(textureDimensions(inputTexture));
-                let texCoord = vec2f(id.xy) / dims;
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              // RMIT: Use this coordinate for all computations
+              let texCoord = vec2f(id.xy) / dims;
+              // RMIT: Map texCoord space to input texture space, This is MUST to use when sampling inputTexture (likes textureSampleLevel())
+              let toInputTexCoord = dims / adjustedDims;
 
-                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+              // Ignore 256 padded pixels
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-                // TODO: Implement here
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
-                // var finalColor: vec4f;
-                textureStore(resultTexture, id.xy, finalColor);
+              // TODO: Implement here
+
+              // var finalColor: vec4f;
+              textureStore(resultTexture, id.xy, finalColor);
             }
           `;
 
           const shader = device.createShaderModule({
-            label: "Chromatic Aberration Shader",
+            label: "Plugin Template V1 Shader",
             code,
           });
 
           const pipelineDef = makeShaderDataDefinitions(code);
 
-          device.addEventListener("lost", (e) => {
-            console.error(e);
-          });
-
-          device.addEventListener("uncapturederror", (e) => {
-            console.error(e.error);
-          });
-
           const pipeline = device.createComputePipeline({
-            label: "Chromatic Aberration Pipeline",
+            label: "Plugin Template V1 Pipeline",
             layout: "auto",
             compute: {
               module: shader,
@@ -225,7 +237,8 @@ export const pluginTemplate = definePlugin({
       console.log("Chromatic Aberration V1", params);
 
       // if this effect needs to exand over original size, do it padding
-      // imgData = await paddingImageData(imgData, numOfPxByParams);
+      const paddingSize = params.numOfPxByParams;
+      // imgData = await paddingImageData(imgData, paddingSize);
 
       const outputWidth = imgData.width,
         outputHeight = imgData.height;
@@ -233,13 +246,13 @@ export const pluginTemplate = definePlugin({
       // Don't change it
       imgData = await addWebGPUAlignmentPadding(imgData);
 
-      const inputWidth = imgData.width,
-        inputHeight = imgData.height;
+      const bufferInputWidth = imgData.width,
+        bufferInputHeight = imgData.height;
 
       // Create textures
       const texture = device.createTexture({
-        label: "Input Texture",
-        size: [inputWidth, inputHeight],
+        label: "Plugin Template Input Texture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
         usage:
           GPUTextureUsage.TEXTURE_BINDING |
@@ -248,14 +261,14 @@ export const pluginTemplate = definePlugin({
       });
 
       const resultTexture = device.createTexture({
-        label: "Result Texture",
-        size: [inputWidth, inputHeight],
+        label: "Plugin Template  ResultTexture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
       const sampler = device.createSampler({
-        label: "Texture Sampler",
+        label: "Plugin Template Texture Sampler #1",
         magFilter: "linear",
         minFilter: "linear",
       });
@@ -263,22 +276,22 @@ export const pluginTemplate = definePlugin({
       // Create uniform buffer
       const uniformValues = makeStructuredView(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
-        label: "Params Buffer",
+        label: "Plugin Template Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
       // RMIT: Set uniform value. Rewrite for Params struct
       uniformValues.set({
-        inputDpi: dpi,
-        baseDpi: baseDpi,
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
         // TODO
       });
 
       device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
 
       const bindGroup = device.createBindGroup({
-        label: "Main Bind Group",
+        label: "Plugin Template Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           {
@@ -302,7 +315,7 @@ export const pluginTemplate = definePlugin({
 
       const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
-        size: inputWidth * inputHeight * 4,
+        size: bufferInputWidth * bufferInputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
 
@@ -310,8 +323,8 @@ export const pluginTemplate = definePlugin({
       device.queue.writeTexture(
         { texture },
         imgData.data,
-        { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
-        [inputWidth, inputHeight]
+        { bytesPerRow: bufferInputWidth * 4, rowsPerImage: bufferInputHeight },
+        [bufferInputWidth, bufferInputHeight]
       );
 
       // Execute compute shader
@@ -325,15 +338,15 @@ export const pluginTemplate = definePlugin({
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
       computePass.dispatchWorkgroups(
-        Math.ceil(inputWidth / 16),
-        Math.ceil(inputHeight / 16)
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
       );
       computePass.end();
 
       commandEncoder.copyTextureToBuffer(
         { texture: resultTexture },
-        { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
-        [inputWidth, inputHeight]
+        { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
+        [bufferInputWidth, bufferInputHeight]
       );
 
       device.queue.submit([commandEncoder.finish()]);
@@ -346,8 +359,8 @@ export const pluginTemplate = definePlugin({
 
       const resultImageData = new ImageData(
         new Uint8ClampedArray(resultData),
-        inputWidth,
-        inputHeight
+        bufferInputWidth,
+        bufferInputHeight
       );
 
       return await removeWebGPUAlignmentPadding(

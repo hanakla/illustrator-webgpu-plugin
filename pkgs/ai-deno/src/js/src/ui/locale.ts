@@ -48,7 +48,12 @@ export function createTranslator<T extends Localized<any>>(texts: T) {
  * @returns
  */
 function getLocale(acceptLocales: string[], fallbackLocale: string): string {
-  const userLocale = navigator.language.split("-")[0];
+  // const userLocale = navigator.language.split("-")[0];
+  // if (acceptLocales.includes(userLocale)) {
+  //   return userLocale;
+  // }
+
+  const userLocale = _AI_DENO_.op_ai_deno_get_user_locale().split("_")[0];
   if (acceptLocales.includes(userLocale)) {
     return userLocale;
   }

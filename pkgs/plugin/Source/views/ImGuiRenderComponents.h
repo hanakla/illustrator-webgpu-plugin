@@ -50,6 +50,18 @@ namespace {
       pushedColor++;
     }
 
+    void beginDisabled() {
+      ImGui::BeginDisabled();
+      ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.8f);
+      pushedVars++;
+    }
+
+    void endDisabled() {
+      ImGui::EndDisabled();
+      ImGui::PopStyleVar(pushedVars);
+      pushedVars--;
+    }
+
     void pushVar(ImGuiStyleVar var, float value) {
       ImGui::PushStyleVar(var, value);
       pushedVars++;

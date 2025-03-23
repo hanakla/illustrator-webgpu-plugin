@@ -2,6 +2,10 @@ import { StyleFilterFlag } from "../types.ts";
 import { definePlugin } from "../types.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
+import {
+  makeShaderDataDefinitions,
+  makeStructuredView,
+} from "npm:webgpu-utils";
 import { createGPUDevice } from "./_shared.ts";
 import {
   lerp,
@@ -110,148 +114,10 @@ export const kirakiraGlow = definePlugin({
       return await createGPUDevice({}, async (device) => {
         const shader = device.createShaderModule({
           label: "Optimized Glow Effect Shader",
-          code: `
-          struct Params {
-            strength: f32,
-            transparentOriginal: u32,
-            highQuality: u32,
-            width: u32,
-            height: u32,
-            downscaleFactor: u32,
-          }
-
-          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-          @group(0) @binding(1) var tempTexture: texture_storage_2d<rgba8unorm, write>;
-          @group(0) @binding(2) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-          @group(0) @binding(3) var textureSampler: sampler;
-          @group(0) @binding(4) var<uniform> params: Params;
-          @group(1) @binding(0) var tempReadTexture: texture_2d<f32>;
-          @group(1) @binding(1) var resultReadTexture: texture_2d<f32>;
-
-          fn gaussian1D(x: f32, sigma: f32) -> f32 {
-            let sigma2 = sigma * sigma;
-            return exp(-(x * x) / (2.0 * sigma2)) / (sqrt(2.0 * 3.14159265359) * sigma);
-          }
-
-          @compute @workgroup_size(16, 16)
-          fn computeDownsample(@builtin(global_invocation_id) id: vec3u) {
-            let dims = vec2f(textureDimensions(inputTexture));
-            let smallDims = vec2f(textureDimensions(tempTexture));
-
-            let texCoord = vec2f(id.xy) / smallDims;
-            let srcCoord = texCoord;
-            let color = textureSampleLevel(inputTexture, textureSampler, srcCoord, 0.0);
-
-            textureStore(tempTexture, id.xy, color);
-          }
-
-          @compute @workgroup_size(16, 16)
-          fn computeHorizontalBlur(@builtin(global_invocation_id) id: vec3u) {
-            let dims = vec2f(textureDimensions(tempTexture));
-            let texCoord = vec2f(id.xy) / dims;
-
-            let sigma = max(1.0, params.strength / 3.0);
-            let kernelSize = i32(min(select(16.0, 24.0, params.highQuality != 0u), ceil(params.strength)));
-
-            var totalWeight = 0.0;
-            var totalColor = vec3f(0.0);
-            var totalAlpha = 0.0;
-
-            for (var x = -kernelSize; x <= kernelSize; x++) {
-              let weight = gaussian1D(f32(x), sigma);
-              let sampleCoord = vec2f(texCoord.x + f32(x) / dims.x, texCoord.y);
-
-              if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0) {
-                let sampleColor = textureSampleLevel(tempReadTexture, textureSampler, sampleCoord, 0.0);
-
-                if (sampleColor.a > 0.001) {
-                  let unpremultipliedColor = sampleColor.rgb / sampleColor.a;
-                  totalColor += unpremultipliedColor * weight * sampleColor.a;
-                  totalAlpha += sampleColor.a * weight;
-                }
-                totalWeight += weight;
-              }
-            }
-
-            var blurredColor = vec4f(0.0);
-            if (totalWeight > 0.0 && totalAlpha > 0.001) {
-              let normalizedColor = totalColor / totalAlpha;
-              blurredColor = vec4f(normalizedColor, totalAlpha / totalWeight);
-            }
-
-            textureStore(resultTexture, id.xy, blurredColor);
-          }
-
-          @compute @workgroup_size(16, 16)
-          fn computeVerticalBlur(@builtin(global_invocation_id) id: vec3u) {
-            let dims = vec2f(textureDimensions(resultTexture));
-            let texCoord = vec2f(id.xy) / dims;
-
-            let sigma = max(1.0, params.strength / 3.0);
-            let kernelSize = i32(min(select(16.0, 24.0, params.highQuality != 0u), ceil(params.strength)));
-
-            var totalWeight = 0.0;
-            var totalColor = vec3f(0.0);
-            var totalAlpha = 0.0;
-
-            for (var y = -kernelSize; y <= kernelSize; y++) {
-              let weight = gaussian1D(f32(y), sigma);
-              let sampleCoord = vec2f(texCoord.x, texCoord.y + f32(y) / dims.y);
-
-              if (sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0) {
-                let sampleColor = textureSampleLevel(resultReadTexture, textureSampler, sampleCoord, 0.0);
-
-                if (sampleColor.a > 0.001) {
-                  let unpremultipliedColor = sampleColor.rgb / sampleColor.a;
-                  totalColor += unpremultipliedColor * weight * sampleColor.a;
-                  totalAlpha += sampleColor.a * weight;
-                }
-                totalWeight += weight;
-              }
-            }
-
-            var blurredColor = vec4f(0.0);
-            if (totalWeight > 0.0 && totalAlpha > 0.001) {
-              let normalizedColor = totalColor / totalAlpha;
-              blurredColor = vec4f(normalizedColor, totalAlpha / totalWeight);
-            }
-
-            textureStore(tempTexture, id.xy, blurredColor);
-          }
-
-          @compute @workgroup_size(16, 16)
-          fn computeFinalComposite(@builtin(global_invocation_id) id: vec3u) {
-            let dims = vec2f(textureDimensions(resultTexture));
-            let smallDims = vec2f(textureDimensions(tempTexture));
-            let texCoord = vec2f(id.xy) / dims;
-
-            let smallCoord = texCoord;
-            let blurredColor = textureSampleLevel(tempReadTexture, textureSampler, smallCoord, 0.0);
-            let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-
-            var finalColor = vec4f(0.0);
-
-            if (params.transparentOriginal != 0u) {
-              finalColor = blurredColor;
-
-              if (originalColor.a > 0.0) {
-                finalColor.a = finalColor.a * (1.0 - originalColor.a);
-              }
-            } else {
-              finalColor = blurredColor;
-
-              if (originalColor.a > 0.0) {
-                finalColor = vec4f(
-                  mix(finalColor.rgb, originalColor.rgb, originalColor.a),
-                  max(finalColor.a, originalColor.a)
-                );
-              }
-            }
-
-            textureStore(resultTexture, id.xy, finalColor);
-          }
-          `,
+          code: mainShaderCode(),
         });
+
+        const defs = makeShaderDataDefinitions(mainShaderCode());
 
         const downsamplePipeline = device.createComputePipeline({
           label: "Downsample Pipeline",
@@ -290,6 +156,7 @@ export const kirakiraGlow = definePlugin({
         });
 
         return {
+          defs,
           downsamplePipeline,
           horizontalBlurPipeline,
           verticalBlurPipeline,
@@ -304,6 +171,7 @@ export const kirakiraGlow = definePlugin({
         horizontalBlurPipeline,
         verticalBlurPipeline,
         compositePipeline,
+        defs,
       },
       params,
       imgData,
@@ -373,22 +241,23 @@ export const kirakiraGlow = definePlugin({
         minFilter: "linear",
       });
 
+      const uniformData = makeStructuredView(defs.uniforms.params);
+      uniformData.set({
+        strength: params.strength,
+        transparentOriginal: params.transparentOriginal ? 1 : 0,
+        highQuality: params.highQuality ? 1 : 0,
+        width: inputWidth,
+        height: inputHeight,
+        downscaleFactor,
+      });
+
       const uniformBuffer = device.createBuffer({
         label: "KiraKiraGlow_UniformBuffer",
-        size: 24,
+        size: uniformData.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      const uniformData = new ArrayBuffer(24);
-      const uniformView = new DataView(uniformData);
-      uniformView.setFloat32(0, params.strength, true);
-      uniformView.setUint32(4, params.transparentOriginal ? 1 : 0, true);
-      uniformView.setUint32(8, params.highQuality ? 1 : 0, true);
-      uniformView.setUint32(12, inputWidth, true);
-      uniformView.setUint32(16, inputHeight, true);
-      uniformView.setUint32(20, downscaleFactor, true);
-
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      device.queue.writeBuffer(uniformBuffer, 0, uniformData.arrayBuffer);
 
       device.queue.writeTexture(
         { texture: inputTexture },
@@ -563,3 +432,147 @@ export const kirakiraGlow = definePlugin({
     },
   },
 });
+
+function mainShaderCode() {
+  return `
+    struct Params {
+      strength: f32,
+      transparentOriginal: u32,
+      highQuality: u32,
+      width: u32,
+      height: u32,
+      downscaleFactor: u32,
+    }
+
+    @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+    @group(0) @binding(1) var tempTexture: texture_storage_2d<rgba8unorm, write>;
+    @group(0) @binding(2) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+    @group(0) @binding(3) var textureSampler: sampler;
+    @group(0) @binding(4) var<uniform> params: Params;
+    @group(1) @binding(0) var tempReadTexture: texture_2d<f32>;
+    @group(1) @binding(1) var resultReadTexture: texture_2d<f32>;
+
+    fn gaussian1D(x: f32, sigma: f32) -> f32 {
+      let sigma2 = sigma * sigma;
+      return exp(-(x * x) / (2.0 * sigma2)) / (sqrt(2.0 * 3.14159265359) * sigma);
+    }
+
+    @compute @workgroup_size(16, 16)
+    fn computeDownsample(@builtin(global_invocation_id) id: vec3u) {
+      let dims = vec2f(textureDimensions(inputTexture));
+      let smallDims = vec2f(textureDimensions(tempTexture));
+
+      let texCoord = vec2f(id.xy) / smallDims;
+      let srcCoord = texCoord;
+      let color = textureSampleLevel(inputTexture, textureSampler, srcCoord, 0.0);
+
+      textureStore(tempTexture, id.xy, color);
+    }
+
+    @compute @workgroup_size(16, 16)
+    fn computeHorizontalBlur(@builtin(global_invocation_id) id: vec3u) {
+      let dims = vec2f(textureDimensions(tempTexture));
+      let texCoord = vec2f(id.xy) / dims;
+
+      let sigma = max(1.0, params.strength / 3.0);
+      let kernelSize = i32(min(select(16.0, 24.0, params.highQuality != 0u), ceil(params.strength)));
+
+      var totalWeight = 0.0;
+      var totalColor = vec3f(0.0);
+      var totalAlpha = 0.0;
+
+      for (var x = -kernelSize; x <= kernelSize; x++) {
+        let weight = gaussian1D(f32(x), sigma);
+        let sampleCoord = vec2f(texCoord.x + f32(x) / dims.x, texCoord.y);
+
+        if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0) {
+          let sampleColor = textureSampleLevel(tempReadTexture, textureSampler, sampleCoord, 0.0);
+
+          if (sampleColor.a > 0.001) {
+            let unpremultipliedColor = sampleColor.rgb / sampleColor.a;
+            totalColor += unpremultipliedColor * weight * sampleColor.a;
+            totalAlpha += sampleColor.a * weight;
+          }
+          totalWeight += weight;
+        }
+      }
+
+      var blurredColor = vec4f(0.0);
+      if (totalWeight > 0.0 && totalAlpha > 0.001) {
+        let normalizedColor = totalColor / totalAlpha;
+        blurredColor = vec4f(normalizedColor, totalAlpha / totalWeight);
+      }
+
+      textureStore(resultTexture, id.xy, blurredColor);
+    }
+
+    @compute @workgroup_size(16, 16)
+    fn computeVerticalBlur(@builtin(global_invocation_id) id: vec3u) {
+      let dims = vec2f(textureDimensions(resultTexture));
+      let texCoord = vec2f(id.xy) / dims;
+
+      let sigma = max(1.0, params.strength / 3.0);
+      let kernelSize = i32(min(select(16.0, 24.0, params.highQuality != 0u), ceil(params.strength)));
+
+      var totalWeight = 0.0;
+      var totalColor = vec3f(0.0);
+      var totalAlpha = 0.0;
+
+      for (var y = -kernelSize; y <= kernelSize; y++) {
+        let weight = gaussian1D(f32(y), sigma);
+        let sampleCoord = vec2f(texCoord.x, texCoord.y + f32(y) / dims.y);
+
+        if (sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0) {
+          let sampleColor = textureSampleLevel(resultReadTexture, textureSampler, sampleCoord, 0.0);
+
+          if (sampleColor.a > 0.001) {
+            let unpremultipliedColor = sampleColor.rgb / sampleColor.a;
+            totalColor += unpremultipliedColor * weight * sampleColor.a;
+            totalAlpha += sampleColor.a * weight;
+          }
+          totalWeight += weight;
+        }
+      }
+
+      var blurredColor = vec4f(0.0);
+      if (totalWeight > 0.0 && totalAlpha > 0.001) {
+        let normalizedColor = totalColor / totalAlpha;
+        blurredColor = vec4f(normalizedColor, totalAlpha / totalWeight);
+      }
+
+      textureStore(tempTexture, id.xy, blurredColor);
+    }
+
+    @compute @workgroup_size(16, 16)
+    fn computeFinalComposite(@builtin(global_invocation_id) id: vec3u) {
+      let dims = vec2f(textureDimensions(resultTexture));
+      let smallDims = vec2f(textureDimensions(tempTexture));
+      let texCoord = vec2f(id.xy) / dims;
+
+      let smallCoord = texCoord;
+      let blurredColor = textureSampleLevel(tempReadTexture, textureSampler, smallCoord, 0.0);
+      let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+
+      var finalColor = vec4f(0.0);
+
+      if (params.transparentOriginal != 0u) {
+        finalColor = blurredColor;
+
+        if (originalColor.a > 0.0) {
+          finalColor.a = finalColor.a * (1.0 - originalColor.a);
+        }
+      } else {
+        finalColor = blurredColor;
+
+        if (originalColor.a > 0.0) {
+          finalColor = vec4f(
+            mix(finalColor.rgb, originalColor.rgb, originalColor.a),
+            max(finalColor.a, originalColor.a)
+          );
+        }
+      }
+
+      textureStore(resultTexture, id.xy, finalColor);
+    }
+  `;
+}

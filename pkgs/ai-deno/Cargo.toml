@@ -8,9 +8,9 @@ name = "ai_deno"
 crate-type = ["staticlib", "rlib"]
 
 [features]
-default = ["debug_lib"]
-debug_lib = []
-debug_deno = []
+default = []
+debug_lib = []  # Use `AI_DENO_DEBUG` env var to enable
+debug_deno = [] # Use `AI_DENO_DEBUG_DENO` env var to enable
 
 [dependencies]
 ffi-support = "0.4.4"

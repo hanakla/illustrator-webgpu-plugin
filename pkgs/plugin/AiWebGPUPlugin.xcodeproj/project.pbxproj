@@ -32,6 +32,7 @@
 		A5ACCD822D6F017A00069E63 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5ACCD812D6F017A00069E63 /* Security.framework */; };
 		A5ACCD842D6F01A000069E63 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */; };
 		A5AFE2E62D7B2A7E0047FC02 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */; };
+		A5B728742D8C608F00FCEE16 /* AiDenoId.h in Headers */ = {isa = PBXBuildFile; fileRef = A5B728732D8C608F00FCEE16 /* AiDenoId.h */; };
 		A5F9AB0D2D6376C7007EE38C /* imgui.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A068892D63700D006BE835 /* imgui.cpp */; };
 		A5F9AB0E2D6376C7007EE38C /* imgui_draw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A0688B2D63700D006BE835 /* imgui_draw.cpp */; };
 		A5F9AB0F2D6376C7007EE38C /* imgui_tables.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5A0688D2D63700D006BE835 /* imgui_tables.cpp */; };
@@ -93,7 +94,7 @@
 		6868C924150BA192003DAAF2 /* AiDenoSuites.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AiDenoSuites.h; path = Source/AiDenoSuites.h; sourceTree = "<group>"; };
 		6868C940150BA219003DAAF2 /* HelloWorld.r */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.rez; name = HelloWorld.r; path = Resources/Mac/HelloWorld.r; sourceTree = "<group>"; };
 		68B2247115063ED00035B025 /* SDKAboutPluginsHelper.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SDKAboutPluginsHelper.cpp; path = ../../sdk/samplecode/common/source/SDKAboutPluginsHelper.cpp; sourceTree = SOURCE_ROOT; };
-		6EE2BA530A40BB2600CC7CE2 /* IllustratorDeno.aip */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IllustratorDeno.aip; sourceTree = BUILT_PRODUCTS_DIR; };
+		6EE2BA530A40BB2600CC7CE2 /* AiWebGPUPlugin.aip */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiWebGPUPlugin.aip; sourceTree = BUILT_PRODUCTS_DIR; };
 		9E9C47151423A25E004EA572 /* FlashUIController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = FlashUIController.cpp; path = ../../sdk/samplecode/common/source/FlashUIController.cpp; sourceTree = SOURCE_ROOT; };
 		9E9C47161423A25E004EA572 /* SDKPlugPlug.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SDKPlugPlug.cpp; path = ../../sdk/samplecode/common/source/SDKPlugPlug.cpp; sourceTree = SOURCE_ROOT; };
 		9E9C47591423AD0C004EA572 /* IAIFilePath.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = IAIFilePath.cpp; path = ../../sdk/illustratorapi/illustrator/IAIFilePath.cpp; sourceTree = SOURCE_ROOT; };
@@ -357,6 +358,7 @@
 		A5ACCD812D6F017A00069E63 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		A5ACCD832D6F01A000069E63 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		A5AFE2E52D7B2A7E0047FC02 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		A5B728732D8C608F00FCEE16 /* AiDenoId.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = AiDenoId.h; path = Source/AiDenoId.h; sourceTree = "<group>"; };
 		A5F9AB112D637800007EE38C /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		A5F9AB372D63A3DE007EE38C /* super-illustrator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "super-illustrator.h"; path = "Source/super-illustrator.h"; sourceTree = "<group>"; };
 		A5F9AB392D63AC6A007EE38C /* consts.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = consts.h; path = Source/consts.h; sourceTree = "<group>"; };
@@ -429,6 +431,7 @@
 				A5F9AB252D637919007EE38C /* views */,
 				A5F9AB3D2D63E44A007EE38C /* libs */,
 				A5F9AB392D63AC6A007EE38C /* consts.h */,
+				A5B728732D8C608F00FCEE16 /* AiDenoId.h */,
 				A5F9AB372D63A3DE007EE38C /* super-illustrator.h */,
 				A591675E2D660DEE00B4709A /* spectrum-tokens.hpp */,
 				A5F9AB442D645B6C007EE38C /* debugHelper.h */,
@@ -458,7 +461,7 @@
 		508817D509F0C9AD0071BF1A /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				6EE2BA530A40BB2600CC7CE2 /* IllustratorDeno.aip */,
+				6EE2BA530A40BB2600CC7CE2 /* AiWebGPUPlugin.aip */,
 				A59DB5602D821FDD00C7BD59 /* Sandbox */,
 			);
 			name = Products;
@@ -1278,6 +1281,7 @@
 				6868C927150BA192003DAAF2 /* AiDenoPlugin.h in Headers */,
 				6868C929150BA192003DAAF2 /* AiDenoSuites.h in Headers */,
 				A5F9AB452D645B6C007EE38C /* debugHelper.h in Headers */,
+				A5B728742D8C608F00FCEE16 /* AiDenoId.h in Headers */,
 				A5F9AB382D63A3DE007EE38C /* super-illustrator.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1285,9 +1289,9 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		508817D309F0C9AD0071BF1A /* AiDenoPlugin */ = {
+		508817D309F0C9AD0071BF1A /* AiWebGPUPlugin */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 508817D709F0C9AE0071BF1A /* Build configuration list for PBXNativeTarget "AiDenoPlugin" */;
+			buildConfigurationList = 508817D709F0C9AE0071BF1A /* Build configuration list for PBXNativeTarget "AiWebGPUPlugin" */;
 			buildPhases = (
 				FDD9160A21AC09BA0018B958 /* Run Script */,
 				6EE2BA0A0A40B76300CC7CE2 /* Headers */,
@@ -1305,9 +1309,9 @@
 				A5F9AB252D637919007EE38C /* views */,
 				A5F9AB3D2D63E44A007EE38C /* libs */,
 			);
-			name = AiDenoPlugin;
+			name = AiWebGPUPlugin;
 			productName = HelloWorld;
-			productReference = 6EE2BA530A40BB2600CC7CE2 /* IllustratorDeno.aip */;
+			productReference = 6EE2BA530A40BB2600CC7CE2 /* AiWebGPUPlugin.aip */;
 			productType = "com.apple.product-type.bundle";
 		};
 		A59DB55F2D821FDD00C7BD59 /* Sandbox */ = {
@@ -1345,7 +1349,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 508817C509F0C9740071BF1A /* Build configuration list for PBXProject "AiDenoPlugin" */;
+			buildConfigurationList = 508817C509F0C9740071BF1A /* Build configuration list for PBXProject "AiWebGPUPlugin" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
@@ -1370,7 +1374,7 @@
 			);
 			projectRoot = "";
 			targets = (
-				508817D309F0C9AD0071BF1A /* AiDenoPlugin */,
+				508817D309F0C9AD0071BF1A /* AiWebGPUPlugin */,
 				A59DB55F2D821FDD00C7BD59 /* Sandbox */,
 			);
 		};
@@ -1497,9 +1501,9 @@
 				INFOPLIST_FILE = ../../sdk/samplecode/common/mac/Info.plist;
 				INFOPLIST_PREFIX_HEADER = ../../sdk/samplecode/common/includes/SDKDef.h;
 				INFOPLIST_PREPROCESS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adobe.illustrator.plugins.$(PRODUCT_NAME)";
-				PRODUCT_MODULE_NAME = IllustratorDeno;
-				PRODUCT_NAME = IllustratorDeno;
+				PRODUCT_BUNDLE_IDENTIFIER = "la.hanak.csxs.ai-deno";
+				PRODUCT_MODULE_NAME = AiWebGPUPlugin;
+				PRODUCT_NAME = AiWebGPUPlugin;
 			};
 			name = debug;
 		};
@@ -1512,9 +1516,9 @@
 				INFOPLIST_FILE = ../../sdk/samplecode/common/mac/Info.plist;
 				INFOPLIST_PREFIX_HEADER = ../../sdk/samplecode/common/includes/SDKDef.h;
 				INFOPLIST_PREPROCESS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adobe.illustrator.plugins.$(PRODUCT_NAME)";
-				PRODUCT_MODULE_NAME = IllustratorDeno;
-				PRODUCT_NAME = IllustratorDeno;
+				PRODUCT_BUNDLE_IDENTIFIER = "la.hanak.csxs.ai-deno";
+				PRODUCT_MODULE_NAME = AiWebGPUPlugin;
+				PRODUCT_NAME = AiWebGPUPlugin;
 			};
 			name = release;
 		};
@@ -1523,8 +1527,8 @@
 			baseConfigurationReference = A190BBD325E3F5FB0001DF18 /* AIPluginDebug.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adobe.illustrator.plugins.la.hanak.ai-deno";
-				PRODUCT_NAME = IllustratorDeno;
+				PRODUCT_BUNDLE_IDENTIFIER = "la.hanak.csxs.ai-deno";
+				PRODUCT_NAME = AiWebGPUPlugin;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
 			};
@@ -1535,8 +1539,8 @@
 			baseConfigurationReference = A190BBD425E3F5FB0001DF18 /* AIPluginRelease.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adobe.illustrator.plugins.la.hanak.ai-deno";
-				PRODUCT_NAME = IllustratorDeno;
+				PRODUCT_BUNDLE_IDENTIFIER = "la.hanak.csxs.ai-deno";
+				PRODUCT_NAME = AiWebGPUPlugin;
 				SWIFT_VERSION = 6.0;
 			};
 			name = release;
@@ -1663,7 +1667,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		508817C509F0C9740071BF1A /* Build configuration list for PBXProject "AiDenoPlugin" */ = {
+		508817C509F0C9740071BF1A /* Build configuration list for PBXProject "AiWebGPUPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				508817C609F0C9740071BF1A /* debug */,
@@ -1672,7 +1676,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;
 		};
-		508817D709F0C9AE0071BF1A /* Build configuration list for PBXNativeTarget "AiDenoPlugin" */ = {
+		508817D709F0C9AE0071BF1A /* Build configuration list for PBXNativeTarget "AiWebGPUPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				508817D809F0C9AE0071BF1A /* debug */,

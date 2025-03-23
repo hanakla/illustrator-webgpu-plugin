@@ -11,10 +11,9 @@ import {
   toColorCode,
 } from "./_utils.ts";
 
-// 翻訳テキスト
 const t = createTranslator({
   en: {
-    title: "Bitonic Pixel Sort",
+    title: "[WIP] Bitonic Pixel Sort",
     direction: "Direction",
     vertical: "Vertical",
     horizontal: "Horizontal",
@@ -25,7 +24,7 @@ const t = createTranslator({
     invertLight: "Invert Light",
   },
   ja: {
-    title: "バイトニックピクセルソート",
+    title: "[WIP] バイトニックピクセルソート",
     direction: "方向",
     vertical: "縦",
     horizontal: "横",

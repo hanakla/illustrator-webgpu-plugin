@@ -30,6 +30,9 @@ extern "C" {
     ai::UnicodeString locale;
     sAIUser->GetAILanguageCode(locale);
 
-    return suai::str::toUtf8StdString(locale).c_str();
+    std::cout << "locale: " << suai::str::toUtf8StdString(locale) << std::endl;
+
+    const char* localeStr = suai::str::strdup(locale.as_UTF8().c_str());
+    return localeStr;
   }
 }

@@ -36,6 +36,7 @@ namespace ImGuiModal {
    public:
     virtual ModalStatusCode runModal(
         const json&           renderTree,
+        std::string           title,
         std::tuple<int, int>* lastPosition,
         OnChangeCallback      onChange,
         OnFireEventCallback   onFireEventCallback

@@ -50,6 +50,7 @@ using json = nlohmann::json;
   MyImGuiView*  imGuiView;
 }
 - (instancetype)initWithWindow:(NSWindow*)window;
+- (void)setTitle:(std::string)title;
 - (void)updateRenderTree:(json)renderTree;
 - (ModalStatusCode)runModal:(json)renderTree
                lastPosition:(std::tuple<int, int>*)lastPosition
@@ -78,7 +79,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
                     backing:NSBackingStoreBuffered
                       defer:YES];
     // window.titlebarAppearsTransparent = true;
-    window.titleVisibility = NSWindowTitleHidden;
+    // window.titleVisibility = NSWindowTitleHidden;
 
     NSSize frameDifference = NSMakeSize(
         window.frame.size.width - window.contentLayoutRect.size.width,
@@ -97,11 +98,14 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 
   ModalStatusCode runModal(
       const json&                     renderTree,
+      std::string                     title,
       std::tuple<int, int>*           lastPosition,
       ImGuiModal::OnChangeCallback    onChange,
       ImGuiModal::OnFireEventCallback onFireEventCallback
   ) override {
     ModalStatusCode result = ModalStatusCode::None;
+
+    [this->controller setTitle:title];
 
     result = [this->controller runModal:renderTree
                            lastPosition:lastPosition
@@ -187,16 +191,6 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   //  config.FontNo = 1;
   config.MergeMode = false;
 
-  // Specify CJK ranges
-  static const ImWchar ranges[] = {
-      0x0020, 0x00FF,  // 基本ラテン + ラテン補助
-      0x3000, 0x30FF,  // CJK記号・句読点 + 平仮名・片仮名
-      0x31F0, 0x31FF,  // 片仮名拡張
-      0xFF00, 0xFFEF,  // 半角・全角形
-      0x4e00, 0x9FAF,  // CJK統合漢字
-      0,
-  };
-
   std::string fontPath = ImGuiModal::getSystemFontPath();
   ImFont*     font     = io.Fonts->AddFontFromFileTTF(
       fontPath.c_str(), 12.0f, &config, io.Fonts->GetGlyphRangesJapanese()
@@ -209,6 +203,10 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   }
 
   return [super initWithWindow:window];
+}
+
+- (void)setTitle:(std::string)title {
+  [self.window setTitle:[NSString stringWithUTF8String:title.c_str()]];
 }
 
 - (void)updateRenderTree:(json)renderTree {
@@ -386,6 +384,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   [commandBuffer presentDrawable:self.currentDrawable];
   [commandBuffer commit];
 
+  std::cout << "Window size: " << windowSize.x << ", " << windowSize.y << std::endl;
+
   // Update window size based on ImGui content
   if (!self->isFirstSized && ImGui::GetFrameCount() > 1) {
     self->isFirstSized = true;
@@ -397,6 +397,8 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
         self.window.frame.origin.x, self.window.frame.origin.y,
         MAX(windowSize.x, kMyDialogWidth), MAX(windowSize.y, kMyDialogWidth)
     );
+
+    std::cout << "Window sized: " << windowSize.x << ", " << windowSize.y << std::endl;
 
     [[self window] setFrame:[[self window] frameRectForContentRect:winFrame] display:YES];
   }

@@ -38,7 +38,7 @@ import { createGPUDevice } from "./_shared.ts";
 // Translation texts for the plugin interfaces
 const t = createTranslator({
   en: {
-    title: "Kaleidoscope",
+    title: "[WIP] Kaleidoscope",
     segments: "Segments",
     pattern: "Pattern",
     rotation: "Rotation",
@@ -66,7 +66,7 @@ const t = createTranslator({
     rotational: "Rotational",
   },
   ja: {
-    title: "万華鏡",
+    title: "[WIP] 万華鏡",
     segments: "分割数",
     pattern: "パターン",
     rotation: "回転",

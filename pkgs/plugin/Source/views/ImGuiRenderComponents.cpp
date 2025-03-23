@@ -47,13 +47,16 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     std::optional<std::string> key = getOptional<std::string>(node["key"]);
 
     if (type == "group") {
-      std::string direction = node["direction"].get<std::string>();
+      std::string         direction = node["direction"];
+      std::optional<bool> disabled  = node["disabled"];
 
       ImGui::BeginGroup();
+      if (disabled) { ui::styleStack.beginDisabled(); }
       for (json& child : node["children"]) {
         renderNode(child);
         if (direction == "row") ImGui::SameLine();
       }
+      if (disabled) { ui::styleStack.endDisabled(); }
       ImGui::EndGroup();
 
     } else if (type == "text") {

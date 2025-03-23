@@ -67,6 +67,10 @@ async function toBlob(
   }
 }
 
+export function createCanvas(width: number, height: number) {
+  return createCanvasImpl(width, height);
+}
+
 export type ImageDataLike = {
   data: Uint8ClampedArray;
   width: number;
@@ -102,6 +106,9 @@ export async function resizeImageToNearestAligned256Resolution(
   return resized;
 }
 
+/**
+ * Add right and bottom padding to the image data to align the resolution to the nearest 256.
+ */
 export async function addWebGPUAlignmentPadding(
   imageDataLike: ImageDataLike
 ): Promise<ImageDataLike> {
@@ -117,8 +124,8 @@ export async function addWebGPUAlignmentPadding(
 
   const canvas = await createCanvasImpl(newWidth, newHeight);
   const ctx = canvas.getContext("2d")!;
-  const imgData = await createImageDataImpl(imageDataLike.data, width, height);
 
+  const imgData = await createImageDataImpl(imageDataLike.data, width, height);
   ctx.putImageData(imgData, 0, 0);
 
   return ctx.getImageData(0, 0, newWidth, newHeight);
