@@ -27,6 +27,7 @@ import { downsampler } from "./live-effects/downsampler.ts";
 import { waveDistortion } from "./live-effects/wave-distortion.ts";
 import { selectiveColorCorrection } from "./live-effects/selective-color-correction.ts";
 import { dataMosh } from "./live-effects/data-mosh.ts";
+import { gaussianBlur } from "./live-effects/gaussian-blur.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
@@ -39,6 +40,7 @@ const allPlugins: AIPlugin<any, any>[] = [
   dithering,
   downsampler,
   fluidDistortion,
+  gaussianBlur,
   glitch,
   halftone,
   // innerGlow,

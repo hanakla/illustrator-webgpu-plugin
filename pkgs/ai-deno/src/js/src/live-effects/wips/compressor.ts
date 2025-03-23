@@ -1,13 +1,13 @@
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin } from "../types.ts";
-import { createTranslator } from "../ui/locale.ts";
-import { ui } from "../ui/nodes.ts";
-import { createGPUDevice } from "./_shared.ts";
+import { StyleFilterFlag } from "../../types.ts";
+import { definePlugin } from "../../types.ts";
+import { createTranslator } from "../../ui/locale.ts";
+import { ui } from "../../ui/nodes.ts";
+import { createGPUDevice } from "../_shared.ts";
 import {
   lerp,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./_utils.ts";
+} from "../_utils.ts";
 
 const t = createTranslator({
   en: {

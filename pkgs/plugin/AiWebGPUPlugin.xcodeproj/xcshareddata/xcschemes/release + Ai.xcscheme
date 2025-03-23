@@ -25,7 +25,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "508817D309F0C9AD0071BF1A"
-               BuildableName = "IllustratorDeno.aip"
+               BuildableName = "AiWebGPUPlugin.aip"
                BlueprintName = "AiWebGPUPlugin"
                ReferencedContainer = "container:AiWebGPUPlugin.xcodeproj">
             </BuildableReference>
@@ -65,7 +65,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "508817D309F0C9AD0071BF1A"
-            BuildableName = "IllustratorDeno.aip"
+            BuildableName = "AiWebGPUPlugin.aip"
             BlueprintName = "AiWebGPUPlugin"
             ReferencedContainer = "container:AiWebGPUPlugin.xcodeproj">
          </BuildableReference>

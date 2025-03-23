@@ -1,13 +1,13 @@
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
-import { createTranslator } from "../ui/locale.ts";
-import { ui } from "../ui/nodes.ts";
+import { StyleFilterFlag } from "../../types.ts";
+import { definePlugin, ColorRGBA } from "../../types.ts";
+import { createTranslator } from "../../ui/locale.ts";
+import { ui } from "../../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
-} from "./_utils.ts";
+} from "../_utils.ts";
 
 // RMIT: Translation texts for the plugin interfaces
 const t = createTranslator({

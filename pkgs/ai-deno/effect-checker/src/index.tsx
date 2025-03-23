@@ -4,9 +4,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { useEventCallback, useStableEvent, useThroughRef } from "./hooks.ts";
 
-import { blurEffect } from "~ext/live-effects/blurEffect.ts";
+import { gaussianBlur } from "~ext/live-effects/gaussian-blur.ts";
 import { pixelSort } from "~ext/live-effects/pixel-sort.ts";
-import { kirakiraGlow } from "~ext/live-effects/kirakira-glow.ts";
+import { kirakiraBlur } from "~ext/live-effects/kirakira-blur.ts";
 import { glitch } from "~ext/live-effects/glitch.ts";
 import { coastic } from "~ext/live-effects/coastic.ts";
 import { dithering } from "~ext/live-effects/dithering.ts";
@@ -15,10 +15,7 @@ import { directionalBlur } from "~ext/live-effects/directional-blur.ts";
 import { halftone } from "~ext/live-effects/halftone.ts";
 import { testBlueFill } from "~ext/live-effects/test-blue-fill.ts";
 import { innerGlow } from "~ext/live-effects/inner-glow.ts";
-import { imageReverbGPU } from "~ext/live-effects/image-reverb-gpu.ts";
-import { imageReverb } from "~ext/live-effects/image-reverb.ts";
 import { outline } from "~ext/live-effects/outline.ts";
-import { compressor } from "~ext/live-effects/compressor.ts";
 import { fluidDistortion } from "~ext/live-effects/fluid-distortion.ts";
 import { kaleidoscope } from "~ext/live-effects/kaleidoscope.ts";
 import { downsampler } from "~ext/live-effects/downsampler.ts";
@@ -27,7 +24,14 @@ import { dataMosh } from "~ext/live-effects/data-mosh.ts";
 import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
 import { selectiveColorCorrection } from "~ext/live-effects/selective-color-correction.ts";
 
+import { compressor } from "~ext/live-effects/wips/compressor.ts";
+import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
+import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
+import { exprTube } from "~ext/live-effects/wips/tube.ts";
+
 const plugins = [
+  exprTube,
+  gaussianBlur,
   dithering,
   selectiveColorCorrection,
   vhsInterlace,
@@ -40,14 +44,12 @@ const plugins = [
   coastic,
   compressor,
   imageReverbGPU,
-  kirakiraGlow,
+  kirakiraBlur,
   glitch,
   pixelSort,
   outline,
-  // blurEffect,
   // innerGlow,
   testBlueFill,
-
   chromaticAberration,
   directionalBlur,
 ];
@@ -245,7 +247,9 @@ function Controls({
       // ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
       console.timeEnd(timeLabel);
 
-      animId = requestAnimationFrame(loop);
+      setTimeout(() => {
+        animId = requestAnimationFrame(loop);
+      }, 800);
     });
 
     return () => {

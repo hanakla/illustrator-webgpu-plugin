@@ -1,8 +1,8 @@
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
-import { createTranslator } from "../ui/locale.ts";
-import { ui } from "../ui/nodes.ts";
-import { lerp } from "./_utils.ts";
+import { StyleFilterFlag } from "../../types.ts";
+import { definePlugin, ColorRGBA } from "../../types.ts";
+import { createTranslator } from "../../ui/locale.ts";
+import { ui } from "../../ui/nodes.ts";
+import { lerp } from "../_utils.ts";
 
 //// If you read, please remove this comment block
 // This is a template for creating a new plugin.
