@@ -68,13 +68,14 @@ try {
   await Promise.all(
     Object.values(allEffectPlugins).map(
       async (effect: AIEffectPlugin<any, any>) => {
-        return retry(3, async () => {
+        return retry(6, async () => {
           try {
             effectInits.set(
               effect,
               (await effect.liveEffect.initLiveEffect?.()) ?? {}
             );
           } catch (e) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
             throw new Error(
               `[effect: ${effect.id}] Failed to initialize effect`,
               {
@@ -445,8 +446,6 @@ async function retry(maxRetries: number, fn: () => any): Promise<void> {
       errors.push(e);
       retries++;
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 20));
   }
 
   throw new AggregateError(errors, "All retries failed");

@@ -391,7 +391,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   [commandBuffer presentDrawable:self.currentDrawable];
   [commandBuffer commit];
 
-  std::cout << "Window size: " << windowSize.x << ", " << windowSize.y << std::endl;
+  // std::cout << "Window size: " << windowSize.x << ", " << windowSize.y << std::endl;
 
   // Update window size based on ImGui content
   if (!self->isFirstSized && ImGui::GetFrameCount() > 1) {

@@ -71,35 +71,15 @@ const t = createTranslator({
   },
 });
 
-// RGB to HSV 変換ヘルパー関数
-const rgbToHsv = (r: number, g: number, b: number) => {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const d = max - min;
-
-  let h = 0;
-  const s = max === 0 ? 0 : d / max;
-  const v = max;
-
-  if (max !== min) {
-    switch (max) {
-      case r:
-        h = (g - b) / d + (g < b ? 6 : 0);
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      case b:
-        h = (r - g) / d + 4;
-        break;
-    }
-    h /= 6;
-  }
-
-  return { h, s, v };
+const defaultCondition = {
+  targetHue: 0.0,
+  hueRange: 180.0, // 180以上で「すべての色相」を意味する
+  saturationMin: 0.0,
+  saturationMax: 1.0,
+  brightnessMin: 0.0,
+  brightnessMax: 1.0,
 };
 
-// プラグイン定義
 export const selectiveColorCorrection = definePlugin({
   id: "color-correction-v1",
   title: t("title"),
@@ -130,7 +110,7 @@ export const selectiveColorCorrection = definePlugin({
       },
 
       // 条件を表示するかどうか
-      showConditions: {
+      useCondition: {
         type: "bool",
         default: false,
       },
@@ -178,6 +158,11 @@ export const selectiveColorCorrection = definePlugin({
         type: "real",
         default: 0.0, // -1〜1の範囲 (0がニュートラル)
       },
+    },
+    onAdjustColors: (params, adjustColor) => {
+      const dummy: ColorRGBA = { r: 1, g: 0, b: 0, a: 0 };
+      // TODO: Implement color adjustment
+      return params;
     },
     onEditParameters: (params) => {
       // パラメータの正規化
@@ -237,7 +222,6 @@ export const selectiveColorCorrection = definePlugin({
       return normalizedParams;
     },
     onScaleParams(params, scaleFactor) {
-      // スケールに影響しないパラメータはそのまま
       return params;
     },
     onInterpolate: (paramsA, paramsB, t) => {
@@ -245,8 +229,7 @@ export const selectiveColorCorrection = definePlugin({
       const result = {
         blendMode: t < 0.5 ? paramsA.blendMode : paramsB.blendMode,
         previewMask: t < 0.5 ? paramsA.previewMask : paramsB.previewMask,
-        showConditions:
-          t < 0.5 ? paramsA.showConditions : paramsB.showConditions,
+        useCondition: t < 0.5 ? paramsA.useCondition : paramsB.useCondition,
 
         // 数値パラメータの線形補間
         featherEdges: lerp(paramsA.featherEdges, paramsB.featherEdges, t),
@@ -278,16 +261,6 @@ export const selectiveColorCorrection = definePlugin({
     },
 
     renderUI: (params, setParam) => {
-      // リセットボタンスタイル
-      const resetButtonStyle = {
-        border: "1px solid #ccc",
-        borderRadius: "3px",
-        padding: "2px 6px",
-        marginLeft: "8px",
-        fontSize: "12px",
-      };
-
-      // 調整UIコンポーネント
       const adjustmentsComponent = ui.group({ direction: "col" }, [
         // 色相シフト
         ui.group({ direction: "col" }, [
@@ -307,7 +280,6 @@ export const selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ hueShift: 0 });
               },
@@ -333,7 +305,6 @@ export const selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ saturationScale: 0 });
               },
@@ -359,7 +330,6 @@ export const selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ brightnessScale: 0 });
               },
@@ -385,7 +355,6 @@ export const selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ contrast: 0 });
               },
@@ -502,9 +471,8 @@ export const selectiveColorCorrection = definePlugin({
 
       // prettier-ignore
       return ui.group({ direction: "col" }, [
-        // グローバル設定
         ui.group({ direction: "col" }, [
-          ui.group({ direction: "row", justifyContent: "space-between" }, [
+          ui.group({ direction: "row" }, [
             ui.text({ text: t("blendMode") }),
             ui.select({
               key: "blendMode",
@@ -519,35 +487,33 @@ export const selectiveColorCorrection = definePlugin({
 
         ui.separator(),
 
-        // 調整セクション（常に表示）
         ui.text({ text: t("adjustments") }),
         adjustmentsComponent,
 
         ui.separator(),
 
-        // 条件表示切り替えチェックボックス
         ui.checkbox({
-          key: "showConditions",
-          value: params.showConditions,
+          key: "useCondition",
+          value: params.useCondition,
           label: t("conditionTitle"),
-          onChange: (e) => {
-            if (!e.value) {
-              // チェックが外れたとき、選択条件をデフォルト値（すべての色）にリセット
-              setParam({
-                targetHue: 0.0,
-                hueRange: 180.0,   // 180以上で「すべての色相」を意味する
-                saturationMin: 0.0,
-                saturationMax: 1.0,
-                brightnessMin: 0.0,
-                brightnessMax: 1.0,
-                showConditions: false
-              });
-            }
-          }
+          // onChange: (e) => {
+          //   if (!e.value) {
+          //     // チェックが外れたとき、選択条件をデフォルト値（すべての色）にリセット
+          //     setParam({
+          //       targetHue: 0.0,
+          //       hueRange: 180.0,   // 180以上で「すべての色相」を意味する
+          //       saturationMin: 0.0,
+          //       saturationMax: 1.0,
+          //       brightnessMin: 0.0,
+          //       brightnessMax: 1.0,
+          //       useCondition: false
+          //     });
+          //   }
+          // }
         }),
 
         // 条件セクション（チェックボックスがオンの場合のみ表示）
-        params.showConditions ? colorConditionComponent : null,
+        params.useCondition ? colorConditionComponent : null,
       ]);
     },
     initLiveEffect: async () => {
@@ -870,17 +836,14 @@ export const selectiveColorCorrection = definePlugin({
         featherEdges: params.featherEdges,
         previewMask: params.previewMask ? 1 : 0,
         condition: {
-          targetHue: params.targetHue,
-          hueRange: params.hueRange,
-          saturationMin: params.saturationMin,
-          saturationMax: params.saturationMax,
-          brightnessMin: params.brightnessMin,
-          brightnessMax: params.brightnessMax,
+          ...(params.useCondition ? params : defaultCondition),
+
           // JSの-1〜1の値をシェーダーで使う0〜2の値に変換
           hueShift: params.hueShift,
           saturationScale: params.saturationScale + 1.0, // -1〜1 → 0〜2
           brightnessScale: params.brightnessScale + 1.0, // -1〜1 → 0〜2
           contrast: params.contrast + 1.0, // -1〜1 → 0〜2
+
           _padding1: 0,
           _padding2: 0,
         },

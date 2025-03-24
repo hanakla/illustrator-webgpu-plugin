@@ -36,7 +36,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 ) {
   ModalStatusCode resultStatus = ModalStatusCode::None;
 
-  std::cout << "renderTree: " << renderTree.dump() << std::endl;
+  // std::cout << "renderTree: " << renderTree.dump() << std::endl;
 
   std::function<void(json)> renderNode = [&](json node) -> void {
     if (node.is_null() || !node.contains("type")) return;
@@ -67,7 +67,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       ImGui::Text("%s", text.c_str());
 
     } else if (type == "button") {
-      std::string label = node["text"];
+      std::string label = node["text"].get<std::string>() + idStr;
 
       ui::styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
       ui::styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
@@ -190,7 +190,8 @@ ModalStatusCode AiDenoImGuiRenderComponents(
         if (ImGui::ColorPicker4(
                 (std::string(id) + "-colorpicker").c_str(), channels,
                 ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float |
-                    ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_DisplayHSV
+                    ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_DisplayHSV |
+                    ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview
             )) {
           json jsonValue = json({
               {"r", channels[0]},
@@ -216,7 +217,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       }
 
     } else if (type == "checkbox") {
-      std::string label = node["label"].get<std::string>();
+      std::string label = node["label"].get<std::string>() + idStr;
       bool        value = node["value"].get<bool>();
 
       if (ImGui::Checkbox(label.c_str(), &value)) {
