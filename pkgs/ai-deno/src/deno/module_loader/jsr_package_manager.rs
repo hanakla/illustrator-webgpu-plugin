@@ -346,6 +346,11 @@ impl JsrPackageManager {
     ) -> Result<(), JsErrorBox> {
         let base_dir = self.compute_package_dir(&nv.name, Some(&nv.version.to_string().as_str()));
 
+        if base_dir.exists() {
+            // TODO: Offline Support
+            return Ok(());
+        }
+
         self.sys.fs_create_dir_all(&base_dir).map_err(|e| {
             JsErrorBox::generic(format!("Failed to create package directory: {}", e))
         })?;

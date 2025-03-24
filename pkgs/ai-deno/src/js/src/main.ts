@@ -5,17 +5,16 @@ import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
 import { homedir } from "node:os";
 
-// import { blurEffect } from "./live-effects/blurEffect.ts";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
 import { ChangeEventHandler, ui, UINode } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/directional-blur.ts";
-import { kirakiraGlow } from "./live-effects/kirakira-glow.ts";
+import { kirakiraBlur } from "./live-effects/kirakira-blur.ts";
 import { dithering } from "./live-effects/dithering.ts";
 import { pixelSort } from "./live-effects/pixel-sort.ts";
 import { glitch } from "./live-effects/glitch.ts";
 import { logger } from "./logger.ts";
-import { outlineEffect } from "./live-effects/outline.ts";
+import { outline } from "./live-effects/outline.ts";
 import { innerGlow } from "./live-effects/inner-glow.ts";
 import { cropImageData, resizeImageData } from "./live-effects/_utils.ts";
 import { coastic } from "./live-effects/coastic.ts";
@@ -32,9 +31,8 @@ import { gaussianBlur } from "./live-effects/gaussian-blur.ts";
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allPlugins: AIPlugin<any, any>[] = [
-  // blurEffect,
-  coastic,
   chromaticAberration,
+  coastic,
   dataMosh,
   directionalBlur,
   dithering,
@@ -45,8 +43,8 @@ const allPlugins: AIPlugin<any, any>[] = [
   halftone,
   // innerGlow,
   kaleidoscope,
-  kirakiraGlow,
-  outlineEffect,
+  kirakiraBlur,
+  outline,
   // pixelSort,
   // randomNoiseEffect,
   selectiveColorCorrection,
@@ -97,9 +95,6 @@ try {
     _AI_DENO_.op_ai_alert("[AiDeno] Failed to initialize effects\n\n" + logs);
   }
 }
-
-console.log(_AI_DENO_.op_ai_deno_get_user_locale());
-console.log(_AI_DENO_.op_ai_get_plugin_version());
 
 export async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);

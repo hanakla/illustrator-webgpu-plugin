@@ -56,7 +56,7 @@ using json = nlohmann::json;
                lastPosition:(std::tuple<int, int>*)lastPosition
                    onChange:(ImGuiModal::OnChangeCallback)onChange
                 onFireEvent:(ImGuiModal::OnFireEventCallback)onFireEventCallback;
-- (void)restoreWindowPosition:(NSWindow*)window pos:(std::tuple<int, int>)pos;
+- (void)restoreWindowPosition:(std::tuple<int, int>*)pos;
 - (void)releaseDialog;
 @end
 
@@ -105,12 +105,19 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   ) override {
     ModalStatusCode result = ModalStatusCode::None;
 
-    [this->controller setTitle:title];
+    try {
+      [this->controller setTitle:title];
 
-    result = [this->controller runModal:renderTree
-                           lastPosition:lastPosition
-                               onChange:onChange
-                            onFireEvent:onFireEventCallback];
+      result = [this->controller runModal:renderTree
+                             lastPosition:lastPosition
+                                 onChange:onChange
+                              onFireEvent:onFireEventCallback];
+    } catch (...) {
+      [this->controller releaseDialog];
+      this->controller = nullptr;
+      throw;
+    }
+
     [this->controller releaseDialog];
     this->controller = nullptr;
 

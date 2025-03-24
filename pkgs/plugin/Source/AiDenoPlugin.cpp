@@ -102,13 +102,11 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
         "%s%s", EFFECT_PREFIX.c_str(), effectDef["id"].get<std::string>().c_str()
     ));
 
-    // char *title =
-    // ai::UnicodeString(effectDef["title"].get<std::string>().c_str(),
-    // kAIUTF8CharacterEncoding).as_UTF8().data();
-    effect.title = suai::str::strdup(
-        suai::str::toAiUnicodeStringUtf8(effectDef["title"].get<std::string>())
-    );
-    // effect.title = title;
+    char title[128];
+    suai::str::toAiUnicodeStringUtf8(effectDef["title"].get<std::string>())
+        .as_Platform(title, 128);
+
+    effect.title          = title;
     effect.majorVersion   = effectDef["version"]["major"].get<int>();
     effect.minorVersion   = effectDef["version"]["minor"].get<int>();
     effect.prefersAsInput = AIStyleFilterPreferredInputArtType::kInputArtDynamic;
@@ -121,9 +119,7 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
     AddLiveEffectMenuData menu;
     menu.category =
         suai::str::strdup(ai::UnicodeString("Deno Effectors", kAIUTF8CharacterEncoding));
-    menu.title = suai::str::strdup(
-        suai::str::toAiUnicodeStringUtf8(effectDef["title"].get<std::string>())
-    );
+    menu.title   = title;
     menu.options = 0;
 
     csb("title", effect.title);
@@ -162,7 +158,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
   // csl("art JSON: %s", suai::art::serialize::ArtToJSON(art).dump(2).c_str());
   // Test calling for checking it works
-  suai::art::serialize::ArtToJSON(art);
+  //  suai::art::serialize::ArtToJSON(art);
 
   PluginParams params;
   error = this->getDictionaryValues(
@@ -568,7 +564,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
           }
         };
 
-    ImGuiModal::OnChangeCallback modaloOnChangeCallback =
+    ImGuiModal::OnChangeCallback modalOnChangeCallback =
         [&pluginParams, &isModalOpened, &isPreviewed, &error, &message, &currentParams,
          &nodeTree, &modal, this](json patch) {
           if (isModalOpened) isPreviewed = true;
@@ -618,7 +614,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
           }
         };
 
-    modaloOnChangeCallback(initialParams);
+    modalOnChangeCallback(initialParams);
 
     PluginPreferences pref = this->getPreferences(&error);
     CHKERR();
@@ -633,7 +629,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     isModalOpened = true;
     csl("Opening modal: %s", nodeTree.dump().c_str());
     ModalStatusCode dialogResult = modal->runModal(
-        nodeTree, effectTitle, lastPosition, modaloOnChangeCallback,
+        nodeTree, effectTitle, lastPosition, modalOnChangeCallback,
         modalOnFireEventCallback
     );
 
@@ -668,8 +664,11 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     }
   } catch (ai::Error& ex) {
     error = ex;
-    csl("Error: %s (code: %s [raw: %d])", ex.what(), stringify_ASErr(error).c_str(),
+    cse("Error: %s (code: %s [raw: %d])", ex.what(), stringify_ASErr(error).c_str(),
         error);
+  } catch (std::exception& ex) {
+    error = kCantHappenErr;
+    cse("Error: %s", ex.what());
   } catch (...) { error = kCantHappenErr; }
 
   return error;

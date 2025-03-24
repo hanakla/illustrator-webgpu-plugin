@@ -36,8 +36,10 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 ) {
   ModalStatusCode resultStatus = ModalStatusCode::None;
 
+  std::cout << "renderTree: " << renderTree.dump() << std::endl;
+
   std::function<void(json)> renderNode = [&](json node) -> void {
-    if (!node.contains("type")) return;
+    if (node.is_null() || !node.contains("type")) return;
 
     std::string type   = node["type"];
     std::string nodeId = node["nodeId"];
@@ -48,15 +50,15 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
     if (type == "group") {
       std::string         direction = node["direction"];
-      std::optional<bool> disabled  = node["disabled"];
+      std::optional<bool> disabled  = getOptional<bool>(node["disabled"]);
 
       ImGui::BeginGroup();
-      if (disabled) { ui::styleStack.beginDisabled(); }
+      if (disabled.value_or(false)) { ui::styleStack.beginDisabled(); }
       for (json& child : node["children"]) {
         renderNode(child);
         if (direction == "row") ImGui::SameLine();
       }
-      if (disabled) { ui::styleStack.endDisabled(); }
+      if (disabled.value_or(false)) { ui::styleStack.endDisabled(); }
       ImGui::EndGroup();
 
     } else if (type == "text") {

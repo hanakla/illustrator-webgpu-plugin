@@ -389,7 +389,10 @@ namespace suai {
     std::string getTitle() {
       const char* effectTitle = NULL;
       sAILiveEffect->GetLiveEffectTitle(effectHandle, &effectTitle);
-      return str::toUtf8StdString(effectTitle);
+
+      ai::UnicodeString title = ai::UnicodeString(effectTitle, kAIPlatformCharacterEncoding);
+
+      return title.as_UTF8().data();
     }
   };
 

@@ -48,6 +48,16 @@ void csl(const char* format, Args... args) {
   std::cout << indentLines(ss.str(), "\033[1m[deno_ai(C)]\033[0m ") << std::endl;
 }
 
+template <typename... Args>
+void cse(const char* format, Args... args) {
+  if (!AI_DENO_DEBUG) return;
+
+  std::ostringstream ss;
+  ss << string_format(format, args...) << std::endl;
+
+  std::cerr << indentLines(ss.str(), "\033[1m[deno_ai(C)]\033[0m ") << std::endl;
+}
+
 // print as hex binary json array
 void csb(const char* label, const char* value) {
   if (!AI_DENO_DEBUG) return;
