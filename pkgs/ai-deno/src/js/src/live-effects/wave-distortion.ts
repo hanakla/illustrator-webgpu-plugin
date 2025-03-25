@@ -65,7 +65,7 @@ export const waveDistortion = definePlugin({
         default: 0.0,
       },
       crossWave: {
-        type: "boolean",
+        type: "bool",
         default: false,
       },
       time: {
@@ -118,9 +118,6 @@ export const waveDistortion = definePlugin({
             ui.slider({ key: "angleValue", dataType: 'float', min: 0, max: 360, value: params.angleValue }),
             ui.numberInput({ key: "angleValue", dataType: 'float', value: params.angleValue }),
           ]),
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t("presets") }),
           ui.group({ direction: "row" }, [
             ui.button({ text: t("horizontal"), onClick: () => setParam({ angleValue: 0 }) }),
             ui.button({ text: t("vertical"), onClick: () => setParam({ angleValue: 90 }) }),
@@ -128,8 +125,7 @@ export const waveDistortion = definePlugin({
           ]),
         ]),
         ui.group({ direction: "row" }, [
-          ui.checkbox({ key: "crossWave", value: params.crossWave }),
-          ui.text({ text: t("crossWave") }),
+          ui.checkbox({ key: "crossWave", label: t("crossWave"), value: params.crossWave }),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("time") }),

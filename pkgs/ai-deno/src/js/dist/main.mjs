@@ -17,54 +17,85 @@ function definePlugin(plugin) {
 
 // src/js/src/ui/nodes.ts
 var ui = {
-  group: ({ direction = "row" }, children) => ({
+  group: ({ direction = "row" }, children) => fillNull({
     type: "group",
     direction,
     children
   }),
-  button: (props) => ({
-    ...props,
+  button: (props) => fillNull({
+    text: props.text,
+    onClick: props.onClick,
     type: "button"
   }),
-  slider: (props) => ({
-    ...props,
+  slider: (props) => fillNull({
+    key: props.key,
+    dataType: props.dataType,
+    min: props.min,
+    max: props.max,
+    value: props.value,
+    onChange: props.onChange,
     type: "slider"
   }),
-  checkbox: (props) => ({
-    ...props,
+  checkbox: (props) => fillNull({
+    key: props.key,
+    label: props.label,
+    value: props.value,
+    onChange: props.onChange,
     type: "checkbox"
   }),
-  textInput: (props) => ({
-    ...props,
+  textInput: (props) => fillNull({
+    key: props.key,
+    value: props.value,
+    onChange: props.onChange,
     type: "textInput"
   }),
-  numberInput: (props) => ({
-    ...props,
+  numberInput: (props) => fillNull({
+    key: props.key,
+    dataType: props.dataType,
+    min: props.min,
+    max: props.max,
+    step: props.step,
+    value: props.value,
+    onChange: props.onChange,
     type: "numberInput"
   }),
-  colorInput: (props) => ({
-    ...props,
+  colorInput: (props) => fillNull({
+    key: props.key,
+    value: props.value,
+    onChange: props.onChange,
     type: "colorInput"
   }),
-  text: (props) => ({
-    ...props,
+  text: (props) => fillNull({
+    text: props.text,
     size: props.size || "normal",
     type: "text"
   }),
-  select: (props) => ({
-    ...props,
+  select: (props) => fillNull({
+    key: props.key,
+    options: props.options,
+    value: props.value,
+    onChange: props.onChange,
     selectedIndex: props.options.findIndex(
       (option) => option.value === props.value
     ),
     type: "select"
   }),
-  separator: () => ({
+  separator: () => fillNull({
     type: "separator"
   })
 };
+function fillNull(obj) {
+  Object.keys(obj).forEach((key) => {
+    const _k = key;
+    if (obj[_k] === null) {
+      obj[_k] = obj[_k] ?? null;
+    }
+  });
+  return obj;
+}
 
 // src/js/src/ui/locale.ts
-var texts = (t15) => t15;
+var texts = (t17) => t17;
 function createTranslator(texts2) {
   const locale = getLocale(Object.keys(texts2), "en");
   return (key, params = {}) => {
@@ -179,8 +210,8 @@ async function toPng(imgData) {
   ctx.putImageData(img, 0, 0);
   return toBlob(canvas, "image/png", 100);
 }
-function lerp(a, b, t15) {
-  return a + (b - a) * t15;
+function lerp(a, b, t17) {
+  return a + (b - a) * t17;
 }
 function parseColorCode(color) {
   const hex = (color.startsWith("#") ? color.slice(1) : color).toUpperCase();
@@ -309,28 +340,38 @@ var t = createTranslator(
     en: {
       title: "Chromatic Aberration V1",
       colorMode: "Color Mode",
+      shiftType: "Shift Type",
+      shiftTypeMove: "Move",
+      shiftTypeZoom: "Zoom",
       strength: "Strength",
       angle: "Angle",
       opacity: "Opacity",
       blendMode: "Blend Mode",
       blendOver: "Over",
       blendeUnder: "Under",
-      debuggingParameters: "Debugging parameters",
-      padding: "Padding",
-      pastelMode: "Pastel"
+      pastelMode: "Pastel",
+      useFocusPoint: "Use Focus Point",
+      focusPointX: "Focus Point X",
+      focusPointY: "Focus Point Y",
+      focusGradient: "Focus Gradient"
     },
     ja: {
       title: "\u8272\u53CE\u5DEE V1",
       colorMode: "\u30AB\u30E9\u30FC\u30E2\u30FC\u30C9",
+      shiftType: "\u305A\u308C\u30BF\u30A4\u30D7",
+      shiftTypeMove: "\u79FB\u52D5",
+      shiftTypeZoom: "\u30BA\u30FC\u30E0",
       strength: "\u5F37\u5EA6",
       angle: "\u89D2\u5EA6",
       opacity: "\u4E0D\u900F\u660E\u5EA6",
       blendMode: "\u30D6\u30EC\u30F3\u30C9\u30E2\u30FC\u30C9",
       blendOver: "\u4E0A\u306B\u5408\u6210",
       blendeUnder: "\u4E0B\u306B\u5408\u6210",
-      debuggingParameters: "\u30C7\u30D0\u30C3\u30B0\u30D1\u30E9\u30E1\u30FC\u30BF",
-      padding: "\u30D1\u30C7\u30A3\u30F3\u30B0",
-      pastelMode: "\u30D1\u30B9\u30C6\u30EB"
+      pastelMode: "\u30D1\u30B9\u30C6\u30EB",
+      useFocusPoint: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u4F7F\u7528",
+      focusPointX: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8X",
+      focusPointY: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8Y",
+      focusGradient: "\u30D5\u30A9\u30FC\u30AB\u30B9\u52FE\u914D"
     }
   })
 );
@@ -346,8 +387,13 @@ var chromaticAberration = definePlugin({
     paramSchema: {
       colorMode: {
         type: "string",
-        enum: ["rgb", "cmyk", "pastel"],
+        enum: ["rgb", "cmyk", "pastel", "rc"],
         default: "rgb"
+      },
+      shiftType: {
+        type: "string",
+        enum: ["move", "zoom"],
+        default: "move"
       },
       strength: {
         type: "real",
@@ -365,23 +411,53 @@ var chromaticAberration = definePlugin({
         type: "string",
         enum: ["over", "under"],
         default: "under"
+      },
+      useFocusPoint: {
+        type: "bool",
+        default: false
+      },
+      focusPointX: {
+        type: "real",
+        default: 0.5
+      },
+      focusPointY: {
+        type: "real",
+        default: 0.5
+      },
+      focusGradient: {
+        type: "real",
+        default: 0.5
       }
     },
     onEditParameters: (params) => params,
     onAdjustColors: (params, adjustColor) => params,
     onInterpolate: (params, paramsB, progress) => ({
       colorMode: params.colorMode,
+      shiftType: params.shiftType,
       strength: lerp(params.strength, paramsB.strength, progress),
       angle: lerp(params.angle, paramsB.angle, progress),
       opacity: lerp(params.opacity, paramsB.opacity, progress),
-      blendMode: params.blendMode
+      blendMode: params.blendMode,
+      useFocusPoint: params.useFocusPoint,
+      focusPointX: lerp(params.focusPointX, paramsB.focusPointX, progress),
+      focusPointY: lerp(params.focusPointY, paramsB.focusPointY, progress),
+      focusGradient: lerp(
+        params.focusGradient,
+        paramsB.focusGradient,
+        progress
+      )
     }),
     onScaleParams: (params, scale) => ({
       colorMode: params.colorMode,
+      shiftType: params.shiftType,
       strength: params.strength * scale,
       angle: params.angle,
       opacity: params.opacity,
-      blendMode: params.blendMode
+      blendMode: params.blendMode,
+      useFocusPoint: params.useFocusPoint,
+      focusPointX: params.focusPointX,
+      focusPointY: params.focusPointY,
+      focusGradient: params.focusGradient
     }),
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
@@ -390,20 +466,37 @@ var chromaticAberration = definePlugin({
           ui.select({ key: "colorMode", value: params.colorMode, options: [
             { value: "rgb", label: "RGB" },
             { value: "cmyk", label: "CMYK" },
+            { value: "rc", label: "Red & Cyan" },
             { value: "pastel", label: t("pastelMode") }
           ] })
         ]),
         ui.group({ direction: "col" }, [
+          ui.text({ text: t("shiftType") }),
+          ui.select({ key: "shiftType", value: params.shiftType, options: [
+            { value: "move", label: t("shiftTypeMove") },
+            { value: "zoom", label: t("shiftTypeZoom") }
+          ] })
+        ]),
+        ui.group({ direction: "col" }, [
           ui.text({ text: t("strength") }),
-          ui.slider({ key: "strength", dataType: "float", min: 0, max: 200, value: params.strength })
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "strength", dataType: "float", min: 0, max: 200, value: params.strength }),
+            ui.numberInput({ key: "strength", dataType: "float", value: params.strength })
+          ])
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("angle") }),
-          ui.slider({ key: "angle", dataType: "float", min: 0, max: 360, value: params.angle })
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "angle", dataType: "float", min: 0, max: 360, value: params.angle }),
+            ui.numberInput({ key: "angle", dataType: "float", value: params.angle })
+          ])
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("opacity") }),
-          ui.slider({ key: "opacity", dataType: "float", min: 0, max: 100, value: params.opacity })
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "opacity", dataType: "float", min: 0, max: 100, value: params.opacity }),
+            ui.numberInput({ key: "opacity", dataType: "float", value: params.opacity })
+          ])
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: "Blend Mode" }),
@@ -411,25 +504,53 @@ var chromaticAberration = definePlugin({
             { value: "over", label: t("blendOver") },
             { value: "under", label: t("blendeUnder") }
           ] })
+        ]),
+        ui.separator(),
+        ui.group({ direction: "col" }, [
+          ui.checkbox({ key: "useFocusPoint", label: t("useFocusPoint"), value: params.useFocusPoint })
+        ]),
+        !params.useFocusPoint ? null : ui.group({ direction: "col" }, [
+          ui.group({ direction: "col" }, [
+            ui.text({ text: t("focusPointX") }),
+            ui.group({ direction: "row" }, [
+              ui.slider({ key: "focusPointX", dataType: "float", min: 0, max: 1, value: params.focusPointX }),
+              ui.numberInput({ key: "focusPointX", dataType: "float", value: params.focusPointX })
+            ])
+          ]),
+          ui.group({ direction: "col" }, [
+            ui.text({ text: t("focusPointY") }),
+            ui.group({ direction: "row" }, [
+              ui.slider({ key: "focusPointY", dataType: "float", min: 0, max: 1, value: params.focusPointY }),
+              ui.numberInput({ key: "focusPointY", dataType: "float", value: params.focusPointY })
+            ])
+          ]),
+          ui.group({ direction: "col" }, [
+            ui.text({ text: t("focusGradient") }),
+            ui.group({ direction: "row" }, [
+              ui.slider({ key: "focusGradient", dataType: "float", min: 0.1, max: 5, value: params.focusGradient }),
+              ui.numberInput({ key: "focusGradient", dataType: "float", value: params.focusGradient })
+            ])
+          ])
         ])
-        // ui.separator(),
-        // ui.group({ direction: "col" }, [
-        //   ui.text({ text: "Debugging parameters" }),
-        //   ui.slider({ key: "padding", label: "Padding", dataType: 'int', min: 0, max: 200, value: params.padding }),
-        // ]),
       ]);
     },
     initLiveEffect: async () => {
       return await createGPUDevice({}, async (device) => {
         const code = `
           struct Params {
-            dpi: f32,
-            baseDpi: f32,
+            outputSize: vec2i,
+            dpiScale: f32,
             strength: f32,
             angle: f32,
-            colorMode: u32,  // 0: RGB, 1: CMYK, 2: Pastel
+            colorMode: u32,  // 0: RGB, 1: CMYK, 2: Pastel, 3: Red & Cyan
             opacity: f32,
             blendMode: u32,  // 0: over, 1: under
+            useFocusPoint: u32,  // 0: false, 1: true
+            focusPointX: f32,
+            focusPointY: f32,
+            focusGradient: f32,
+            isInPreview: u32,  // 0: false, 1: true
+            shiftType: u32  // 0: move, 1: zoom
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -483,164 +604,242 @@ var chromaticAberration = definePlugin({
           // RGB\u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u3092\u30D1\u30B9\u30C6\u30EB\u30AB\u30E9\u30FC\u306B\u5909\u63DB\u3059\u308B\u95A2\u6570
           fn rgbChannelToPastel(r: f32, g: f32, b: f32) -> vec3f {
               // R -> \u30D1\u30B9\u30C6\u30EB\u30D4\u30F3\u30AF (\u8D64+\u5C11\u3057\u9752)
-              let pastelPink = vec3f(min(r * 1.2, 1.0), r * 0.6, r * 0.8);
+              let pastelPink = vec3f(min(r * 1.0, 1.0), r * 0.6, r * 0.8);
 
               // G -> \u30D1\u30B9\u30C6\u30EB\u30A4\u30A8\u30ED\u30FC (\u7DD1+\u8D64)
-              let pastelYellow = vec3f(g * 0.8, min(g * 1.2, 1.0), g * 0.2);
+              let pastelYellow = vec3f(g * 0.8, min(g * 1.0, 1.0), g * 0.2);
 
               // B -> \u30D1\u30B9\u30C6\u30EB\u30B7\u30A2\u30F3 (\u9752+\u7DD1)
-              let pastelCyan = vec3f(b * 0.2, b * 0.8, min(b * 1.2, 1.0));
+              let pastelCyan = vec3f(b * 0.2, b * 0.8, min(b * 1.0, 1.0));
 
               return pastelPink + pastelYellow + pastelCyan;
           }
 
           // \u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u91CD\u306A\u308A\u5177\u5408\u3092\u691C\u51FA\u3059\u308B\u95A2\u6570
           fn detectChannelOverlap(r: f32, g: f32, b: f32) -> f32 {
-              // \u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5B58\u5728\u3092\u78BA\u8A8D (\u3057\u304D\u3044\u50240.15\u4EE5\u4E0A\u3067\u5B58\u5728\u3068\u307F\u306A\u3059)
-              let threshold = 0.15;
-              let hasR = select(0.0, 1.0, r > threshold);
-              let hasG = select(0.0, 1.0, g > threshold);
-              let hasB = select(0.0, 1.0, b > threshold);
+            // \u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5B58\u5728\u3092\u78BA\u8A8D (\u3057\u304D\u3044\u50240.15\u4EE5\u4E0A\u3067\u5B58\u5728\u3068\u307F\u306A\u3059)
+            let threshold = 0.15;
+            let hasR = select(0.0, 1.0, r > threshold);
+            let hasG = select(0.0, 1.0, g > threshold);
+            let hasB = select(0.0, 1.0, b > threshold);
 
-              // \u5B58\u5728\u3059\u308B\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u6570
-              let channelCount = hasR + hasG + hasB;
+            // \u5B58\u5728\u3059\u308B\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u6570
+            let channelCount = hasR + hasG + hasB;
 
-              // 3\u30C1\u30E3\u30F3\u30CD\u30EB\u3059\u3079\u3066\u304C\u5B58\u5728\u3059\u308B\u5834\u5408\u306F1.0\u3001\u305D\u3046\u3067\u306A\u3051\u308C\u30700.0
-              return select(0.0, 1.0, channelCount >= 2.5);
+            // 3\u30C1\u30E3\u30F3\u30CD\u30EB\u3059\u3079\u3066\u304C\u5B58\u5728\u3059\u308B\u5834\u5408\u306F1.0\u3001\u305D\u3046\u3067\u306A\u3051\u308C\u30700.0
+            return select(0.0, 1.0, channelCount >= 2.5);
+          }
+
+          // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u306B\u30EA\u30F3\u30B0\u3092\u63CF\u753B\u3059\u308B\u95A2\u6570
+          fn drawFocusRing(texCoord: vec2f, focusPoint: vec2f) -> f32 {
+            let distance = length(texCoord - focusPoint);
+
+            // \u30EA\u30F3\u30B0\u306E\u5185\u5074\u3068\u5916\u5074\u306E\u534A\u5F84
+            let innerRadius = 0.02;
+            let outerRadius = 0.02;
+
+            // \u5186\u306E\u4E2D\u304C0.0\u3001\u5186\u306E\u5916\u304C1.0\u306B\u306A\u308B\u3088\u3046\u306A\u30B9\u30E0\u30FC\u30BA\u306A\u5024\u3092\u751F\u6210
+            let ring = smoothstep(innerRadius - 0.005, innerRadius, distance) * (1.0 - smoothstep(outerRadius, outerRadius + 0.005, distance));
+
+            return ring;
+          }
+
+          fn calculateDistanceBasedOffset(texCoord: vec2f, focusPoint: vec2f, baseOffset: vec2f, gradient: f32) -> vec2f {
+            // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u304B\u3089\u306E\u8DDD\u96E2\u3092\u8A08\u7B97\uFF080-1\u306E\u7BC4\u56F2\uFF09
+            let distance = length(texCoord - focusPoint);
+
+            // \u52FE\u914D\u306B\u57FA\u3065\u3044\u3066\u8DDD\u96E2\u306E\u52B9\u679C\u3092\u8ABF\u6574
+            // gradient\u304C1.0\u306E\u5834\u5408\u306F\u7DDA\u5F62\u3001\u5927\u304D\u3044\u307B\u3069\u6025\u5CFB\u3001\u5C0F\u3055\u3044\u307B\u3069\u7DE9\u3084\u304B
+            let adjustedDistance = pow(distance, gradient);
+
+            // \u8ABF\u6574\u3055\u308C\u305F\u8DDD\u96E2\u306B\u5FDC\u3058\u3066\u30AA\u30D5\u30BB\u30C3\u30C8\u3092\u8ABF\u6574
+            return baseOffset * adjustedDistance;
+          }
+
+          fn calculateZoomOffset(texCoord: vec2f, focusPoint: vec2f, strength: f32) -> vec2f {
+            let direction = texCoord - focusPoint;
+            let zoomStrength = strength / 100.0;
+            return direction * zoomStrength;
           }
 
           @compute @workgroup_size(16, 16)
           fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let dims = vec2f(textureDimensions(inputTexture));
-              let texCoord = vec2f(id.xy) / dims;
+            let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
+            let dims = vec2f(params.outputSize);
+            let texCoord = vec2f(id.xy) / dims;
+            let toInputTexCoord = dims / dimsWithGPUPadding;
 
-              // strength\u3092\u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u3068\u3057\u3066\u51E6\u7406\u3057\u3001\u30C6\u30AF\u30B9\u30C1\u30E3\u5EA7\u6A19\u306B\u5909\u63DB
-              let pixelOffset = getOffset(params.angle) * params.strength * (params.dpi / params.baseDpi);
-              let texOffset = pixelOffset / dims;
+            // strength\u3092\u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u3068\u3057\u3066\u51E6\u7406\u3057\u3001\u30C6\u30AF\u30B9\u30C1\u30E3\u5EA7\u6A19\u306B\u5909\u63DB
+            let basePixelOffset = getOffset(params.angle) * params.strength * params.dpiScale;
+            let baseTexOffset = basePixelOffset / dims;
 
-              var effectColor: vec4f;
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+            // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u4F4D\u7F6E\u3092\u53D6\u5F97\uFF08\u4F7F\u7528\u3057\u306A\u3044\u5834\u5408\u306F\u30C7\u30D5\u30A9\u30EB\u30C80.5, 0.5\uFF09
+            let focusPoint = select(
+              vec2f(0.5, 0.5),
+              vec2f(params.focusPointX, params.focusPointY),
+              params.useFocusPoint != 0u
+            );
 
-              if (params.colorMode == 0u) { // RGB mode
-                  let redOffset = texCoord + texOffset;
-                  let blueOffset = texCoord - texOffset;
-
-                  let redSample = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0);
-                  let greenSample = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-                  let blueSample = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0);
-
-                  let r = redSample.r;
-                  let g = greenSample.g;
-                  let b = blueSample.b;
-
-                  let a_red = redSample.a;
-                  let a_green = greenSample.a;
-                  let a_blue = blueSample.a;
-
-                  let a = screenBlend(screenBlend(a_red, a_green), a_blue);
-
-                  effectColor = vec4f(r, g, b, a);
-              }               else if (params.colorMode == 1u) { // CMYK mode
-                  // \u30AA\u30D5\u30BB\u30C3\u30C8\u3092\u8A08\u7B97\uFF08\u5143\u306E\u30AA\u30D5\u30BB\u30C3\u30C8\u8A08\u7B97\u3092\u4F7F\u7528\uFF09
-                  let cyanOffset = texCoord + texOffset;
-                  let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
-                  let yellowOffset = texCoord - texOffset;
-
-                  // \u5404\u8272\u306E\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0
-                  let cyanSample = textureSampleLevel(inputTexture, textureSampler, cyanOffset, 0.0);
-                  let magentaSample = textureSampleLevel(inputTexture, textureSampler, magentaOffset, 0.0);
-                  let yellowSample = textureSampleLevel(inputTexture, textureSampler, yellowOffset, 0.0);
-                  let originalSample = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-
-                  // \u3088\u308A\u9BAE\u3084\u304B\u306A\u8272\u5206\u89E3\uFF08\u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5F37\u8ABF\uFF09
-                  // \u30B7\u30A2\u30F3(\u9752\u7DD1)\uFF1A\u8D64\u3092\u6291\u5236\u3057\u3001\u9752\u3068\u7DD1\u3092\u5F37\u8ABF
-                  let cyanColor = vec3f(
-                      cyanSample.r * 0.3,    // \u8D64\u3092\u6291\u5236
-                      cyanSample.g * 1.1,    // \u7DD1\u3092\u5F37\u8ABF
-                      cyanSample.b * 1.1     // \u9752\u3092\u5F37\u8ABF
-                  );
-
-                  // \u30DE\u30BC\u30F3\u30BF(\u8D64\u7D2B)\uFF1A\u7DD1\u3092\u6291\u5236\u3057\u3001\u8D64\u3068\u9752\u3092\u5F37\u8ABF
-                  let magentaColor = vec3f(
-                      magentaSample.r * 1.1,  // \u8D64\u3092\u5F37\u8ABF
-                      magentaSample.g * 0.3,  // \u7DD1\u3092\u6291\u5236
-                      magentaSample.b * 1.1   // \u9752\u3092\u5F37\u8ABF
-                  );
-
-                  // \u30A4\u30A8\u30ED\u30FC(\u9EC4)\uFF1A\u9752\u3092\u6291\u5236\u3057\u3001\u8D64\u3068\u7DD1\u3092\u5F37\u8ABF
-                  let yellowColor = vec3f(
-                      yellowSample.r * 1.1,   // \u8D64\u3092\u5F37\u8ABF
-                      yellowSample.g * 1.1,   // \u7DD1\u3092\u5F37\u8ABF
-                      yellowSample.b * 0.3    // \u9752\u3092\u6291\u5236
-                  );
-
-                  // \u5404\u8272\u3092\u5408\u6210
-                  let combinedColor = vec3f(
-                      max(max(cyanColor.r, magentaColor.r), yellowColor.r),
-                      max(max(cyanColor.g, magentaColor.g), yellowColor.g),
-                      max(max(cyanColor.b, magentaColor.b), yellowColor.b)
-                  );
-
-                  // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97\uFF08\u4ED6\u306E\u30E2\u30FC\u30C9\u3068\u540C\u69D8\u306B\u5404\u30B5\u30F3\u30D7\u30EB\u306E\u30A2\u30EB\u30D5\u30A1\u3092\u30D6\u30EC\u30F3\u30C9\uFF09
-                  let a_cyan = cyanSample.a;
-                  let a_magenta = magentaSample.a;
-                  let a_yellow = yellowSample.a;
-                  let a = screenBlend(screenBlend(a_cyan, a_magenta), a_yellow);
-
-                  // \u5F37\u5EA60\u3067\u3082\u5143\u306E\u8272\u3092\u4FDD\u6301
-                  let strengthFactor = params.strength / 5.0;  // \u5F37\u5EA6\u306E\u52B9\u679C\u3092\u8ABF\u6574
-                  let blendRatio = clamp(strengthFactor, 0.0, 1.0);
-                  let result = mix(originalSample.rgb, combinedColor, blendRatio);
-
-                  effectColor = vec4f(result, a);
-
-                  effectColor = vec4f(result, a);
-              } else { // Pastel mode (2u)
-                  // \u5143\u306E\u30B5\u30F3\u30D7\u30EB\u3092\u53D6\u5F97
-                  let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-
-                  // RGB\u8272\u53CE\u5DEE\u3068\u540C\u69D8\u306B\u3001\u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u3092\u305A\u3089\u3057\u3066\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0
-                  let redOffset = texCoord + texOffset;
-                  let greenOffset = texCoord;
-                  let blueOffset = texCoord - texOffset;
-
-                  let redSample = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0);
-                  let greenSample = textureSampleLevel(inputTexture, textureSampler, greenOffset, 0.0);
-                  let blueSample = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0);
-
-                  // \u5404\u30B5\u30F3\u30D7\u30EB\u304B\u3089\u5BFE\u5FDC\u3059\u308BRGB\u30C1\u30E3\u30F3\u30CD\u30EB\u3092\u62BD\u51FA
-                  let r = redSample.r;
-                  let g = greenSample.g;
-                  let b = blueSample.b;
-
-                  // \u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u3092\u5358\u72EC\u306E\u30D1\u30B9\u30C6\u30EB\u30AB\u30E9\u30FC\u306B\u5909\u63DB
-                  let pastelColor = rgbChannelToPastel(r, g, b);
-
-                  // \u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u91CD\u306A\u308A\u5177\u5408\u3092\u691C\u51FA
-                  let overlapFactor = detectChannelOverlap(r, g, b);
-
-                  // \u91CD\u306A\u3063\u3066\u3044\u308B\u90E8\u5206(overlapFactor=1.0)\u3067\u306F\u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528
-                  // \u305D\u3046\u3067\u306A\u3044\u90E8\u5206\u3067\u306F\u30D1\u30B9\u30C6\u30EB\u30AB\u30E9\u30FC\u3092\u4F7F\u7528
-                  // let result = mix(pastelColor, originalColor.rgb, overlapFactor);
-                  let result = pastelColor;
-
-                  // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
-                  let a_red = redSample.a;
-                  let a_green = greenSample.a;
-                  let a_blue = blueSample.a;
-                  let a = screenBlend(screenBlend(a_red, a_green), a_blue);
-
-                  effectColor = vec4f(result, a);
-              }
-
-              var finalColor: vec4f;
-              if (params.blendMode == 0u) {
-                  finalColor = mix(originalColor, effectColor, params.opacity / 100.0);
+            // \u305A\u308C\u30BF\u30A4\u30D7\u306B\u5FDC\u3058\u3066\u30AA\u30D5\u30BB\u30C3\u30C8\u3092\u8A08\u7B97
+            var texOffset: vec2f;
+            if (params.shiftType == 0u) { // \u79FB\u52D5\u30E2\u30FC\u30C9
+              if (params.useFocusPoint != 0u) {
+                texOffset = calculateDistanceBasedOffset(texCoord, focusPoint, baseTexOffset, params.focusGradient);
               } else {
-                  finalColor = mix(effectColor, originalColor, 1.0 - params.opacity / 100.0);
+                texOffset = baseTexOffset;
               }
+            } else { // \u30BA\u30FC\u30E0\u30E2\u30FC\u30C9
+              let zoomOffset = calculateZoomOffset(texCoord, focusPoint, params.strength);
 
-              textureStore(resultTexture, id.xy, finalColor);
+              // \u89D2\u5EA6\u306B\u57FA\u3065\u3044\u3066\u56DE\u8EE2\u3055\u305B\u308B
+              let angleRad = params.angle * 3.14159 / 180.0;
+              let rotCos = cos(angleRad);
+              let rotSin = sin(angleRad);
+              let rotatedOffset = vec2f(
+                zoomOffset.x * rotCos - zoomOffset.y * rotSin,
+                zoomOffset.x * rotSin + zoomOffset.y * rotCos
+              );
+
+              texOffset = rotatedOffset;
+
+              // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u4F7F\u7528\u6642\u306F\u8DDD\u96E2\u306B\u57FA\u3065\u3044\u3066\u52B9\u679C\u3092\u8ABF\u6574
+              if (params.useFocusPoint != 0u) {
+                let distance = length(texCoord - focusPoint);
+                let adjustedDistance = pow(distance, params.focusGradient);
+                texOffset = texOffset * adjustedDistance;
+              }
+            }
+
+            let opacity = params.opacity / 100.0;
+
+            var effectColor: vec4f;
+            let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+
+            if (params.colorMode == 0u) { // RGB mode
+              let redOffset = texCoord + texOffset;
+              let blueOffset = texCoord - texOffset;
+
+              let rs = textureSampleLevel(inputTexture, textureSampler, redOffset * toInputTexCoord, 0.0);
+              let gs = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              let bs = textureSampleLevel(inputTexture, textureSampler, blueOffset * toInputTexCoord, 0.0);
+
+              let a_red = rs.a;
+              let a_green = gs.a;
+              let a_blue = bs.a;
+
+              let a = screenBlend(screenBlend(a_red, a_green), a_blue);
+
+              effectColor = vec4f(
+                rs.r,
+                gs.g,
+                bs.b,
+                a
+              );
+            } else if (params.colorMode == 1u) { // CMYK mode
+              let cyanOffset = texCoord + texOffset;
+              let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
+              let yellowOffset = texCoord - texOffset;
+
+              let cs = textureSampleLevel(inputTexture, textureSampler, cyanOffset * toInputTexCoord, 0.0);
+              let ms = textureSampleLevel(inputTexture, textureSampler, magentaOffset * toInputTexCoord, 0.0);
+              let ys = textureSampleLevel(inputTexture, textureSampler, yellowOffset * toInputTexCoord, 0.0);
+              let origs = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              let cyanColor = vec3f(cs.r * 0.3, cs.g * 1.0, cs.b * 1.0);
+              let magentaColor = vec3f(ms.r * 1.0, ms.g * 0.3, ms.b * 1.0);
+              let yellowColor = vec3f(ys.r * 1.0, ys.g * 1.0, ys.b * 0.3);
+
+              let combinedColor = vec3f(
+                  max(max(cyanColor.r, magentaColor.r), yellowColor.r),
+                  max(max(cyanColor.g, magentaColor.g), yellowColor.g),
+                  max(max(cyanColor.b, magentaColor.b), yellowColor.b)
+              );
+
+              let a = screenBlend(screenBlend(cs.a, ms.a), ys.a) * opacity;
+
+              let strengthFactor = params.strength;
+              let blendRatio = clamp(strengthFactor, 0.0, 1.0);
+              let result = mix(origs.rgb, combinedColor, blendRatio);
+
+              effectColor = vec4f(result, a);
+            } else if (params.colorMode == 2u) { // Pastel mode
+              let ch1Offset = texCoord + texOffset;
+              let ch2Offset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
+              let ch3Offset = texCoord - texOffset;
+
+              let ch1s = textureSampleLevel(inputTexture, textureSampler, ch1Offset * toInputTexCoord, 0.0);
+              let ch2s = textureSampleLevel(inputTexture, textureSampler, ch2Offset * toInputTexCoord, 0.0);
+              let ch3s = textureSampleLevel(inputTexture, textureSampler, ch3Offset * toInputTexCoord, 0.0);
+              let origs = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // pastel color
+              let ch1 = vec3f(ch1s.r * 0.56, ch1s.g * 0.29, ch1s.b * 0.42);
+              let ch2 = vec3f(ch2s.r * 0, ch2s.g * 0.28, ch2s.b * 0.45);
+              let ch3 = vec3f(ch3s.r * 0.44, ch3s.g * 0.43, ch3s.b * 0.13);
+
+              // let ch1 = vec3f(ch1s.r * 0.08, ch1s.g * 0.35, ch1s.b * 0.57);
+              // let ch2 = vec3f(ch2s.r * 0.44, ch2s.g * 0.13, ch2s.b * 0.31);
+              // let ch3 = vec3f(ch3s.r * 0.48, ch3s.g * 0.52, ch3s.b * 0.12);
+
+              var combinedColor = vec3f(
+                ch1.r + ch2.r + ch3.r,
+                ch1.g + ch2.g + ch3.g,
+                ch1.b + ch2.b + ch3.b,
+              );
+
+              let a = screenBlend(screenBlend(ch1s.a, ch2s.a), ch3s.a) * opacity;
+
+              let strengthFactor = params.strength;
+              let blendRatio = clamp(strengthFactor, 0.0, 1.0);
+              let result = mix(origs.rgb, combinedColor, blendRatio);
+
+              effectColor = vec4f(result, a);
+            } else if (params.colorMode == 3u) { // Red & Cyan mode
+              let redOffset = texCoord + texOffset;
+              let cyanOffset = texCoord - texOffset;
+
+              let rs = textureSampleLevel(inputTexture, textureSampler, redOffset * toInputTexCoord, 0.0);
+              let gs = textureSampleLevel(inputTexture, textureSampler, cyanOffset * toInputTexCoord, 0.0);
+              let bs = textureSampleLevel(inputTexture, textureSampler, cyanOffset * toInputTexCoord, 0.0);
+
+              let a_red = rs.a;
+              let a_green = gs.a;
+              let a_blue = bs.a;
+
+              let a = screenBlend(screenBlend(a_red, a_green), a_blue);
+
+              effectColor = vec4f(
+                rs.r,
+                gs.g,
+                bs.b,
+                a
+              );
+            }
+
+            var finalColor = effectColor;
+            let opacityFactor = opacity;
+
+            // \u8272\u3092\u88DC\u9593\uFF08\u4E0D\u900F\u660E\u5EA6\u304C\u4E0B\u304C\u308B\u307B\u3069\u5143\u306E\u8272\u306B\u8FD1\u3065\u304F\uFF09
+            finalColor = vec4f(
+              mix(originalColor.rgb, effectColor.rgb, opacityFactor),
+              finalColor.a
+            );
+
+            // \u8272\u30BA\u30EC\u90E8\u5206\u306E\u307F\u900F\u660E\u5EA6\u304C\u9069\u7528\u3055\u308C\u308B\u3088\u3046\u306B\u8ABF\u6574
+            let alphaDifference = effectColor.a - originalColor.a;
+            finalColor.a = originalColor.a + alphaDifference * opacityFactor;
+
+            // \u30D7\u30EC\u30D3\u30E5\u30FC\u6642\u306B\u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u3092\u8868\u793A
+            if (params.useFocusPoint != 0u && params.isInPreview != 0u) {
+              let focusPoint = vec2f(params.focusPointX, params.focusPointY);
+              let ringIntensity = drawFocusRing(texCoord, focusPoint);
+
+              let ringColor = vec4f(1.0, 1.0, 0.3, 1.0);
+
+              finalColor = mix(finalColor, ringColor, ringIntensity);
+            }
+
+            textureStore(resultTexture, id.xy, finalColor);
           }
       `;
         const shader = device.createShaderModule({
@@ -700,20 +899,21 @@ var chromaticAberration = definePlugin({
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      let colorModeValue = 0;
-      if (params.colorMode === "cmyk") {
-        colorModeValue = 1;
-      } else if (params.colorMode === "pastel") {
-        colorModeValue = 2;
-      }
+      const colorModeValue = params.colorMode === "rgb" ? 0 : params.colorMode === "cmyk" ? 1 : params.colorMode === "pastel" ? 2 : params.colorMode === "rc" ? 3 : 0;
       uniformValues.set({
-        dpi: env.dpi,
-        baseDpi: env.baseDpi,
+        outputSize: [outputWidth, outputHeight],
+        dpiScale,
         strength: params.strength,
         angle: params.angle,
         colorMode: colorModeValue,
         opacity: params.opacity,
-        blendMode: params.blendMode === "over" ? 0 : 1
+        blendMode: params.blendMode === "over" ? 0 : 1,
+        useFocusPoint: params.useFocusPoint ? 1 : 0,
+        focusPointX: params.focusPointX,
+        focusPointY: params.focusPointY,
+        focusGradient: params.focusGradient,
+        isInPreview: env.isInPreview ? 1 : 0,
+        shiftType: params.shiftType === "move" ? 0 : 1
       });
       const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
@@ -814,6 +1014,10 @@ var testBlueFill = definePlugin({
         type: "bool",
         default: false
       },
+      halfFill: {
+        type: "bool",
+        default: false
+      },
       padding: {
         type: "int",
         default: 0
@@ -834,8 +1038,9 @@ var testBlueFill = definePlugin({
     onAdjustColors: (params, adjustColor) => params,
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
-    onInterpolate: (paramsA, paramsB, t15) => paramsA,
-    goLiveEffect: async (init, params, input) => {
+    onInterpolate: (paramsA, paramsB, t17) => paramsA,
+    goLiveEffect: async (init, params, input, env) => {
+      console.log("[test-blue-fill] goLiveEffect", { params, env });
       let width = input.width;
       let height = input.height;
       let len = input.data.length;
@@ -878,15 +1083,16 @@ var testBlueFill = definePlugin({
           height
         };
       }
+      const start = params.halfFill ? Math.ceil(height * (width * 4) / 2) : 0;
       if (params.fillOtherChannels) {
-        for (let i = 0; i < len; i += 4) {
+        for (let i = start; i < len; i += 4) {
           buffer[i] = 0;
           buffer[i + 1] = 0;
           buffer[i + 2] = 255;
           buffer[i + 3] = alpha;
         }
       } else {
-        for (let i = 0; i < len; i += 4) {
+        for (let i = start; i < len; i += 4) {
           buffer[i + 2] = 255;
           buffer[i + 3] = alpha;
         }
@@ -1426,27 +1632,33 @@ var directionalBlur = definePlugin({
   }
 });
 
-// src/js/src/live-effects/kirakira-glow.ts
+// src/js/src/live-effects/kirakira-blur.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions3,
   makeStructuredView as makeStructuredView3
 } from "npm:webgpu-utils";
 var t3 = createTranslator({
   en: {
-    title: "KiraKira Glow V1",
+    title: "Kirakira Blur",
+    radius: "Blur Radius (px)",
     strength: "Blur Strength",
-    transparentOriginal: "Transparent original",
-    highQuality: "High quality mode"
+    sparkle: "Sparkle Intensity",
+    makeOriginalTransparent: "Make Original Transparent",
+    useCustomColor: "Use Custom Blur Color",
+    customColor: "Custom Blur Color"
   },
   ja: {
-    title: "\u30AD\u30E9\u30AD\u30E9\u30B0\u30ED\u30FC V1",
+    title: "\u30AD\u30E9\u30AD\u30E9\u30D6\u30E9\u30FC",
+    radius: "\u307C\u304B\u3057\u534A\u5F84 (px)",
     strength: "\u307C\u304B\u3057\u5F37\u5EA6",
-    transparentOriginal: "\u5143\u753B\u50CF\u3092\u900F\u660E\u306B\u3059\u308B",
-    highQuality: "\u9AD8\u54C1\u8CEA\u30E2\u30FC\u30C9"
+    sparkle: "\u304D\u3089\u3081\u304D\u5F37\u5EA6",
+    makeOriginalTransparent: "\u5143\u753B\u50CF\u3092\u900F\u660E\u306B\u3059\u308B",
+    useCustomColor: "\u30AB\u30B9\u30BF\u30E0\u30D6\u30E9\u30FC\u8272\u3092\u4F7F\u7528",
+    customColor: "\u30AB\u30B9\u30BF\u30E0\u30D6\u30E9\u30FC\u8272"
   }
 });
-var kirakiraGlow = definePlugin({
-  id: "kirakira-glow-effect-v1",
+var kirakiraBlur = definePlugin({
+  id: "kirakira-blur-v1",
   title: t3("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
@@ -1455,310 +1667,638 @@ var kirakiraGlow = definePlugin({
       features: []
     },
     paramSchema: {
-      strength: {
-        type: "real",
+      radius: {
+        type: "int",
         default: 10
       },
-      transparentOriginal: {
+      strength: {
+        type: "real",
+        default: 1
+      },
+      sparkle: {
+        type: "real",
+        default: 0.5
+      },
+      makeOriginalTransparent: {
         type: "bool",
         default: false
       },
-      highQuality: {
+      useCustomColor: {
         type: "bool",
         default: false
+      },
+      customColor: {
+        type: "color",
+        default: {
+          r: 1,
+          g: 1,
+          b: 1,
+          a: 1
+        }
       }
     },
     onEditParameters: (params) => {
-      params.strength = Math.max(0, params.strength);
-      return params;
+      return {
+        ...params,
+        radius: Math.max(0, Math.min(200, params.radius)),
+        strength: Math.max(0, Math.min(2, params.strength)),
+        sparkle: Math.max(0, Math.min(1, params.sparkle))
+      };
     },
     onAdjustColors: (params, adjustColor) => {
-      return params;
+      return {
+        ...params,
+        customColor: adjustColor(params.customColor)
+      };
     },
     onScaleParams(params, scaleFactor) {
       return {
-        strength: params.strength * scaleFactor,
-        transparentOriginal: params.transparentOriginal,
-        highQuality: params.highQuality
+        ...params,
+        radius: Math.round(params.radius * scaleFactor),
+        strength: params.strength,
+        sparkle: params.sparkle,
+        makeOriginalTransparent: params.makeOriginalTransparent,
+        useCustomColor: params.useCustomColor,
+        customColor: params.customColor
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        strength: lerp(paramsA.strength, paramsB.strength, t15),
-        transparentOriginal: t15 < 0.5 ? paramsA.transparentOriginal : paramsB.transparentOriginal,
-        highQuality: t15 < 0.5 ? paramsA.highQuality : paramsB.highQuality
+        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t17)),
+        strength: lerp(paramsA.strength, paramsB.strength, t17),
+        sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t17),
+        makeOriginalTransparent: t17 < 0.5 ? paramsA.makeOriginalTransparent : paramsB.makeOriginalTransparent,
+        useCustomColor: t17 < 0.5 ? paramsA.useCustomColor : paramsB.useCustomColor,
+        customColor: {
+          r: lerp(paramsA.customColor.r, paramsB.customColor.r, t17),
+          g: lerp(paramsA.customColor.g, paramsB.customColor.g, t17),
+          b: lerp(paramsA.customColor.b, paramsB.customColor.b, t17),
+          a: lerp(paramsA.customColor.a, paramsB.customColor.a, t17)
+        }
       };
     },
-    renderUI: (params) => {
+    renderUI: (params, setParam) => {
+      const customColorStr = toColorCode(params.customColor);
       return ui.group({ direction: "col" }, [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("radius") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "radius", dataType: "int", min: 1, max: 200, value: params.radius }),
+            ui.numberInput({ key: "radius", dataType: "int", value: params.radius })
+          ])
+        ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t3("strength") }),
           ui.group({ direction: "row" }, [
-            ui.slider({
-              key: "strength",
-              dataType: "float",
-              min: 0,
-              max: 500,
-              value: params.strength
-            }),
-            ui.numberInput({
-              key: "strength",
-              dataType: "float",
-              value: params.strength
-            })
+            ui.slider({ key: "strength", dataType: "float", min: 0, max: 2, value: params.strength }),
+            ui.numberInput({ key: "strength", dataType: "float", value: params.strength })
           ])
         ]),
-        ui.group({ direction: "row" }, [
-          ui.checkbox({
-            key: "transparentOriginal",
-            label: t3("transparentOriginal"),
-            value: params.transparentOriginal
-          })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("sparkle") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "sparkle", dataType: "float", min: 0, max: 1, value: params.sparkle }),
+            ui.numberInput({ key: "sparkle", dataType: "float", value: params.sparkle })
+          ])
         ]),
-        ui.group({ direction: "row" }, [
-          ui.checkbox({
-            key: "highQuality",
-            label: t3("highQuality"),
-            value: params.highQuality
-          })
+        ui.separator(),
+        ui.group({ direction: "col" }, [
+          ui.checkbox({ key: "useCustomColor", value: params.useCustomColor, label: t3("useCustomColor") }),
+          ui.group({ direction: "row", disabled: !params.useCustomColor }, [
+            ui.text({ text: t3("customColor") }),
+            ui.colorInput({ key: "customColor", value: params.customColor }),
+            ui.textInput({ key: "customColorText", value: customColorStr, onChange: (e) => {
+              setParam({ customColor: parseColorCode(e.value) });
+            } })
+          ])
+        ]),
+        ui.separator(),
+        ui.group({ direction: "col" }, [
+          ui.checkbox({ key: "makeOriginalTransparent", value: params.makeOriginalTransparent, label: t3("makeOriginalTransparent") })
         ])
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, async (device) => {
-        const shader = device.createShaderModule({
-          label: "Optimized Glow Effect Shader",
-          code: mainShaderCode()
-        });
-        const defs = makeShaderDataDefinitions3(mainShaderCode());
-        const downsamplePipeline = device.createComputePipeline({
-          label: "Downsample Pipeline",
-          layout: "auto",
-          compute: {
-            module: shader,
-            entryPoint: "computeDownsample"
-          }
-        });
-        const horizontalBlurPipeline = device.createComputePipeline({
-          label: "Horizontal Blur Pipeline",
-          layout: "auto",
-          compute: {
-            module: shader,
-            entryPoint: "computeHorizontalBlur"
-          }
-        });
-        const verticalBlurPipeline = device.createComputePipeline({
-          label: "Vertical Blur Pipeline",
-          layout: "auto",
-          compute: {
-            module: shader,
-            entryPoint: "computeVerticalBlur"
-          }
-        });
-        const compositePipeline = device.createComputePipeline({
-          label: "Composite Pipeline",
-          layout: "auto",
-          compute: {
-            module: shader,
-            entryPoint: "computeFinalComposite"
-          }
-        });
-        return {
-          defs,
-          downsamplePipeline,
-          horizontalBlurPipeline,
-          verticalBlurPipeline,
-          compositePipeline
-        };
-      });
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Kirakira Blur)" }
+        },
+        (device) => {
+          const verticalBlurCode = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              radius: i32,
+              strength: f32,
+              sparkle: f32,
+              makeOriginalTransparent: i32,
+              useCustomColor: i32,
+              customColor: vec4f,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+
+            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
+              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
+              return exp(gaussianExp) / (2.5066282746 * sigma);
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / adjustedDims;
+
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+              // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u30D6\u30E9\u30FC\u534A\u5F84\u3068\u30B7\u30B0\u30DE\u306E\u8A08\u7B97
+              let radiusScaled = f32(params.radius) * params.dpiScale;
+              let sigma = radiusScaled * 0.33 * params.strength;
+
+              if (sigma <= 0.0) {
+                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
+              }
+
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u304B\u3069\u3046\u304B\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u8272\u3092\u6C7A\u5B9A
+              var sampledRGB: vec3f;
+              if (params.useCustomColor != 0) {
+                // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
+                sampledRGB = params.customColor.rgb;
+              } else {
+                // \u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
+                sampledRGB = originalColor.rgb;
+              }
+
+              // \u30A2\u30EB\u30D5\u30A1\u5024\u306F\u5E38\u306B\u5143\u753B\u50CF\u304B\u3089\u53D6\u5F97
+              let sampledAlpha = originalColor.a;
+
+              // \u30A2\u30EB\u30D5\u30A1\u3068RGB\u3092\u5206\u3051\u3066\u8A08\u7B97\u3059\u308B\u305F\u3081\u306B\u5909\u6570\u3092\u5206\u3051\u308B
+              let centerWeight = gaussianWeight(0.0, sigma);
+
+              // \u30A2\u30EB\u30D5\u30A1\u8A08\u7B97\u7528
+              var totalWeightAlpha = centerWeight;
+              var resultAlpha = sampledAlpha * centerWeight;
+
+              // RGB\u8A08\u7B97\u7528\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+              var totalWeightRGB = centerWeight * sampledAlpha;
+              // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u3067\u3082RGB\u5024\u3092\u4FDD\u6301\u3059\u308B\uFF08\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u304B\u3089\u623B\u3059\uFF09
+              var resultRGB: vec3f;
+              if (sampledAlpha > 0.0) {
+                resultRGB = sampledRGB * centerWeight * sampledAlpha;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u306F\u5468\u56F2\u304B\u3089\u8272\u3092\u63A8\u6E2C\u3059\u308B\u305F\u3081\u521D\u671F\u5024\u306F0
+                resultRGB = vec3f(0.0);
+              }
+
+              let pixelStep = 1.0 / dims.y;
+              let radiusScaledInt = i32(ceil(radiusScaled));
+
+              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
+                let offset = f32(i);
+                let weight = gaussianWeight(offset, sigma);
+
+                let offsetUp = vec2f(0.0, pixelStep * offset);
+                let offsetDown = vec2f(0.0, -pixelStep * offset);
+
+                let upCoord = texCoord * toInputTexCoord + offsetUp;
+                let downCoord = texCoord * toInputTexCoord + offsetDown;
+
+                let sampleUp = textureSampleLevel(inputTexture, textureSampler, upCoord, 0.0);
+                let sampleDown = textureSampleLevel(inputTexture, textureSampler, downCoord, 0.0);
+
+                // \u30AB\u30B9\u30BF\u30E0\u8272\u307E\u305F\u306F\u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528
+                var sampleUpRGB: vec3f;
+                var sampleDownRGB: vec3f;
+
+                if (params.useCustomColor != 0) {
+                  sampleUpRGB = params.customColor.rgb;
+                  sampleDownRGB = params.customColor.rgb;
+                } else {
+                  sampleUpRGB = sampleUp.rgb;
+                  sampleDownRGB = sampleDown.rgb;
+                }
+
+                // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
+                resultAlpha += (sampleUp.a + sampleDown.a) * weight;
+                totalWeightAlpha += weight * 2.0;
+
+                // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u3067\u306A\u3051\u308C\u3070RGB\u3092\u8003\u616E
+                if (sampleUp.a > 0.0) {
+                  resultRGB += sampleUpRGB * weight * sampleUp.a;
+                  totalWeightRGB += weight * sampleUp.a;
+                }
+
+                if (sampleDown.a > 0.0) {
+                  resultRGB += sampleDownRGB * weight * sampleDown.a;
+                  totalWeightRGB += weight * sampleDown.a;
+                }
+              }
+
+              // \u6700\u7D42\u7684\u306A\u30A2\u30EB\u30D5\u30A1\u5024\u3092\u8A08\u7B97
+              resultAlpha = resultAlpha / totalWeightAlpha;
+
+              // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u91CD\u307F\u3067\u6B63\u898F\u5316\uFF09
+              var finalRGB: vec3f;
+              if (totalWeightRGB > 0.0) {
+                finalRGB = resultRGB / totalWeightRGB;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C\u3059\u3079\u30660\u306A\u3089\u3001\u5143\u306E\u8272\u3092\u4F7F\u7528
+                finalRGB = originalColor.rgb;
+              }
+
+              let finalColor = vec4f(finalRGB, resultAlpha);
+
+              textureStore(resultTexture, id.xy, finalColor);
+            }
+          `;
+          const horizontalBlurCode = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              radius: i32,
+              strength: f32,
+              sparkle: f32,
+              makeOriginalTransparent: i32,
+              useCustomColor: i32,
+              customColor: vec4f,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+            @group(0) @binding(4) var originalTexture: texture_2d<f32>;
+
+            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
+              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
+              return exp(gaussianExp) / (2.5066282746 * sigma);
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / adjustedDims;
+
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+              // \u5143\u753B\u50CF\u3092\u53D6\u5F97
+              let originalColor = textureSampleLevel(originalTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u30D6\u30E9\u30FC\u534A\u5F84\u3068\u30B7\u30B0\u30DE\u306E\u8A08\u7B97
+              let radiusScaled = f32(params.radius) * params.dpiScale;
+              let sigma = radiusScaled * 0.33 * params.strength;
+
+              if (sigma <= 0.0) {
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
+              }
+
+              let intermediateColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u304B\u3069\u3046\u304B\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u8272\u3092\u6C7A\u5B9A
+              var sampledRGB: vec3f;
+              if (params.useCustomColor != 0) {
+                // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
+                sampledRGB = params.customColor.rgb;
+              } else {
+                // \u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
+                sampledRGB = intermediateColor.rgb;
+              }
+
+              // \u30A2\u30EB\u30D5\u30A1\u5024\u306F\u5E38\u306B\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u304B\u3089\u53D6\u5F97
+              let sampledAlpha = intermediateColor.a;
+
+              // \u30A2\u30EB\u30D5\u30A1\u3068RGB\u3092\u5206\u3051\u3066\u8A08\u7B97\u3059\u308B\u305F\u3081\u306B\u5909\u6570\u3092\u5206\u3051\u308B
+              let centerWeight = gaussianWeight(0.0, sigma);
+
+              // \u30A2\u30EB\u30D5\u30A1\u8A08\u7B97\u7528
+              var totalWeightAlpha = centerWeight;
+              var resultAlpha = sampledAlpha * centerWeight;
+
+              // RGB\u8A08\u7B97\u7528\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+              var totalWeightRGB = centerWeight * sampledAlpha;
+              // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u3067\u3082RGB\u5024\u3092\u4FDD\u6301\u3059\u308B\uFF08\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u304B\u3089\u623B\u3059\uFF09
+              var resultRGB: vec3f;
+              if (sampledAlpha > 0.0) {
+                resultRGB = sampledRGB * centerWeight * sampledAlpha;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u306F\u5468\u56F2\u304B\u3089\u8272\u3092\u63A8\u6E2C\u3059\u308B\u305F\u3081\u521D\u671F\u5024\u306F0
+                resultRGB = vec3f(0.0);
+              }
+
+              let pixelStep = 1.0 / dims.x;
+              let radiusScaledInt = i32(ceil(radiusScaled));
+
+              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
+                let offset = f32(i);
+                let weight = gaussianWeight(offset, sigma);
+
+                let offsetRight = vec2f(pixelStep * offset, 0.0);
+                let offsetLeft = vec2f(-pixelStep * offset, 0.0);
+
+                let rightCoord = texCoord * toInputTexCoord + offsetRight;
+                let leftCoord = texCoord * toInputTexCoord + offsetLeft;
+
+                let sampleRight = textureSampleLevel(inputTexture, textureSampler, rightCoord, 0.0);
+                let sampleLeft = textureSampleLevel(inputTexture, textureSampler, leftCoord, 0.0);
+
+                // \u30AB\u30B9\u30BF\u30E0\u8272\u307E\u305F\u306F\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u8272\u3092\u4F7F\u7528
+                var sampleRightRGB: vec3f;
+                var sampleLeftRGB: vec3f;
+
+                if (params.useCustomColor != 0) {
+                  sampleRightRGB = params.customColor.rgb;
+                  sampleLeftRGB = params.customColor.rgb;
+                } else {
+                  sampleRightRGB = sampleRight.rgb;
+                  sampleLeftRGB = sampleLeft.rgb;
+                }
+
+                // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
+                resultAlpha += (sampleRight.a + sampleLeft.a) * weight;
+                totalWeightAlpha += weight * 2.0;
+
+                // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u3067\u306A\u3051\u308C\u3070RGB\u3092\u8003\u616E
+                if (sampleRight.a > 0.0) {
+                  resultRGB += sampleRightRGB * weight * sampleRight.a;
+                  totalWeightRGB += weight * sampleRight.a;
+                }
+
+                if (sampleLeft.a > 0.0) {
+                  resultRGB += sampleLeftRGB * weight * sampleLeft.a;
+                  totalWeightRGB += weight * sampleLeft.a;
+                }
+              }
+
+              // \u6700\u7D42\u7684\u306A\u30A2\u30EB\u30D5\u30A1\u5024\u3092\u8A08\u7B97
+              resultAlpha = resultAlpha / totalWeightAlpha;
+
+              // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u91CD\u307F\u3067\u6B63\u898F\u5316\uFF09
+              var finalRGB: vec3f;
+              if (totalWeightRGB > 0.0) {
+                finalRGB = resultRGB / totalWeightRGB;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C\u3059\u3079\u30660\u306A\u3089\u3001\u5143\u306E\u8272\u3092\u4F7F\u7528
+                finalRGB = intermediateColor.rgb;
+              }
+
+              // \u57FA\u672C\u7684\u306A\u30D6\u30E9\u30FC\u7D50\u679C
+              let blurColor = vec4f(finalRGB, resultAlpha);
+
+              // \u304D\u3089\u3081\u304D\u52B9\u679C\u3092\u9069\u7528\uFF08\u5024\u3092\u6700\u59272\u500D\u307E\u3067\u5897\u5E45\uFF09
+              let sparkleMultiplier = 1.0 + params.sparkle;
+              let sparkledColor = vec4f(blurColor.rgb * sparkleMultiplier, blurColor.a);
+
+              // \u5143\u753B\u50CF\u306E\u900F\u660E\u5EA6\u306B\u57FA\u3065\u3044\u3066\u5408\u6210
+              // \u5143\u753B\u50CF\u304C\u4E0D\u900F\u660E\u306A\u90E8\u5206\u307B\u3069\u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528
+              let blendFactor = originalColor.a;
+              let blendedRGB = mix(sparkledColor.rgb, originalColor.rgb, blendFactor);
+
+                              // \u300C\u5143\u753B\u50CF\u3092\u900F\u660E\u306B\u3059\u308B\u300D\u8A2D\u5B9A\u306B\u57FA\u3065\u3044\u3066\u30A2\u30EB\u30D5\u30A1\u3092\u8ABF\u6574
+              var resultColor: vec4f;
+              if (params.makeOriginalTransparent != 0) {
+                // \u5408\u6210\u3057\u305FRGB\u3092\u4F7F\u7528\u3057\u3001\u5143\u753B\u50CF\u304C\u4E0D\u900F\u660E\u3060\u3063\u305F\u90E8\u5206\u306E\u30A2\u30EB\u30D5\u30A1\u30920\u306B
+                let resultAlpha = select(sparkledColor.a, 0.0, originalColor.a > 0.0);
+                resultColor = vec4f(blendedRGB, resultAlpha);
+              } else {
+                // \u901A\u5E38\u306E\u5408\u6210\uFF1A\u5143\u753B\u50CF\u306E\u4E0D\u900F\u660E\u90E8\u5206\u306F\u5143\u753B\u50CF\u306E\u8272\u3001\u900F\u660E\u90E8\u5206\u306F\u30D6\u30E9\u30FC+\u304D\u3089\u3081\u304D\u52B9\u679C
+                resultColor = vec4f(blendedRGB, max(originalColor.a, sparkledColor.a));
+              }
+
+              // \u7D50\u679C\u306F0.0\uFF5E1.0\u306E\u7BC4\u56F2\u306B\u5236\u9650
+              resultColor = clamp(resultColor, vec4f(0.0), vec4f(1.0));
+
+              textureStore(resultTexture, id.xy, resultColor);
+            }
+          `;
+          const verticalShader = device.createShaderModule({
+            label: "Kirakira Blur Vertical Shader",
+            code: verticalBlurCode
+          });
+          const horizontalShader = device.createShaderModule({
+            label: "Kirakira Blur Horizontal Shader",
+            code: horizontalBlurCode
+          });
+          const verticalPipelineDef = makeShaderDataDefinitions3(verticalBlurCode);
+          const horizontalPipelineDef = makeShaderDataDefinitions3(horizontalBlurCode);
+          const verticalPipeline = device.createComputePipeline({
+            label: "Kirakira Blur Vertical Pipeline",
+            layout: "auto",
+            compute: {
+              module: verticalShader,
+              entryPoint: "computeMain"
+            }
+          });
+          const horizontalPipeline = device.createComputePipeline({
+            label: "Kirakira Blur Horizontal Pipeline",
+            layout: "auto",
+            compute: {
+              module: horizontalShader,
+              entryPoint: "computeMain"
+            }
+          });
+          return {
+            device,
+            verticalPipeline,
+            horizontalPipeline,
+            verticalPipelineDef,
+            horizontalPipelineDef
+          };
+        }
+      );
     },
     goLiveEffect: async ({
       device,
-      downsamplePipeline,
-      horizontalBlurPipeline,
-      verticalBlurPipeline,
-      compositePipeline,
-      defs
-    }, params, imgData, env) => {
-      const dpiScale = env.dpi / env.baseDpi;
-      const padding = Math.ceil(params.strength * dpiScale);
-      imgData = await paddingImageData(imgData, padding);
-      const outputWidth = imgData.width, outputHeight = imgData.height;
+      verticalPipeline,
+      horizontalPipeline,
+      verticalPipelineDef,
+      horizontalPipelineDef
+    }, params, imgData, { dpi, baseDpi }) => {
+      console.log("Kirakira Blur V1", params);
+      const dpiRatio = dpi / baseDpi;
+      const paddingSize = Math.ceil(params.radius * dpiRatio);
+      imgData = await paddingImageData(imgData, paddingSize);
+      const outputWidth = imgData.width;
+      const outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
-      const inputWidth = imgData.width, inputHeight = imgData.height;
-      let downscaleFactor = 1;
-      if (!params.highQuality) {
-        if (inputWidth > 8192) downscaleFactor = 8;
-        else if (inputWidth > 4096) downscaleFactor = 4;
-        else if (inputWidth > 2048) downscaleFactor = 2;
-      } else {
-        if (inputWidth > 8192) downscaleFactor = 4;
-        else if (inputWidth > 4096) downscaleFactor = 2;
-      }
-      const smallWidth = Math.ceil(inputWidth / downscaleFactor);
-      const smallHeight = Math.ceil(inputHeight / downscaleFactor);
+      const bufferInputWidth = imgData.width, bufferInputHeight = imgData.height;
       const inputTexture = device.createTexture({
-        label: "KiraKiraGlow_InputTexture",
-        size: [inputWidth, inputHeight],
+        label: "Kirakira Blur Input Texture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
       });
-      const tempTexture = device.createTexture({
-        label: "KiraKiraGlow_TempTexture",
-        size: [smallWidth, smallHeight],
+      const intermediateTexture = device.createTexture({
+        label: "Kirakira Blur Intermediate Texture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
       });
       const resultTexture = device.createTexture({
-        label: "KiraKiraGlow_ResultTexture",
-        size: [inputWidth, inputHeight],
+        label: "Kirakira Blur Result Texture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
       const sampler = device.createSampler({
-        label: "KiraKiraGlow_Sampler",
+        label: "Kirakira Blur Texture Sampler",
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformData = makeStructuredView3(defs.uniforms.params);
-      uniformData.set({
-        strength: params.strength,
-        transparentOriginal: params.transparentOriginal ? 1 : 0,
-        highQuality: params.highQuality ? 1 : 0,
-        width: inputWidth,
-        height: inputHeight,
-        downscaleFactor
-      });
-      const uniformBuffer = device.createBuffer({
-        label: "KiraKiraGlow_UniformBuffer",
-        size: uniformData.arrayBuffer.byteLength,
+      const verticalUniformValues = makeStructuredView3(
+        verticalPipelineDef.uniforms.params
+      );
+      const verticalUniformBuffer = device.createBuffer({
+        label: "Kirakira Blur Vertical Params Buffer",
+        size: verticalUniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData.arrayBuffer);
+      const horizontalUniformValues = makeStructuredView3(
+        horizontalPipelineDef.uniforms.params
+      );
+      const horizontalUniformBuffer = device.createBuffer({
+        label: "Kirakira Blur Horizontal Params Buffer",
+        size: horizontalUniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      verticalUniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
+        radius: params.radius,
+        strength: params.strength,
+        sparkle: params.sparkle,
+        makeOriginalTransparent: params.makeOriginalTransparent ? 1 : 0,
+        useCustomColor: params.useCustomColor ? 1 : 0,
+        customColor: [
+          params.customColor.r,
+          params.customColor.g,
+          params.customColor.b,
+          params.customColor.a
+        ]
+      });
+      horizontalUniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
+        radius: params.radius,
+        strength: params.strength,
+        sparkle: params.sparkle,
+        makeOriginalTransparent: params.makeOriginalTransparent ? 1 : 0,
+        useCustomColor: params.useCustomColor ? 1 : 0,
+        customColor: [
+          params.customColor.r,
+          params.customColor.g,
+          params.customColor.b,
+          params.customColor.a
+        ]
+      });
+      device.queue.writeBuffer(
+        verticalUniformBuffer,
+        0,
+        verticalUniformValues.arrayBuffer
+      );
+      device.queue.writeBuffer(
+        horizontalUniformBuffer,
+        0,
+        horizontalUniformValues.arrayBuffer
+      );
       device.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
-        { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
-        [inputWidth, inputHeight]
+        { bytesPerRow: bufferInputWidth * 4, rowsPerImage: bufferInputHeight },
+        [bufferInputWidth, bufferInputHeight]
       );
-      const downsampleBindGroup = device.createBindGroup({
-        label: "KiraKiraGlow_DownsampleBindGroup",
-        layout: downsamplePipeline.getBindGroupLayout(0),
+      const verticalBindGroup = device.createBindGroup({
+        label: "Kirakira Blur Vertical Bind Group",
+        layout: verticalPipeline.getBindGroupLayout(0),
         entries: [
-          { binding: 0, resource: inputTexture.createView() },
-          { binding: 1, resource: tempTexture.createView() },
-          { binding: 3, resource: sampler }
+          {
+            binding: 0,
+            resource: inputTexture.createView()
+          },
+          {
+            binding: 1,
+            resource: intermediateTexture.createView()
+          },
+          {
+            binding: 2,
+            resource: sampler
+          },
+          {
+            binding: 3,
+            resource: { buffer: verticalUniformBuffer }
+          }
         ]
       });
-      const horizontalBlurBindGroup = device.createBindGroup({
-        label: "KiraKiraGlow_HorizontalBlurBindGroup",
-        layout: horizontalBlurPipeline.getBindGroupLayout(0),
+      const horizontalBindGroup = device.createBindGroup({
+        label: "Kirakira Blur Horizontal Bind Group",
+        layout: horizontalPipeline.getBindGroupLayout(0),
         entries: [
-          { binding: 1, resource: tempTexture.createView() },
-          { binding: 2, resource: resultTexture.createView() },
-          { binding: 3, resource: sampler },
-          { binding: 4, resource: { buffer: uniformBuffer } }
+          {
+            binding: 0,
+            resource: intermediateTexture.createView()
+          },
+          {
+            binding: 1,
+            resource: resultTexture.createView()
+          },
+          {
+            binding: 2,
+            resource: sampler
+          },
+          {
+            binding: 3,
+            resource: { buffer: horizontalUniformBuffer }
+          },
+          {
+            binding: 4,
+            resource: inputTexture.createView()
+          }
         ]
       });
-      const horizontalBlurReadGroup = device.createBindGroup({
-        label: "KiraKiraGlow_HorizontalBlurReadGroup",
-        layout: horizontalBlurPipeline.getBindGroupLayout(1),
-        entries: [{ binding: 0, resource: tempTexture.createView() }]
-      });
-      const verticalBlurBindGroup = device.createBindGroup({
-        label: "KiraKiraGlow_VerticalBlurBindGroup",
-        layout: verticalBlurPipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 1, resource: tempTexture.createView() },
-          { binding: 2, resource: resultTexture.createView() },
-          { binding: 3, resource: sampler },
-          { binding: 4, resource: { buffer: uniformBuffer } }
-        ]
-      });
-      const verticalBlurReadGroup = device.createBindGroup({
-        label: "KiraKiraGlow_VerticalBlurReadGroup",
-        layout: verticalBlurPipeline.getBindGroupLayout(1),
-        entries: [{ binding: 1, resource: resultTexture.createView() }]
-      });
-      const compositeBindGroup = device.createBindGroup({
-        label: "KiraKiraGlow_CompositeBindGroup",
-        layout: compositePipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: inputTexture.createView() },
-          { binding: 1, resource: tempTexture.createView() },
-          { binding: 2, resource: resultTexture.createView() },
-          { binding: 3, resource: sampler },
-          { binding: 4, resource: { buffer: uniformBuffer } }
-        ]
-      });
-      const compositeReadGroup = device.createBindGroup({
-        label: "KiraKiraGlow_CompositeReadGroup",
-        layout: compositePipeline.getBindGroupLayout(1),
-        entries: [{ binding: 0, resource: tempTexture.createView() }]
-      });
-      const commandEncoder = device.createCommandEncoder({
-        label: "KiraKiraGlow_CommandEncoder"
-      });
-      {
-        const computePass = commandEncoder.beginComputePass({
-          label: "KiraKiraGlow_DownsamplePass"
-        });
-        computePass.setPipeline(downsamplePipeline);
-        computePass.setBindGroup(0, downsampleBindGroup);
-        computePass.dispatchWorkgroups(
-          Math.ceil(smallWidth / 16),
-          Math.ceil(smallHeight / 16)
-        );
-        computePass.end();
-      }
-      {
-        const computePass = commandEncoder.beginComputePass({
-          label: "KiraKiraGlow_HorizontalBlurPass"
-        });
-        computePass.setPipeline(horizontalBlurPipeline);
-        computePass.setBindGroup(0, horizontalBlurBindGroup);
-        computePass.setBindGroup(1, horizontalBlurReadGroup);
-        computePass.dispatchWorkgroups(
-          Math.ceil(smallWidth / 16),
-          Math.ceil(smallHeight / 16)
-        );
-        computePass.end();
-      }
-      {
-        const computePass = commandEncoder.beginComputePass({
-          label: "KiraKiraGlow_VerticalBlurPass"
-        });
-        computePass.setPipeline(verticalBlurPipeline);
-        computePass.setBindGroup(0, verticalBlurBindGroup);
-        computePass.setBindGroup(1, verticalBlurReadGroup);
-        computePass.dispatchWorkgroups(
-          Math.ceil(smallWidth / 16),
-          Math.ceil(smallHeight / 16)
-        );
-        computePass.end();
-      }
-      {
-        const computePass = commandEncoder.beginComputePass({
-          label: "KiraKiraGlow_CompositePass"
-        });
-        computePass.setPipeline(compositePipeline);
-        computePass.setBindGroup(0, compositeBindGroup);
-        computePass.setBindGroup(1, compositeReadGroup);
-        computePass.dispatchWorkgroups(
-          Math.ceil(inputWidth / 16),
-          Math.ceil(inputHeight / 16)
-        );
-        computePass.end();
-      }
       const stagingBuffer = device.createBuffer({
-        label: "KiraKiraGlow_StagingBuffer",
-        size: inputWidth * inputHeight * 4,
+        label: "Staging Buffer",
+        size: bufferInputWidth * bufferInputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
+      const commandEncoder = device.createCommandEncoder({
+        label: "Kirakira Blur Command Encoder"
+      });
+      const verticalPass = commandEncoder.beginComputePass({
+        label: "Kirakira Blur Vertical Pass"
+      });
+      verticalPass.setPipeline(verticalPipeline);
+      verticalPass.setBindGroup(0, verticalBindGroup);
+      verticalPass.dispatchWorkgroups(
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
+      );
+      verticalPass.end();
+      const horizontalPass = commandEncoder.beginComputePass({
+        label: "Kirakira Blur Horizontal Pass"
+      });
+      horizontalPass.setPipeline(horizontalPipeline);
+      horizontalPass.setBindGroup(0, horizontalBindGroup);
+      horizontalPass.dispatchWorkgroups(
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
+      );
+      horizontalPass.end();
       commandEncoder.copyTextureToBuffer(
         { texture: resultTexture },
-        { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
-        [inputWidth, inputHeight]
+        { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
+        [bufferInputWidth, bufferInputHeight]
       );
       device.queue.submit([commandEncoder.finish()]);
       await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -1767,8 +2307,8 @@ var kirakiraGlow = definePlugin({
       stagingBuffer.unmap();
       const resultImageData = new ImageData(
         new Uint8ClampedArray(resultData),
-        inputWidth,
-        inputHeight
+        bufferInputWidth,
+        bufferInputHeight
       );
       return await removeWebGPUAlignmentPadding(
         resultImageData,
@@ -1778,158 +2318,41 @@ var kirakiraGlow = definePlugin({
     }
   }
 });
-function mainShaderCode() {
-  return `
-    struct Params {
-      strength: f32,
-      transparentOriginal: u32,
-      highQuality: u32,
-      width: u32,
-      height: u32,
-      downscaleFactor: u32,
-    }
-
-    @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-    @group(0) @binding(1) var tempTexture: texture_storage_2d<rgba8unorm, write>;
-    @group(0) @binding(2) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-    @group(0) @binding(3) var textureSampler: sampler;
-    @group(0) @binding(4) var<uniform> params: Params;
-    @group(1) @binding(0) var tempReadTexture: texture_2d<f32>;
-    @group(1) @binding(1) var resultReadTexture: texture_2d<f32>;
-
-    fn gaussian1D(x: f32, sigma: f32) -> f32 {
-      let sigma2 = sigma * sigma;
-      return exp(-(x * x) / (2.0 * sigma2)) / (sqrt(2.0 * 3.14159265359) * sigma);
-    }
-
-    @compute @workgroup_size(16, 16)
-    fn computeDownsample(@builtin(global_invocation_id) id: vec3u) {
-      let dims = vec2f(textureDimensions(inputTexture));
-      let smallDims = vec2f(textureDimensions(tempTexture));
-
-      let texCoord = vec2f(id.xy) / smallDims;
-      let srcCoord = texCoord;
-      let color = textureSampleLevel(inputTexture, textureSampler, srcCoord, 0.0);
-
-      textureStore(tempTexture, id.xy, color);
-    }
-
-    @compute @workgroup_size(16, 16)
-    fn computeHorizontalBlur(@builtin(global_invocation_id) id: vec3u) {
-      let dims = vec2f(textureDimensions(tempTexture));
-      let texCoord = vec2f(id.xy) / dims;
-
-      let sigma = max(1.0, params.strength / 3.0);
-      let kernelSize = i32(min(select(16.0, 24.0, params.highQuality != 0u), ceil(params.strength)));
-
-      var totalWeight = 0.0;
-      var totalColor = vec3f(0.0);
-      var totalAlpha = 0.0;
-
-      for (var x = -kernelSize; x <= kernelSize; x++) {
-        let weight = gaussian1D(f32(x), sigma);
-        let sampleCoord = vec2f(texCoord.x + f32(x) / dims.x, texCoord.y);
-
-        if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0) {
-          let sampleColor = textureSampleLevel(tempReadTexture, textureSampler, sampleCoord, 0.0);
-
-          if (sampleColor.a > 0.001) {
-            let unpremultipliedColor = sampleColor.rgb / sampleColor.a;
-            totalColor += unpremultipliedColor * weight * sampleColor.a;
-            totalAlpha += sampleColor.a * weight;
-          }
-          totalWeight += weight;
-        }
-      }
-
-      var blurredColor = vec4f(0.0);
-      if (totalWeight > 0.0 && totalAlpha > 0.001) {
-        let normalizedColor = totalColor / totalAlpha;
-        blurredColor = vec4f(normalizedColor, totalAlpha / totalWeight);
-      }
-
-      textureStore(resultTexture, id.xy, blurredColor);
-    }
-
-    @compute @workgroup_size(16, 16)
-    fn computeVerticalBlur(@builtin(global_invocation_id) id: vec3u) {
-      let dims = vec2f(textureDimensions(resultTexture));
-      let texCoord = vec2f(id.xy) / dims;
-
-      let sigma = max(1.0, params.strength / 3.0);
-      let kernelSize = i32(min(select(16.0, 24.0, params.highQuality != 0u), ceil(params.strength)));
-
-      var totalWeight = 0.0;
-      var totalColor = vec3f(0.0);
-      var totalAlpha = 0.0;
-
-      for (var y = -kernelSize; y <= kernelSize; y++) {
-        let weight = gaussian1D(f32(y), sigma);
-        let sampleCoord = vec2f(texCoord.x, texCoord.y + f32(y) / dims.y);
-
-        if (sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0) {
-          let sampleColor = textureSampleLevel(resultReadTexture, textureSampler, sampleCoord, 0.0);
-
-          if (sampleColor.a > 0.001) {
-            let unpremultipliedColor = sampleColor.rgb / sampleColor.a;
-            totalColor += unpremultipliedColor * weight * sampleColor.a;
-            totalAlpha += sampleColor.a * weight;
-          }
-          totalWeight += weight;
-        }
-      }
-
-      var blurredColor = vec4f(0.0);
-      if (totalWeight > 0.0 && totalAlpha > 0.001) {
-        let normalizedColor = totalColor / totalAlpha;
-        blurredColor = vec4f(normalizedColor, totalAlpha / totalWeight);
-      }
-
-      textureStore(tempTexture, id.xy, blurredColor);
-    }
-
-    @compute @workgroup_size(16, 16)
-    fn computeFinalComposite(@builtin(global_invocation_id) id: vec3u) {
-      let dims = vec2f(textureDimensions(resultTexture));
-      let smallDims = vec2f(textureDimensions(tempTexture));
-      let texCoord = vec2f(id.xy) / dims;
-
-      let smallCoord = texCoord;
-      let blurredColor = textureSampleLevel(tempReadTexture, textureSampler, smallCoord, 0.0);
-      let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-
-      var finalColor = vec4f(0.0);
-
-      if (params.transparentOriginal != 0u) {
-        finalColor = blurredColor;
-
-        if (originalColor.a > 0.0) {
-          finalColor.a = finalColor.a * (1.0 - originalColor.a);
-        }
-      } else {
-        finalColor = blurredColor;
-
-        if (originalColor.a > 0.0) {
-          finalColor = vec4f(
-            mix(finalColor.rgb, originalColor.rgb, originalColor.a),
-            max(finalColor.a, originalColor.a)
-          );
-        }
-      }
-
-      textureStore(resultTexture, id.xy, finalColor);
-    }
-  `;
-}
 
 // src/js/src/live-effects/dithering.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions4,
   makeStructuredView as makeStructuredView4
 } from "npm:webgpu-utils";
+var t4 = createTranslator({
+  en: {
+    title: "Dithering V1",
+    patternType: "Pattern Type",
+    bayer2x2: "2x2 Bayer",
+    bayer4x4: "4x4 Bayer",
+    bayer8x8: "8x8 Bayer",
+    threshold: "Threshold",
+    colorMode: "Color Mode",
+    monochrome: "Monochrome",
+    color: "Color",
+    strength: "Strength"
+  },
+  ja: {
+    title: "\u30C7\u30A3\u30B6\u30EA\u30F3\u30B0 V1",
+    patternType: "\u30D1\u30BF\u30FC\u30F3\u30BF\u30A4\u30D7",
+    bayer2x2: "2x2 Bayer",
+    bayer4x4: "4x4 Bayer",
+    bayer8x8: "8x8 Bayer",
+    threshold: "\u3057\u304D\u3044\u5024",
+    colorMode: "\u30AB\u30E9\u30FC\u30E2\u30FC\u30C9",
+    monochrome: "\u30E2\u30CE\u30AF\u30ED",
+    color: "\u30AB\u30E9\u30FC",
+    strength: "\u5F37\u5EA6"
+  }
+});
 var dithering = definePlugin({
-  id: "dithering-effect-v1",
-  title: "Dithering Effect V1",
+  id: "dithering-v1",
+  title: t4("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -1959,6 +2382,9 @@ var dithering = definePlugin({
     onEditParameters: (params) => {
       return params;
     },
+    onAdjustColors: (params, adjustColor) => {
+      return params;
+    },
     onScaleParams(params, scaleFactor) {
       return {
         threshold: params.threshold,
@@ -1967,34 +2393,44 @@ var dithering = definePlugin({
         colorMode: params.colorMode
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        threshold: lerp(paramsA.threshold, paramsB.threshold, t15),
-        strength: lerp(paramsA.strength, paramsB.strength, t15),
-        patternType: t15 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        colorMode: t15 < 0.5 ? paramsA.colorMode : paramsB.colorMode
+        threshold: lerp(paramsA.threshold, paramsB.threshold, t17),
+        strength: lerp(paramsA.strength, paramsB.strength, t17),
+        patternType: t17 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        colorMode: t17 < 0.5 ? paramsA.colorMode : paramsB.colorMode
       };
     },
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
-        ui.group({ direction: "row" }, [
-          ui.select({ key: "patternType", label: "Pattern Type", value: params.patternType, options: [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t4("strength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "strength", dataType: "float", min: 0, max: 100, value: params.strength }),
+            ui.numberInput({ key: "strength", dataType: "float", min: 0, max: 100, step: 0.1, value: params.strength })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t4("patternType") }),
+          ui.select({ key: "patternType", value: params.patternType, options: [
             { value: "bayer2x2", label: "2x2 Bayer" },
             { value: "bayer4x4", label: "4x4 Bayer" },
             { value: "bayer8x8", label: "8x8 Bayer" }
           ] })
         ]),
-        ui.group({ direction: "row" }, [
-          ui.slider({ key: "threshold", label: "Threshold", dataType: "float", min: 0, max: 100, value: params.threshold })
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t4("threshold") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "threshold", dataType: "float", min: 0, max: 100, value: params.threshold }),
+            ui.numberInput({ key: "threshold", dataType: "float", min: 0, max: 100, step: 0.1, value: params.threshold })
+          ])
         ]),
-        ui.group({ direction: "row" }, [
-          ui.select({ key: "colorMode", label: "Color Mode", value: params.colorMode, options: [
-            { value: "monochrome", label: "Monochrome" },
-            { value: "color", label: "Color" }
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t4("colorMode") }),
+          ui.select({ key: "colorMode", value: params.colorMode, options: [
+            { value: "monochrome", label: t4("monochrome") },
+            { value: "color", label: t4("color") }
           ] })
-        ]),
-        ui.group({ direction: "row" }, [
-          ui.slider({ key: "strength", label: "Strength", dataType: "float", min: 0, max: 100, value: params.strength })
         ])
       ]);
     },
@@ -2002,12 +2438,13 @@ var dithering = definePlugin({
       return await createGPUDevice(
         {
           device: {
-            label: "Device (Dithering Effect)"
+            label: "Device (Dithering)"
           }
         },
         (device) => {
           const code = `
             struct Params {
+              outputSize: vec2f,
               dpiScale: f32,
               threshold: f32,
               strength: f32,
@@ -2065,8 +2502,10 @@ var dithering = definePlugin({
 
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let dims = vec2f(textureDimensions(inputTexture));
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
               let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / adjustedDims;
 
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
 
@@ -2141,6 +2580,7 @@ var dithering = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
       uniformData.set({
+        outputSize: [outputWidth, outputHeight],
         dpiScale: dpi / baseDpi,
         threshold: params.threshold / 100,
         strength: params.strength / 100,
@@ -2226,7 +2666,7 @@ import {
   makeShaderDataDefinitions as makeShaderDataDefinitions5,
   makeStructuredView as makeStructuredView5
 } from "npm:webgpu-utils";
-var t4 = createTranslator({
+var t5 = createTranslator({
   en: {
     title: "Glitch Effect V1",
     intensity: "Intensity",
@@ -2250,7 +2690,7 @@ var t4 = createTranslator({
 });
 var glitch = definePlugin({
   id: "glitch-effect-v1",
-  title: t4("title"),
+  title: t5("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -2296,13 +2736,13 @@ var glitch = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t15),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t15),
-        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t15)),
-        angle: lerp(paramsA.angle, paramsB.angle, t15),
-        bias: lerp(paramsA.bias, paramsB.bias, t15),
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
+        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t17)),
+        angle: lerp(paramsA.angle, paramsB.angle, t17),
+        bias: lerp(paramsA.bias, paramsB.bias, t17),
         seed: paramsA.seed
         // シード値は補間しない
       };
@@ -2310,42 +2750,42 @@ var glitch = definePlugin({
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t4("intensity") }),
+          ui.text({ text: t5("intensity") }),
           ui.slider({ key: "intensity", dataType: "float", min: 0, max: 1, value: params.intensity })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t4("slices") }),
+          ui.text({ text: t5("slices") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "slices", dataType: "int", min: 1, max: 400, value: params.slices }),
             ui.numberInput({ dataType: "int", key: "slices", value: params.slices, min: 1, max: 400, step: 1 })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t4("colorShift") }),
+          ui.text({ text: t5("colorShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 100, value: params.colorShift }),
             ui.numberInput({ dataType: "float", key: "colorShift", value: params.colorShift, min: 0, max: 1, step: 0.01 })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t4("angle") }),
+          ui.text({ text: t5("angle") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "angle", dataType: "float", min: -1, max: 1, value: params.angle }),
             ui.numberInput({ dataType: "float", key: "angle", value: params.angle, min: -1, max: 1, step: 0.01 })
           ]),
-          ui.button({ text: t4("reset"), onClick: () => {
+          ui.button({ text: t5("reset"), onClick: () => {
             setParam({ angle: 0 });
           } })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t4("bias") }),
+          ui.text({ text: t5("bias") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "bias", dataType: "float", min: -1, max: 1, value: params.bias }),
             ui.numberInput({ dataType: "float", key: "bias", value: params.bias, min: -1, max: 1, step: 0.01 })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t4("seed") }),
+          ui.text({ text: t5("seed") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "seed", dataType: "int", min: 0, max: 1e4, value: params.seed }),
             ui.numberInput({ dataType: "int", key: "seed", value: params.seed, min: 0, max: 1e4, step: 1 })
@@ -2535,7 +2975,11 @@ var glitch = definePlugin({
 });
 
 // src/js/src/live-effects/outline.ts
-var t5 = createTranslator({
+import {
+  makeShaderDataDefinitions as makeShaderDataDefinitions6,
+  makeStructuredView as makeStructuredView6
+} from "npm:webgpu-utils";
+var t6 = createTranslator({
   en: {
     title: "Outline Effect (Morphology)",
     size: "Size",
@@ -2547,9 +2991,9 @@ var t5 = createTranslator({
     color: "\u8272"
   }
 });
-var outlineEffect = definePlugin({
+var outline = definePlugin({
   id: "outline-effect-morphology-v1",
-  title: t5("title"),
+  title: t6("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -2584,21 +3028,21 @@ var outlineEffect = definePlugin({
         size: params.size * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        size: lerp(paramsA.size, paramsB.size, t15),
+        size: lerp(paramsA.size, paramsB.size, t17),
         color: {
-          r: lerp(paramsA.color.r, paramsB.color.r, t15),
-          g: lerp(paramsA.color.g, paramsB.color.g, t15),
-          b: lerp(paramsA.color.b, paramsB.color.b, t15),
-          a: lerp(paramsA.color.a, paramsB.color.a, t15)
+          r: lerp(paramsA.color.r, paramsB.color.r, t17),
+          g: lerp(paramsA.color.g, paramsB.color.g, t17),
+          b: lerp(paramsA.color.b, paramsB.color.b, t17),
+          a: lerp(paramsA.color.a, paramsB.color.a, t17)
         }
       };
     },
     renderUI: (params) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "row" }, [
-          ui.text({ text: t5("size") }),
+          ui.text({ text: t6("size") }),
           ui.slider({
             key: "size",
             dataType: "float",
@@ -2616,291 +3060,303 @@ var outlineEffect = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device = await navigator.gpu.requestAdapter().then(
-        (adapter) => adapter.requestDevice({
-          label: "WebGPU(Outline Effect Morphology)"
-        })
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Outline Effect Morphology)" }
+        },
+        (device) => {
+          const boundaryShaderCode = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              size: f32,
+              color: vec4f,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var intermediateTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+
+            fn isTransparent(color: vec4f) -> bool {
+              return color.a < 0.01;
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+                let adjustedDims = vec2f(textureDimensions(inputTexture));
+                let dims = vec2f(params.outputSize);
+                let texCoord = vec2f(id.xy) / dims;
+                let toInputTexCoord = dims / adjustedDims;
+
+                // Ignore 256 padded pixels
+                if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+                // DPI\u5BFE\u5FDC\u306E\u30B5\u30A4\u30BA\u8A08\u7B97
+                let scaledSize = params.size * params.dpiScale;
+
+                // \u73FE\u5728\u306E\u30D4\u30AF\u30BB\u30EB\u306E\u900F\u660E\u6027
+                let isCurrentTransparent = isTransparent(originalColor);
+
+                var outlineIntensity = 0.0;
+
+                if (scaledSize > 0.0) {
+                    let stepSize = 1.0 / dims;
+                    // \u6700\u5927\u8DDD\u96E2\u306F\u7DDA\u306E\u592A\u3055\u306B\u57FA\u3065\u304F
+                    let maxDist = scaledSize * 1.5;
+
+                    // \u653E\u5C04\u72B6\u306B\u65B9\u5411\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u3057\u3066\u5883\u754C\u3092\u691C\u51FA
+                    let dirCount = 32u; // \u3088\u308A\u591A\u304F\u306E\u65B9\u5411\u3092\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0
+                    let angleStep = 3.14159 * 2.0 / f32(dirCount);
+
+                    for (var i = 0u; i < dirCount; i = i + 1u) {
+                        let angle = f32(i) * angleStep;
+                        let dir = vec2f(cos(angle), sin(angle));
+
+                        var foundBoundary = false;
+                        var boundaryDist = maxDist;
+
+                        // \u3088\u308A\u7D30\u304B\u3044\u30B9\u30C6\u30C3\u30D7\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0
+                        let samplingStep = 0.3; // \u3088\u308A\u7D30\u304B\u3044\u30B9\u30C6\u30C3\u30D7
+                        for (var dist = 0.5; dist <= maxDist; dist += samplingStep) {
+                            let offset = dir * stepSize * dist;
+                            let sampleCoord = texCoord * toInputTexCoord + offset;
+
+                            // \u753B\u50CF\u306E\u7BC4\u56F2\u5916\u306F\u30B9\u30AD\u30C3\u30D7
+                            if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 ||
+                                sampleCoord.y < 0.0 || sampleCoord.y > 1.0) {
+                                continue;
+                            }
+
+                            let sampleColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord, 0.0);
+                            let isSampleTransparent = isTransparent(sampleColor);
+
+                            // \u900F\u660E\u6027\u304C\u7570\u306A\u308C\u3070\u5883\u754C\u3092\u691C\u51FA
+                            if (isSampleTransparent != isCurrentTransparent) {
+                                foundBoundary = true;
+                                boundaryDist = dist;
+                                break;
+                            }
+                        }
+
+                        if (foundBoundary) {
+                            // \u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u306E\u5F37\u5EA6\u8A08\u7B97\uFF1A\u5883\u754C\u306B\u8FD1\u3044\u307B\u3069\u5F37\u304F
+                            let t = 1.0 - boundaryDist / scaledSize;
+                            outlineIntensity = max(outlineIntensity, clamp(t, 0.0, 1.0));
+                        }
+                    }
+                }
+
+                // \u7D50\u679C\u3092\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u306B\u4FDD\u5B58
+                // r: \u900F\u660E\u6027\u30D5\u30E9\u30B0\uFF081.0\u306F\u4E0D\u900F\u660E\u30010.0\u306F\u900F\u660E\uFF09
+                // g: \u672A\u4F7F\u7528
+                // b: \u672A\u4F7F\u7528
+                // a: \u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u5F37\u5EA6
+                var transparencyFlag = 0.0;
+                if (!isCurrentTransparent) {
+                    transparencyFlag = 1.0;
+                }
+
+                textureStore(
+                  intermediateTexture,
+                  id.xy,
+                  vec4f(transparencyFlag, 0.0, 0.0, outlineIntensity)
+                );
+            }
+          `;
+          const morphologyShaderCode = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              size: f32,
+              color: vec4f,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var intermediateTexture: texture_2d<f32>;
+            @group(0) @binding(2) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(3) var textureSampler: sampler;
+            @group(0) @binding(4) var<uniform> params: Params;
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+                let adjustedDims = vec2f(textureDimensions(inputTexture));
+                let dims = vec2f(params.outputSize);
+                let texCoord = vec2f(id.xy) / dims;
+                let toInputTexCoord = dims / adjustedDims;
+
+                // Ignore 256 padded pixels
+                if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+                // \u5143\u306E\u753B\u50CF\u3068\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u304B\u3089\u60C5\u5831\u3092\u53D6\u5F97
+                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+                let intermediateValue = textureSampleLevel(intermediateTexture, textureSampler, texCoord, 0.0);
+
+                // \u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u60C5\u5831\u3092\u5206\u89E3
+                var isCurrentOpaque = false;
+                if (intermediateValue.r > 0.5) {
+                    isCurrentOpaque = true;
+                }
+                let outlineIntensity = intermediateValue.a;
+
+                // DPI\u5BFE\u5FDC\u306E\u30B5\u30A4\u30BA\u8A08\u7B97
+                let scaledSize = params.size * params.dpiScale;
+
+                // \u30E2\u30FC\u30D5\u30A9\u30ED\u30B8\u30FC\u6F14\u7B97\u306E\u305F\u3081\u306E\u69CB\u9020\u5316\u8981\u7D20\uFF08\u30AB\u30FC\u30CD\u30EB\uFF09\u30B5\u30A4\u30BA
+                var kernelSize = 4;
+
+                // \u30B9\u30C6\u30C3\u30D71: \u62E1\u5F35\u64CD\u4F5C\uFF08Dilation\uFF09
+                // \u3053\u308C\u306B\u3088\u308A\u5C0F\u3055\u306A\u7A74\u3084\u51F9\u307F\u304C\u57CB\u307E\u308A\u307E\u3059
+                var dilatedValue = 0.0;
+
+                for (var dy = -kernelSize; dy <= kernelSize; dy += 1) {
+                    for (var dx = -kernelSize; dx <= kernelSize; dx += 1) {
+                        let offset = vec2f(f32(dx), f32(dy)) / dims;
+                        let sampleCoord = texCoord + offset;
+
+                        // \u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u7BC4\u56F2\u5916\u30C1\u30A7\u30C3\u30AF
+                        if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 ||
+                            sampleCoord.y < 0.0 || sampleCoord.y > 1.0) {
+                            continue;
+                        }
+
+                        // \u69CB\u9020\u5316\u8981\u7D20\uFF08\u5186\u5F62\u30AB\u30FC\u30CD\u30EB\uFF09\u306E\u6761\u4EF6
+                        let dist = length(vec2f(f32(dx), f32(dy)));
+                        if (dist > f32(kernelSize)) {
+                            continue;
+                        }
+
+                        let sampleValue = textureSampleLevel(intermediateTexture, textureSampler, sampleCoord, 0.0);
+                        dilatedValue = max(dilatedValue, sampleValue.a);
+                    }
+                }
+
+                // \u30B9\u30C6\u30C3\u30D72: \u53CE\u7E2E\u64CD\u4F5C\uFF08Erosion\uFF09
+                // \u3053\u308C\u306B\u3088\u308A\u7A81\u8D77\u3084\u30AE\u30B6\u30AE\u30B6\u304C\u524A\u3089\u308C\u307E\u3059
+                var erodedValue = 1.0;
+
+                // \u53CE\u7E2E\u30AB\u30FC\u30CD\u30EB\u306F\u62E1\u5F35\u3088\u308A\u5C11\u3057\u5C0F\u3055\u304F
+                let erosionKernelSize = max(1, kernelSize - 1);
+
+                for (var dy = -erosionKernelSize; dy <= erosionKernelSize; dy += 1) {
+                    for (var dx = -erosionKernelSize; dx <= erosionKernelSize; dx += 1) {
+                        let offset = vec2f(f32(dx), f32(dy)) / dims;
+                        let sampleCoord = texCoord + offset;
+
+                        // \u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u7BC4\u56F2\u5916\u306F\u6700\u5C0F\u5024\u3068\u307F\u306A\u3059
+                        if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 ||
+                            sampleCoord.y < 0.0 || sampleCoord.y > 1.0) {
+                            erodedValue = 0.0;
+                            continue;
+                        }
+
+                        // \u69CB\u9020\u5316\u8981\u7D20\uFF08\u5186\u5F62\u30AB\u30FC\u30CD\u30EB\uFF09\u306E\u6761\u4EF6
+                        let dist = length(vec2f(f32(dx), f32(dy)));
+                        if (dist > f32(erosionKernelSize)) {
+                            continue;
+                        }
+
+                        // \u62E1\u5F35\u6E08\u307F\u5024\u3092\u4F7F\u7528\u3057\u3066\u53CE\u7E2E
+                        let sampleValue = textureSampleLevel(intermediateTexture, textureSampler, sampleCoord, 0.0);
+                        erodedValue = min(erodedValue, sampleValue.a);
+                    }
+                }
+
+                // \u6700\u7D42\u7684\u306A\u30E2\u30FC\u30D5\u30A9\u30ED\u30B8\u30FC\u51E6\u7406\u7D50\u679C
+                // \u307E\u305A\u62E1\u5F35\u3057\u3066\u304B\u3089\u53CE\u7E2E\u3059\u308B\u306E\u3067\u30AF\u30ED\u30FC\u30BA\u64CD\u4F5C\uFF08Close\uFF09\u306B\u306A\u308B
+                var morphValue = 0.0;
+
+                // \u7DDA\u306E\u592A\u3055\u306B\u5FDC\u3058\u3066\u6319\u52D5\u3092\u8ABF\u6574
+                if (scaledSize < 5.0) {
+                    // \u7D30\u3044\u7DDA\u306F\u5143\u306E\u5024\u3092\u307B\u307C\u7DAD\u6301\uFF08\u8EFD\u5FAE\u306A\u30E2\u30FC\u30D5\u30A9\u30ED\u30B8\u30FC\uFF09
+                    morphValue = mix(outlineIntensity, dilatedValue, 0.5);
+                } else {
+                    // \u592A\u3044\u7DDA\u306F\u30D5\u30EB\u51E6\u7406\uFF08\u30AF\u30ED\u30FC\u30BA\u64CD\u4F5C\uFF09
+                    morphValue = erodedValue;
+                }
+
+                // \u95BE\u5024\u51E6\u7406\u3067\u30D0\u30A4\u30CA\u30EA\u30DE\u30B9\u30AF\u751F\u6210
+                var binaryMask = 0.0;
+                let threshold = 0.3;
+                if (morphValue >= threshold) {
+                    binaryMask = 1.0;
+                }
+
+                // \u6700\u7D42\u7684\u306A\u6ED1\u3089\u304B\u3055\u3092\u308F\u305A\u304B\u306B\u8FFD\u52A0
+                var finalMask = binaryMask;
+
+                // \u7D50\u679C\u306E\u5408\u6210
+                var finalColor = vec4f(0.0, 0.0, 0.0, 0.0);
+                if (originalColor.a > 0.01) {
+                    // \u4E0D\u900F\u660E\u90E8\u5206\u306F\u5143\u306E\u753B\u50CF\u3092\u8868\u793A\uFF08\u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u3092\u4E0A\u66F8\u304D\uFF09
+                    finalColor = originalColor;
+                } else {
+                    // \u900F\u660E\u90E8\u5206\u306F\u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u3092\u8868\u793A
+                    finalColor = vec4f(
+                      params.color.r,
+                      params.color.g,
+                      params.color.b,
+                      finalMask * params.color.a
+                    );
+                }
+
+                textureStore(resultTexture, id.xy, finalColor);
+            }
+          `;
+          const boundaryShader = device.createShaderModule({
+            label: "Outline Boundary Detection Shader",
+            code: boundaryShaderCode
+          });
+          const morphologyShader = device.createShaderModule({
+            label: "Outline Morphology Shader",
+            code: morphologyShaderCode
+          });
+          const boundaryPipelineDef = makeShaderDataDefinitions6(boundaryShaderCode);
+          const morphologyPipelineDef = makeShaderDataDefinitions6(morphologyShaderCode);
+          device.addEventListener("lost", (e) => {
+            console.error(e);
+          });
+          device.addEventListener("uncapturederror", (e) => {
+            console.error(e.error);
+          });
+          const boundaryPipeline = device.createComputePipeline({
+            label: "Outline Boundary Pipeline",
+            layout: "auto",
+            compute: {
+              module: boundaryShader,
+              entryPoint: "computeMain"
+            }
+          });
+          const morphologyPipeline = device.createComputePipeline({
+            label: "Outline Morphology Pipeline",
+            layout: "auto",
+            compute: {
+              module: morphologyShader,
+              entryPoint: "computeMain"
+            }
+          });
+          return {
+            device,
+            boundaryPipeline,
+            morphologyPipeline,
+            boundaryPipelineDef,
+            morphologyPipelineDef
+          };
+        }
       );
-      if (!device) {
-        throw new Error("Failed to create WebGPU device");
-      }
-      const boundaryShader = device.createShaderModule({
-        label: "Outline Boundary Detection Shader",
-        code: `
-          struct Params {
-            size: f32,
-            color: vec4f,
-            inputDpi: f32,
-            baseDpi: f32,
-            _padding: array<vec4f, 3>,
-          }
-
-          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-          @group(0) @binding(1) var intermediateTexture: texture_storage_2d<rgba8unorm, write>;
-          @group(0) @binding(2) var textureSampler: sampler;
-          @group(0) @binding(3) var<uniform> params: Params;
-
-          fn isTransparent(color: vec4f) -> bool {
-            return color.a < 0.01;
-          }
-
-          @compute @workgroup_size(16, 16)
-          fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let dims = vec2f(textureDimensions(inputTexture));
-              let texCoord = vec2f(id.xy) / dims;
-
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-
-              // DPI\u5BFE\u5FDC\u306E\u30B5\u30A4\u30BA\u8A08\u7B97
-              let scaledSize = params.size * (params.inputDpi / params.baseDpi);
-
-              // \u73FE\u5728\u306E\u30D4\u30AF\u30BB\u30EB\u306E\u900F\u660E\u6027
-              let isCurrentTransparent = isTransparent(originalColor);
-
-              var outlineIntensity = 0.0;
-
-              if (scaledSize > 0.0) {
-                  let stepSize = 1.0 / dims;
-                  // \u6700\u5927\u8DDD\u96E2\u306F\u7DDA\u306E\u592A\u3055\u306B\u57FA\u3065\u304F
-                  let maxDist = scaledSize * 1.5;
-
-                  // \u653E\u5C04\u72B6\u306B\u65B9\u5411\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u3057\u3066\u5883\u754C\u3092\u691C\u51FA
-                  let dirCount = 64u; // \u3088\u308A\u591A\u304F\u306E\u65B9\u5411\u3092\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0
-                  let angleStep = 3.14159 * 2.0 / f32(dirCount);
-
-                  for (var i = 0u; i < dirCount; i = i + 1u) {
-                      let angle = f32(i) * angleStep;
-                      let dir = vec2f(cos(angle), sin(angle));
-
-                      var foundBoundary = false;
-                      var boundaryDist = maxDist;
-
-                      // \u3088\u308A\u7D30\u304B\u3044\u30B9\u30C6\u30C3\u30D7\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0
-                      let samplingStep = 0.3; // \u3088\u308A\u7D30\u304B\u3044\u30B9\u30C6\u30C3\u30D7
-                      for (var dist = 0.5; dist <= maxDist; dist += samplingStep) {
-                          let offset = dir * stepSize * dist;
-                          let sampleCoord = texCoord + offset;
-
-                          // \u753B\u50CF\u306E\u7BC4\u56F2\u5916\u306F\u30B9\u30AD\u30C3\u30D7
-                          if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 ||
-                              sampleCoord.y < 0.0 || sampleCoord.y > 1.0) {
-                              continue;
-                          }
-
-                          let sampleColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord, 0.0);
-                          let isSampleTransparent = isTransparent(sampleColor);
-
-                          // \u900F\u660E\u6027\u304C\u7570\u306A\u308C\u3070\u5883\u754C\u3092\u691C\u51FA
-                          if (isSampleTransparent != isCurrentTransparent) {
-                              foundBoundary = true;
-                              boundaryDist = dist;
-                              break;
-                          }
-                      }
-
-                      if (foundBoundary) {
-                          // \u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u306E\u5F37\u5EA6\u8A08\u7B97\uFF1A\u5883\u754C\u306B\u8FD1\u3044\u307B\u3069\u5F37\u304F
-                          let t = 1.0 - boundaryDist / scaledSize;
-                          outlineIntensity = max(outlineIntensity, clamp(t, 0.0, 1.0));
-                      }
-                  }
-
-                  // \u30D0\u30A4\u30CA\u30EA\u30DE\u30B9\u30AF\u3092\u751F\u6210\u305B\u305A\u3001\u5F37\u5EA6\u3092\u305D\u306E\u307E\u307E\u4FDD\u6301
-                  // \u3053\u308C\u306B\u3088\u308A2\u30D1\u30B9\u76EE\u3067\u3088\u308A\u67D4\u8EDF\u306A\u51E6\u7406\u304C\u53EF\u80FD
-              }
-
-              // \u7D50\u679C\u3092\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u306B\u4FDD\u5B58
-              // r: \u900F\u660E\u6027\u30D5\u30E9\u30B0\uFF081.0\u306F\u4E0D\u900F\u660E\u30010.0\u306F\u900F\u660E\uFF09
-              // g: \u672A\u4F7F\u7528
-              // b: \u672A\u4F7F\u7528
-              // a: \u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u5F37\u5EA6
-              var transparencyFlag = 0.0;
-              if (!isCurrentTransparent) {
-                  transparencyFlag = 1.0;
-              }
-
-              textureStore(
-                intermediateTexture,
-                id.xy,
-                vec4f(transparencyFlag, 0.0, 0.0, outlineIntensity)
-              );
-          }
-        `
-      });
-      const morphologyShader = device.createShaderModule({
-        label: "Outline Morphology Shader",
-        code: `
-          struct Params {
-            size: f32,
-            color: vec4f,
-            inputDpi: f32,
-            baseDpi: f32,
-            _padding: array<vec4f, 3>,
-          }
-
-          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-          @group(0) @binding(1) var intermediateTexture: texture_2d<f32>;
-          @group(0) @binding(2) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-          @group(0) @binding(3) var textureSampler: sampler;
-          @group(0) @binding(4) var<uniform> params: Params;
-
-          @compute @workgroup_size(16, 16)
-          fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let dims = vec2f(textureDimensions(inputTexture));
-              let texCoord = vec2f(id.xy) / dims;
-
-              // \u5143\u306E\u753B\u50CF\u3068\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u304B\u3089\u60C5\u5831\u3092\u53D6\u5F97
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
-              let intermediateValue = textureSampleLevel(intermediateTexture, textureSampler, texCoord, 0.0);
-
-              // \u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u60C5\u5831\u3092\u5206\u89E3
-              var isCurrentOpaque = false;
-              if (intermediateValue.r > 0.5) {
-                  isCurrentOpaque = true;
-              }
-              let outlineIntensity = intermediateValue.a;
-
-              // DPI\u5BFE\u5FDC\u306E\u30B5\u30A4\u30BA\u8A08\u7B97
-              let scaledSize = params.size * (params.inputDpi / params.baseDpi);
-
-              // \u30E2\u30FC\u30D5\u30A9\u30ED\u30B8\u30FC\u6F14\u7B97\u306E\u305F\u3081\u306E\u69CB\u9020\u5316\u8981\u7D20\uFF08\u30AB\u30FC\u30CD\u30EB\uFF09\u30B5\u30A4\u30BA
-              var kernelSize = 1;
-              if (scaledSize < 5.0) {
-                  kernelSize = 1; // \u7D30\u3044\u7DDA
-              } else if (scaledSize < 20.0) {
-                  kernelSize = 2; // \u4E2D\u7A0B\u5EA6\u306E\u7DDA
-              } else if (scaledSize < 50.0) {
-                  kernelSize = 3; // \u3084\u3084\u592A\u3044\u7DDA
-              } else {
-                  kernelSize = 4; // \u975E\u5E38\u306B\u592A\u3044\u7DDA
-              }
-
-              // \u30B9\u30C6\u30C3\u30D71: \u62E1\u5F35\u64CD\u4F5C\uFF08Dilation\uFF09
-              // \u3053\u308C\u306B\u3088\u308A\u5C0F\u3055\u306A\u7A74\u3084\u51F9\u307F\u304C\u57CB\u307E\u308A\u307E\u3059
-              var dilatedValue = 0.0;
-
-              for (var dy = -kernelSize; dy <= kernelSize; dy += 1) {
-                  for (var dx = -kernelSize; dx <= kernelSize; dx += 1) {
-                      let offset = vec2f(f32(dx), f32(dy)) / dims;
-                      let sampleCoord = texCoord + offset;
-
-                      // \u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u7BC4\u56F2\u5916\u30C1\u30A7\u30C3\u30AF
-                      if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 ||
-                          sampleCoord.y < 0.0 || sampleCoord.y > 1.0) {
-                          continue;
-                      }
-
-                      // \u69CB\u9020\u5316\u8981\u7D20\uFF08\u5186\u5F62\u30AB\u30FC\u30CD\u30EB\uFF09\u306E\u6761\u4EF6
-                      let dist = length(vec2f(f32(dx), f32(dy)));
-                      if (dist > f32(kernelSize)) {
-                          continue;
-                      }
-
-                      let sampleValue = textureSampleLevel(intermediateTexture, textureSampler, sampleCoord, 0.0);
-                      dilatedValue = max(dilatedValue, sampleValue.a);
-                  }
-              }
-
-              // \u30B9\u30C6\u30C3\u30D72: \u53CE\u7E2E\u64CD\u4F5C\uFF08Erosion\uFF09
-              // \u3053\u308C\u306B\u3088\u308A\u7A81\u8D77\u3084\u30AE\u30B6\u30AE\u30B6\u304C\u524A\u3089\u308C\u307E\u3059
-              var erodedValue = 1.0;
-
-              // \u53CE\u7E2E\u30AB\u30FC\u30CD\u30EB\u306F\u62E1\u5F35\u3088\u308A\u5C11\u3057\u5C0F\u3055\u304F
-              let erosionKernelSize = max(1, kernelSize - 1);
-
-              for (var dy = -erosionKernelSize; dy <= erosionKernelSize; dy += 1) {
-                  for (var dx = -erosionKernelSize; dx <= erosionKernelSize; dx += 1) {
-                      let offset = vec2f(f32(dx), f32(dy)) / dims;
-                      let sampleCoord = texCoord + offset;
-
-                      // \u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u7BC4\u56F2\u5916\u306F\u6700\u5C0F\u5024\u3068\u307F\u306A\u3059
-                      if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 ||
-                          sampleCoord.y < 0.0 || sampleCoord.y > 1.0) {
-                          erodedValue = 0.0;
-                          continue;
-                      }
-
-                      // \u69CB\u9020\u5316\u8981\u7D20\uFF08\u5186\u5F62\u30AB\u30FC\u30CD\u30EB\uFF09\u306E\u6761\u4EF6
-                      let dist = length(vec2f(f32(dx), f32(dy)));
-                      if (dist > f32(erosionKernelSize)) {
-                          continue;
-                      }
-
-                      // \u62E1\u5F35\u6E08\u307F\u5024\u3092\u4F7F\u7528\u3057\u3066\u53CE\u7E2E
-                      let sampleValue = textureSampleLevel(intermediateTexture, textureSampler, sampleCoord, 0.0);
-                      erodedValue = min(erodedValue, sampleValue.a);
-                  }
-              }
-
-              // \u6700\u7D42\u7684\u306A\u30E2\u30FC\u30D5\u30A9\u30ED\u30B8\u30FC\u51E6\u7406\u7D50\u679C
-              // \u307E\u305A\u62E1\u5F35\u3057\u3066\u304B\u3089\u53CE\u7E2E\u3059\u308B\u306E\u3067\u30AF\u30ED\u30FC\u30BA\u64CD\u4F5C\uFF08Close\uFF09\u306B\u306A\u308B
-              var morphValue = 0.0;
-
-              // \u7DDA\u306E\u592A\u3055\u306B\u5FDC\u3058\u3066\u6319\u52D5\u3092\u8ABF\u6574
-              if (scaledSize < 5.0) {
-                  // \u7D30\u3044\u7DDA\u306F\u5143\u306E\u5024\u3092\u307B\u307C\u7DAD\u6301\uFF08\u8EFD\u5FAE\u306A\u30E2\u30FC\u30D5\u30A9\u30ED\u30B8\u30FC\uFF09
-                  morphValue = mix(outlineIntensity, dilatedValue, 0.5);
-              } else {
-                  // \u592A\u3044\u7DDA\u306F\u30D5\u30EB\u51E6\u7406\uFF08\u30AF\u30ED\u30FC\u30BA\u64CD\u4F5C\uFF09
-                  morphValue = erodedValue;
-              }
-
-              // \u95BE\u5024\u51E6\u7406\u3067\u30D0\u30A4\u30CA\u30EA\u30DE\u30B9\u30AF\u751F\u6210
-              var binaryMask = 0.0;
-              let threshold = 0.3;
-              if (morphValue >= threshold) {
-                  binaryMask = 1.0;
-              }
-
-              // \u6700\u7D42\u7684\u306A\u6ED1\u3089\u304B\u3055\u3092\u308F\u305A\u304B\u306B\u8FFD\u52A0
-              var finalMask = binaryMask;
-
-              // \u7D50\u679C\u306E\u5408\u6210
-              var finalColor = vec4f(0.0, 0.0, 0.0, 0.0);
-              if (originalColor.a > 0.01) {
-                  // \u4E0D\u900F\u660E\u90E8\u5206\u306F\u5143\u306E\u753B\u50CF\u3092\u8868\u793A\uFF08\u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u3092\u4E0A\u66F8\u304D\uFF09
-                  finalColor = originalColor;
-              } else {
-                  // \u900F\u660E\u90E8\u5206\u306F\u30A2\u30A6\u30C8\u30E9\u30A4\u30F3\u3092\u8868\u793A
-                  finalColor = vec4f(
-                    params.color.r,
-                    params.color.g,
-                    params.color.b,
-                    finalMask * params.color.a
-                  );
-              }
-
-              textureStore(resultTexture, id.xy, finalColor);
-          }
-        `
-      });
-      device.addEventListener("lost", (e) => {
-        console.error(e);
-      });
-      device.addEventListener("uncapturederror", (e) => {
-        console.error(e.error);
-      });
-      const boundaryPipeline = device.createComputePipeline({
-        label: "Outline Boundary Pipeline",
-        layout: "auto",
-        compute: {
-          module: boundaryShader,
-          entryPoint: "computeMain"
-        }
-      });
-      const morphologyPipeline = device.createComputePipeline({
-        label: "Outline Morphology Pipeline",
-        layout: "auto",
-        compute: {
-          module: morphologyShader,
-          entryPoint: "computeMain"
-        }
-      });
-      return { device, boundaryPipeline, morphologyPipeline };
     },
-    goLiveEffect: async ({ device, boundaryPipeline, morphologyPipeline }, params, imgData, env) => {
+    goLiveEffect: async ({
+      device,
+      boundaryPipeline,
+      morphologyPipeline,
+      boundaryPipelineDef,
+      morphologyPipelineDef
+    }, params, imgData, { dpi, baseDpi }) => {
       console.log("Outline Effect Morphology V1", params);
-      const padding = Math.ceil(params.size);
+      const dpiScale = dpi / baseDpi;
+      const padding = Math.ceil(params.size * dpiScale);
       imgData = await paddingImageData(imgData, padding);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
@@ -2928,10 +3384,20 @@ var outlineEffect = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformBuffer = device.createBuffer({
-        label: "Params Buffer",
-        size: 96,
-        // 必要なサイズ (フロート4個 + vec4 + パディング)
+      const boundaryUniformValues = makeStructuredView6(
+        boundaryPipelineDef.uniforms.params
+      );
+      const boundaryUniformBuffer = device.createBuffer({
+        label: "Boundary Params Buffer",
+        size: boundaryUniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      const morphologyUniformValues = makeStructuredView6(
+        morphologyPipelineDef.uniforms.params
+      );
+      const morphologyUniformBuffer = device.createBuffer({
+        label: "Morphology Params Buffer",
+        size: morphologyUniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
       const boundaryBindGroup = device.createBindGroup({
@@ -2952,7 +3418,7 @@ var outlineEffect = definePlugin({
           },
           {
             binding: 3,
-            resource: { buffer: uniformBuffer }
+            resource: { buffer: boundaryUniformBuffer }
           }
         ]
       });
@@ -2978,7 +3444,7 @@ var outlineEffect = definePlugin({
           },
           {
             binding: 4,
-            resource: { buffer: uniformBuffer }
+            resource: { buffer: morphologyUniformBuffer }
           }
         ]
       });
@@ -2987,16 +3453,28 @@ var outlineEffect = definePlugin({
         size: inputWidth * inputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
-      const uniformData = new ArrayBuffer(96);
-      const uniformView = new DataView(uniformData);
-      uniformView.setFloat32(0, params.size, true);
-      uniformView.setFloat32(16, params.color.r, true);
-      uniformView.setFloat32(20, params.color.g, true);
-      uniformView.setFloat32(24, params.color.b, true);
-      uniformView.setFloat32(28, params.color.a, true);
-      uniformView.setFloat32(32, env.dpi, true);
-      uniformView.setFloat32(36, env.baseDpi, true);
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      boundaryUniformValues.set({
+        outputSize: [inputWidth, inputHeight],
+        dpiScale,
+        size: params.size,
+        color: [params.color.r, params.color.g, params.color.b, params.color.a]
+      });
+      device.queue.writeBuffer(
+        boundaryUniformBuffer,
+        0,
+        boundaryUniformValues.arrayBuffer
+      );
+      morphologyUniformValues.set({
+        outputSize: [inputWidth, inputHeight],
+        dpiScale,
+        size: params.size,
+        color: [params.color.r, params.color.g, params.color.b, params.color.a]
+      });
+      device.queue.writeBuffer(
+        morphologyUniformBuffer,
+        0,
+        morphologyUniformValues.arrayBuffer
+      );
       device.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
@@ -3052,10 +3530,10 @@ var outlineEffect = definePlugin({
 
 // src/js/src/live-effects/coastic.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions6,
-  makeStructuredView as makeStructuredView6
+  makeShaderDataDefinitions as makeShaderDataDefinitions7,
+  makeStructuredView as makeStructuredView7
 } from "npm:webgpu-utils";
-var t6 = createTranslator({
+var t7 = createTranslator({
   en: {
     title: "Caustics",
     intensity: "Intensity",
@@ -3079,7 +3557,7 @@ var t6 = createTranslator({
 });
 var coastic = definePlugin({
   id: "caustics-effect-v1",
-  title: t6("title"),
+  title: t7("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -3133,59 +3611,59 @@ var coastic = definePlugin({
         scale: params.scale * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t15),
-        scale: lerp(paramsA.scale, paramsB.scale, t15),
-        complexity: lerp(paramsA.complexity, paramsB.complexity, t15),
-        speed: lerp(paramsA.speed, paramsB.speed, t15),
-        colorMode: t15 < 0.5 ? paramsA.colorMode : paramsB.colorMode,
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
+        scale: lerp(paramsA.scale, paramsB.scale, t17),
+        complexity: lerp(paramsA.complexity, paramsB.complexity, t17),
+        speed: lerp(paramsA.speed, paramsB.speed, t17),
+        colorMode: t17 < 0.5 ? paramsA.colorMode : paramsB.colorMode,
         lightColor: {
-          r: lerp(paramsA.lightColor.r, paramsB.lightColor.r, t15),
-          g: lerp(paramsA.lightColor.g, paramsB.lightColor.g, t15),
-          b: lerp(paramsA.lightColor.b, paramsB.lightColor.b, t15),
-          a: lerp(paramsA.lightColor.a, paramsB.lightColor.a, t15)
+          r: lerp(paramsA.lightColor.r, paramsB.lightColor.r, t17),
+          g: lerp(paramsA.lightColor.g, paramsB.lightColor.g, t17),
+          b: lerp(paramsA.lightColor.b, paramsB.lightColor.b, t17),
+          a: lerp(paramsA.lightColor.a, paramsB.lightColor.a, t17)
         },
         bgColor: {
-          r: lerp(paramsA.bgColor.r, paramsB.bgColor.r, t15),
-          g: lerp(paramsA.bgColor.g, paramsB.bgColor.g, t15),
-          b: lerp(paramsA.bgColor.b, paramsB.bgColor.b, t15),
-          a: lerp(paramsA.bgColor.a, paramsB.bgColor.a, t15)
+          r: lerp(paramsA.bgColor.r, paramsB.bgColor.r, t17),
+          g: lerp(paramsA.bgColor.g, paramsB.bgColor.g, t17),
+          b: lerp(paramsA.bgColor.b, paramsB.bgColor.b, t17),
+          a: lerp(paramsA.bgColor.a, paramsB.bgColor.a, t17)
         }
       };
     },
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("intensity") }),
+          ui.text({ text: t7("intensity") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "intensity", dataType: "float", min: 0, max: 2, value: params.intensity }),
             ui.numberInput({ key: "intensity", dataType: "float", value: params.intensity })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("scale") }),
+          ui.text({ text: t7("scale") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "scale", dataType: "float", min: 10, max: 200, value: params.scale }),
             ui.numberInput({ key: "scale", dataType: "float", value: params.scale })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("complexity") }),
+          ui.text({ text: t7("complexity") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "complexity", dataType: "float", min: 1, max: 10, value: params.complexity }),
             ui.numberInput({ key: "complexity", dataType: "float", value: params.complexity })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("speed") }),
+          ui.text({ text: t7("speed") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "speed", dataType: "float", min: 0, max: 2, value: params.speed }),
             ui.numberInput({ key: "speed", dataType: "float", value: params.speed })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("colorMode") }),
+          ui.text({ text: t7("colorMode") }),
           ui.select({ key: "colorMode", value: params.colorMode, options: [
             { label: "Blend", value: "blend" },
             { label: "Add", value: "add" },
@@ -3193,11 +3671,11 @@ var coastic = definePlugin({
           ] })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("lightColor") }),
+          ui.text({ text: t7("lightColor") }),
           ui.colorInput({ key: "lightColor", value: params.lightColor })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t6("bgColor") }),
+          ui.text({ text: t7("bgColor") }),
           ui.colorInput({ key: "bgColor", value: params.bgColor })
         ])
       ]);
@@ -3328,7 +3806,7 @@ var coastic = definePlugin({
             label: "Caustics Shader",
             code
           });
-          const defs = makeShaderDataDefinitions6(code);
+          const defs = makeShaderDataDefinitions7(code);
           device.addEventListener("lost", (e) => {
             console.error(e);
           });
@@ -3369,7 +3847,7 @@ var coastic = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformValues = makeStructuredView6(defs.uniforms.params);
+      const uniformValues = makeStructuredView7(defs.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -3469,7 +3947,7 @@ var coastic = definePlugin({
 });
 
 // src/js/src/live-effects/halftone.ts
-var t7 = createTranslator({
+var t8 = createTranslator({
   en: {
     title: "Halftone Effect",
     dotSize: "Dot Size",
@@ -3489,7 +3967,7 @@ var t7 = createTranslator({
 });
 var halftone = definePlugin({
   id: "halftone-effect-v1",
-  title: t7("title"),
+  title: t8("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -3541,16 +4019,16 @@ var halftone = definePlugin({
         // Angle doesn't need scaling
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        size: lerp(paramsA.size, paramsB.size, t15),
-        interval: lerp(paramsA.interval, paramsB.interval, t15),
-        angle: lerp(paramsA.angle, paramsB.angle, t15),
+        size: lerp(paramsA.size, paramsB.size, t17),
+        interval: lerp(paramsA.interval, paramsB.interval, t17),
+        angle: lerp(paramsA.angle, paramsB.angle, t17),
         color: {
-          r: lerp(paramsA.color.r, paramsB.color.r, t15),
-          g: lerp(paramsA.color.g, paramsB.color.g, t15),
-          b: lerp(paramsA.color.b, paramsB.color.b, t15),
-          a: lerp(paramsA.color.a, paramsB.color.a, t15)
+          r: lerp(paramsA.color.r, paramsB.color.r, t17),
+          g: lerp(paramsA.color.g, paramsB.color.g, t17),
+          b: lerp(paramsA.color.b, paramsB.color.b, t17),
+          a: lerp(paramsA.color.a, paramsB.color.a, t17)
         }
       };
     },
@@ -3558,7 +4036,7 @@ var halftone = definePlugin({
       const colorStr = toColorCode(params.color);
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t7("dotSize") }),
+          ui.text({ text: t8("dotSize") }),
           ui.slider({
             key: "size",
             dataType: "float",
@@ -3573,7 +4051,7 @@ var halftone = definePlugin({
           })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t7("dotInterval") }),
+          ui.text({ text: t8("dotInterval") }),
           ui.slider({
             key: "interval",
             dataType: "float",
@@ -3588,7 +4066,7 @@ var halftone = definePlugin({
           })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t7("dotAngle") }),
+          ui.text({ text: t8("dotAngle") }),
           ui.slider({
             key: "angle",
             dataType: "float",
@@ -3603,11 +4081,11 @@ var halftone = definePlugin({
           })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t7("dotColor") }),
+          ui.text({ text: t8("dotColor") }),
           ui.group({ direction: "row" }, [
             ui.colorInput({
               key: "color",
-              label: t7("color"),
+              label: t8("color"),
               value: params.color
             }),
             ui.textInput({
@@ -3871,10 +4349,10 @@ var halftone = definePlugin({
 
 // src/js/src/live-effects/fluid-distortion.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions7,
-  makeStructuredView as makeStructuredView7
+  makeShaderDataDefinitions as makeShaderDataDefinitions8,
+  makeStructuredView as makeStructuredView8
 } from "npm:webgpu-utils";
-var t8 = createTranslator({
+var t9 = createTranslator({
   en: {
     title: "Fluid Distortion V1",
     intensity: "Intensity",
@@ -3898,7 +4376,7 @@ var t8 = createTranslator({
 });
 var fluidDistortion = definePlugin({
   id: "fluid-distortion-v1",
-  title: t8("title"),
+  title: t9("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -3957,20 +4435,20 @@ var fluidDistortion = definePlugin({
         colorShift: params.colorShift
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t15),
-        speed: lerp(paramsA.speed, paramsB.speed, t15),
-        scale: lerp(paramsA.scale, paramsB.scale, t15),
-        turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t15),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t15),
-        timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t15)
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
+        speed: lerp(paramsA.speed, paramsB.speed, t17),
+        scale: lerp(paramsA.scale, paramsB.scale, t17),
+        turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t17),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
+        timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t17)
       };
     },
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("intensity") }),
+          ui.text({ text: t9("intensity") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "intensity",
@@ -3987,7 +4465,7 @@ var fluidDistortion = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("speed") }),
+          ui.text({ text: t9("speed") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "speed",
@@ -4004,7 +4482,7 @@ var fluidDistortion = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("scale") }),
+          ui.text({ text: t9("scale") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "scale",
@@ -4021,7 +4499,7 @@ var fluidDistortion = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("turbulence") }),
+          ui.text({ text: t9("turbulence") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "turbulence",
@@ -4038,7 +4516,7 @@ var fluidDistortion = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("colorShift") }),
+          ui.text({ text: t9("colorShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "colorShift",
@@ -4055,7 +4533,7 @@ var fluidDistortion = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("timeSeed") }),
+          ui.text({ text: t9("timeSeed") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "timeSeed",
@@ -4072,7 +4550,7 @@ var fluidDistortion = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t8("padding") }),
+          ui.text({ text: t9("padding") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "padding",
@@ -4282,7 +4760,7 @@ var fluidDistortion = definePlugin({
             label: "Fluid Distortion Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions7(code);
+          const pipelineDef = makeShaderDataDefinitions8(code);
           device.addEventListener("lost", (e) => {
             console.error(e);
           });
@@ -4345,7 +4823,7 @@ var fluidDistortion = definePlugin({
         addressModeU: "repeat",
         addressModeV: "repeat"
       });
-      const uniformValues = makeStructuredView7(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView8(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -4444,10 +4922,10 @@ var fluidDistortion = definePlugin({
 
 // src/js/src/live-effects/kaleidoscope.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions8,
-  makeStructuredView as makeStructuredView8
+  makeShaderDataDefinitions as makeShaderDataDefinitions9,
+  makeStructuredView as makeStructuredView9
 } from "npm:webgpu-utils";
-var t9 = createTranslator({
+var t10 = createTranslator({
   en: {
     title: "[WIP] Kaleidoscope",
     segments: "Segments",
@@ -4507,7 +4985,7 @@ var t9 = createTranslator({
 });
 var kaleidoscope = definePlugin({
   id: "kaleidoscope",
-  title: t9("title"),
+  title: t10("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -4630,105 +5108,105 @@ var kaleidoscope = definePlugin({
         padding: Math.round(params.padding * scaleFactor)
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        pattern: t15 < 0.5 ? paramsA.pattern : paramsB.pattern,
-        segments: Math.round(lerp(paramsA.segments, paramsB.segments, t15)),
-        rotation: lerp(paramsA.rotation, paramsB.rotation, t15),
-        centerX: lerp(paramsA.centerX, paramsB.centerX, t15),
-        centerY: lerp(paramsA.centerY, paramsB.centerY, t15),
-        zoom: lerp(paramsA.zoom, paramsB.zoom, t15),
-        distortion: lerp(paramsA.distortion, paramsB.distortion, t15),
-        complexity: lerp(paramsA.complexity, paramsB.complexity, t15),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t15),
-        cellEffect: lerp(paramsA.cellEffect, paramsB.cellEffect, t15),
-        cellSize: lerp(paramsA.cellSize, paramsB.cellSize, t15),
-        blendMode: t15 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
-        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t15))
+        pattern: t17 < 0.5 ? paramsA.pattern : paramsB.pattern,
+        segments: Math.round(lerp(paramsA.segments, paramsB.segments, t17)),
+        rotation: lerp(paramsA.rotation, paramsB.rotation, t17),
+        centerX: lerp(paramsA.centerX, paramsB.centerX, t17),
+        centerY: lerp(paramsA.centerY, paramsB.centerY, t17),
+        zoom: lerp(paramsA.zoom, paramsB.zoom, t17),
+        distortion: lerp(paramsA.distortion, paramsB.distortion, t17),
+        complexity: lerp(paramsA.complexity, paramsB.complexity, t17),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
+        cellEffect: lerp(paramsA.cellEffect, paramsB.cellEffect, t17),
+        cellSize: lerp(paramsA.cellSize, paramsB.cellSize, t17),
+        blendMode: t17 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
+        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t17))
       };
     },
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("pattern") }),
+          ui.text({ text: t10("pattern") }),
           ui.select({ key: "pattern", value: params.pattern, options: [
-            { label: t9("triangular"), value: "triangular" },
-            { label: t9("square"), value: "square" },
-            { label: t9("hexagonal"), value: "hexagonal" },
-            { label: t9("octagonal"), value: "octagonal" },
-            { label: t9("circular"), value: "circular" },
-            { label: t9("spiral"), value: "spiral" },
-            { label: t9("fractal"), value: "fractal" },
-            { label: t9("composite"), value: "composite" }
+            { label: t10("triangular"), value: "triangular" },
+            { label: t10("square"), value: "square" },
+            { label: t10("hexagonal"), value: "hexagonal" },
+            { label: t10("octagonal"), value: "octagonal" },
+            { label: t10("circular"), value: "circular" },
+            { label: t10("spiral"), value: "spiral" },
+            { label: t10("fractal"), value: "fractal" },
+            { label: t10("composite"), value: "composite" }
           ] })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("blendMode") }),
+          ui.text({ text: t10("blendMode") }),
           ui.select({ key: "blendMode", value: params.blendMode, options: [
-            { label: t9("normal"), value: "normal" },
-            { label: t9("kaleidoscope"), value: "kaleidoscope" },
-            { label: t9("mirror"), value: "mirror" },
-            { label: t9("rotational"), value: "rotational" }
+            { label: t10("normal"), value: "normal" },
+            { label: t10("kaleidoscope"), value: "kaleidoscope" },
+            { label: t10("mirror"), value: "mirror" },
+            { label: t10("rotational"), value: "rotational" }
           ] })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("segments") }),
+          ui.text({ text: t10("segments") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "segments", dataType: "int", min: 2, max: 36, value: params.segments }),
             ui.numberInput({ key: "segments", dataType: "int", value: params.segments })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("rotation") }),
+          ui.text({ text: t10("rotation") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "rotation", dataType: "float", min: 0, max: 360, value: params.rotation }),
             ui.numberInput({ key: "rotation", dataType: "float", value: params.rotation })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("centerX") }),
+          ui.text({ text: t10("centerX") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "centerX", dataType: "float", min: -1, max: 2, value: params.centerX }),
             ui.numberInput({ key: "centerX", dataType: "float", value: params.centerX })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("centerY") }),
+          ui.text({ text: t10("centerY") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "centerY", dataType: "float", min: -1, max: 2, value: params.centerY }),
             ui.numberInput({ key: "centerY", dataType: "float", value: params.centerY })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("zoom") }),
+          ui.text({ text: t10("zoom") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "zoom", dataType: "float", min: 0.1, max: 5, value: params.zoom }),
             ui.numberInput({ key: "zoom", dataType: "float", value: params.zoom })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("distortion") }),
+          ui.text({ text: t10("distortion") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "distortion", dataType: "float", min: 0, max: 1, value: params.distortion }),
             ui.numberInput({ key: "distortion", dataType: "float", value: params.distortion })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("complexity") }),
+          ui.text({ text: t10("complexity") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "complexity", dataType: "float", min: 0, max: 1, value: params.complexity }),
             ui.numberInput({ key: "complexity", dataType: "float", value: params.complexity })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("colorShift") }),
+          ui.text({ text: t10("colorShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 1, value: params.colorShift }),
             ui.numberInput({ key: "colorShift", dataType: "float", value: params.colorShift })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t9("padding") }),
+          ui.text({ text: t10("padding") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "padding", dataType: "int", min: 0, max: 500, value: params.padding }),
             ui.numberInput({ key: "padding", dataType: "int", value: params.padding })
@@ -5193,7 +5671,7 @@ var kaleidoscope = definePlugin({
             label: "Kaleidoscope Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions8(code);
+          const pipelineDef = makeShaderDataDefinitions9(code);
           device.addEventListener("lost", (e) => {
             console.error(e);
           });
@@ -5240,7 +5718,7 @@ var kaleidoscope = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformValues = makeStructuredView8(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView9(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -5351,10 +5829,10 @@ var kaleidoscope = definePlugin({
 
 // src/js/src/live-effects/vhs-interlace.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions9,
-  makeStructuredView as makeStructuredView9
+  makeShaderDataDefinitions as makeShaderDataDefinitions10,
+  makeStructuredView as makeStructuredView10
 } from "npm:webgpu-utils";
-var t10 = createTranslator({
+var t11 = createTranslator({
   en: {
     title: "VHS & Interlace Effect",
     intensity: "Effect Intensity",
@@ -5393,7 +5871,7 @@ var t10 = createTranslator({
 var MAX_VERTICAL_JITTER_PIXELS = 100;
 var vhsInterlace = definePlugin({
   id: "vhs-interlace-effect-v1",
-  title: t10("title"),
+  title: t11("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -5508,107 +5986,107 @@ var vhsInterlace = definePlugin({
         applyToTransparent: params.applyToTransparent
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t15),
-        noise: lerp(paramsA.noise, paramsB.noise, t15),
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
+        noise: lerp(paramsA.noise, paramsB.noise, t17),
         noiseDistortion: lerp(
           paramsA.noiseDistortion,
           paramsB.noiseDistortion,
-          t15
+          t17
         ),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t15),
-        scanlines: lerp(paramsA.scanlines, paramsB.scanlines, t15),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
+        scanlines: lerp(paramsA.scanlines, paramsB.scanlines, t17),
         interlaceGap: Math.round(
-          lerp(paramsA.interlaceGap, paramsB.interlaceGap, t15)
+          lerp(paramsA.interlaceGap, paramsB.interlaceGap, t17)
         ),
         brightnessJitter: lerp(
           paramsA.brightnessJitter,
           paramsB.brightnessJitter,
-          t15
+          t17
         ),
-        trackingError: lerp(paramsA.trackingError, paramsB.trackingError, t15),
-        verticalJitter: lerp(paramsA.verticalJitter, paramsB.verticalJitter, t15),
-        tilt: lerp(paramsA.tilt, paramsB.tilt, t15),
-        randomSeed: lerp(paramsA.randomSeed, paramsB.randomSeed, t15),
-        enableVHSColor: t15 < 0.5 ? paramsA.enableVHSColor : paramsB.enableVHSColor,
+        trackingError: lerp(paramsA.trackingError, paramsB.trackingError, t17),
+        verticalJitter: lerp(paramsA.verticalJitter, paramsB.verticalJitter, t17),
+        tilt: lerp(paramsA.tilt, paramsB.tilt, t17),
+        randomSeed: lerp(paramsA.randomSeed, paramsB.randomSeed, t17),
+        enableVHSColor: t17 < 0.5 ? paramsA.enableVHSColor : paramsB.enableVHSColor,
         vhsColor: {
-          r: lerp(paramsA.vhsColor.r, paramsB.vhsColor.r, t15),
-          g: lerp(paramsA.vhsColor.g, paramsB.vhsColor.g, t15),
-          b: lerp(paramsA.vhsColor.b, paramsB.vhsColor.b, t15),
-          a: lerp(paramsA.vhsColor.a, paramsB.vhsColor.a, t15)
+          r: lerp(paramsA.vhsColor.r, paramsB.vhsColor.r, t17),
+          g: lerp(paramsA.vhsColor.g, paramsB.vhsColor.g, t17),
+          b: lerp(paramsA.vhsColor.b, paramsB.vhsColor.b, t17),
+          a: lerp(paramsA.vhsColor.a, paramsB.vhsColor.a, t17)
         },
-        applyToTransparent: t15 < 0.5 ? paramsA.applyToTransparent : paramsB.applyToTransparent
+        applyToTransparent: t17 < 0.5 ? paramsA.applyToTransparent : paramsB.applyToTransparent
       };
     },
     renderUI: (params, setParam) => {
       const vhsColorStr = toColorCode(params.vhsColor);
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("intensity") }),
+          ui.text({ text: t11("intensity") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "intensity", dataType: "float", min: 0, max: 2, value: params.intensity }),
             ui.numberInput({ key: "intensity", dataType: "float", value: params.intensity })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("noise") }),
+          ui.text({ text: t11("noise") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "noise", dataType: "float", min: 0, max: 1, value: params.noise }),
             ui.numberInput({ key: "noise", dataType: "float", value: params.noise })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("noiseDistortion") }),
+          ui.text({ text: t11("noiseDistortion") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "noiseDistortion", dataType: "float", min: 0, max: 1, value: params.noiseDistortion }),
             ui.numberInput({ key: "noiseDistortion", dataType: "float", value: params.noiseDistortion })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("colorShift") }),
+          ui.text({ text: t11("colorShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 10, value: params.colorShift }),
             ui.numberInput({ key: "colorShift", dataType: "float", value: params.colorShift })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("scanlines") }),
+          ui.text({ text: t11("scanlines") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "scanlines", dataType: "float", min: 0, max: 1, value: params.scanlines }),
             ui.numberInput({ key: "scanlines", dataType: "float", value: params.scanlines })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("interlaceGap") }),
+          ui.text({ text: t11("interlaceGap") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "interlaceGap", dataType: "int", min: 1, max: 10, value: params.interlaceGap }),
             ui.numberInput({ key: "interlaceGap", dataType: "int", value: params.interlaceGap })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("brightnessJitter") }),
+          ui.text({ text: t11("brightnessJitter") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "brightnessJitter", dataType: "float", min: 0, max: 0.5, value: params.brightnessJitter }),
             ui.numberInput({ key: "brightnessJitter", dataType: "float", value: params.brightnessJitter })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("trackingError") }),
+          ui.text({ text: t11("trackingError") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "trackingError", dataType: "float", min: 0, max: 2, value: params.trackingError }),
             ui.numberInput({ key: "trackingError", dataType: "float", value: params.trackingError })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("verticalJitter") }),
+          ui.text({ text: t11("verticalJitter") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "verticalJitter", dataType: "float", min: 0, max: 1, value: params.verticalJitter }),
             ui.numberInput({ key: "verticalJitter", dataType: "float", value: params.verticalJitter })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("tilt") }),
+          ui.text({ text: t11("tilt") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "tilt", dataType: "float", min: -0.5, max: 0.5, value: params.tilt }),
             ui.numberInput({ key: "tilt", dataType: "float", value: params.tilt })
@@ -5616,9 +6094,9 @@ var vhsInterlace = definePlugin({
         ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
-          ui.checkbox({ key: "enableVHSColor", value: params.enableVHSColor, label: t10("enableVHSColor") }),
+          ui.checkbox({ key: "enableVHSColor", value: params.enableVHSColor, label: t11("enableVHSColor") }),
           ui.group({ direction: "row" }, [
-            ui.text({ text: t10("vhsColor") }),
+            ui.text({ text: t11("vhsColor") }),
             ui.colorInput({ key: "vhsColor", value: params.vhsColor }),
             ui.textInput({ key: "vhsColorText", value: vhsColorStr, onChange: (e) => {
               setParam({ vhsColor: parseColorCode(e.value) });
@@ -5627,7 +6105,7 @@ var vhsInterlace = definePlugin({
         ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t10("randomSeed") }),
+          ui.text({ text: t11("randomSeed") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "randomSeed", dataType: "float", min: 0, max: 1, value: params.randomSeed }),
             ui.numberInput({ key: "randomSeed", dataType: "float", value: params.randomSeed })
@@ -5635,7 +6113,7 @@ var vhsInterlace = definePlugin({
         ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
-          ui.checkbox({ key: "applyToTransparent", value: params.applyToTransparent, label: t10("applyToTransparent") })
+          ui.checkbox({ key: "applyToTransparent", value: params.applyToTransparent, label: t11("applyToTransparent") })
         ])
       ]);
     },
@@ -5947,7 +6425,7 @@ var vhsInterlace = definePlugin({
             label: "VHS & Interlace Effect Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions9(code);
+          const pipelineDef = makeShaderDataDefinitions10(code);
           const bindGroupLayout = device.createBindGroupLayout({
             label: "VHS Effect Bind Group Layout",
             entries: [
@@ -6029,7 +6507,7 @@ var vhsInterlace = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformValues = makeStructuredView9(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView10(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -6132,10 +6610,10 @@ var vhsInterlace = definePlugin({
 
 // src/js/src/live-effects/downsampler.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions10,
-  makeStructuredView as makeStructuredView10
+  makeShaderDataDefinitions as makeShaderDataDefinitions11,
+  makeStructuredView as makeStructuredView11
 } from "npm:webgpu-utils";
-var t11 = createTranslator({
+var t12 = createTranslator({
   en: {
     title: "Downsampler",
     mode: "Sampling Quality",
@@ -6176,7 +6654,7 @@ var t11 = createTranslator({
 var MAX_BLOCKS = 48;
 var downsampler = definePlugin({
   id: "downsampler-v1",
-  title: t11("title"),
+  title: t12("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -6236,43 +6714,43 @@ var downsampler = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        blocksX: lerp(paramsA.blocksX, paramsB.blocksX, t15),
-        blocksY: lerp(paramsA.blocksY, paramsB.blocksY, t15),
-        linkAxes: t15 < 0.5 ? paramsA.linkAxes : paramsB.linkAxes,
-        mode: t15 < 0.5 ? paramsA.mode : paramsB.mode,
-        enableRefraction: t15 < 0.5 ? paramsA.enableRefraction : paramsB.enableRefraction,
-        patternType: t15 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        refraction: lerp(paramsA.refraction, paramsB.refraction, t15),
-        seed: lerp(paramsA.seed, paramsB.seed, t15),
+        blocksX: lerp(paramsA.blocksX, paramsB.blocksX, t17),
+        blocksY: lerp(paramsA.blocksY, paramsB.blocksY, t17),
+        linkAxes: t17 < 0.5 ? paramsA.linkAxes : paramsB.linkAxes,
+        mode: t17 < 0.5 ? paramsA.mode : paramsB.mode,
+        enableRefraction: t17 < 0.5 ? paramsA.enableRefraction : paramsB.enableRefraction,
+        patternType: t17 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        refraction: lerp(paramsA.refraction, paramsB.refraction, t17),
+        seed: lerp(paramsA.seed, paramsB.seed, t17),
         rippleFrequency: lerp(
           paramsA.rippleFrequency,
           paramsB.rippleFrequency,
-          t15
+          t17
         ),
         rippleComplexity: lerp(
           paramsA.rippleComplexity,
           paramsB.rippleComplexity,
-          t15
+          t17
         )
       };
     },
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t11("mode") }),
+          ui.text({ text: t12("mode") }),
           ui.select({
             key: "mode",
             value: params.mode,
             options: [
-              { label: t11("bilinear"), value: "bilinear" },
-              { label: t11("bicubic"), value: "bicubic" }
+              { label: t12("bilinear"), value: "bilinear" },
+              { label: t12("bicubic"), value: "bicubic" }
             ]
           })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t11("blocksX") }),
+          ui.text({ text: t12("blocksX") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "blocksX",
@@ -6290,7 +6768,7 @@ var downsampler = definePlugin({
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t11("blocksY") }),
+          ui.text({ text: t12("blocksY") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "blocksY",
@@ -6307,26 +6785,26 @@ var downsampler = definePlugin({
           ])
         ]),
         ui.group({ direction: "row" }, [
-          ui.checkbox({ key: "linkAxes", value: params.linkAxes, label: t11("linkAxes") })
+          ui.checkbox({ key: "linkAxes", value: params.linkAxes, label: t12("linkAxes") })
         ]),
         ui.separator(),
         ui.group({ direction: "row" }, [
-          ui.checkbox({ key: "enableRefraction", value: params.enableRefraction, label: t11("enableRefraction") })
+          ui.checkbox({ key: "enableRefraction", value: params.enableRefraction, label: t12("enableRefraction") })
         ]),
         ui.group({ direction: "col", disabled: !params.enableRefraction }, [
-          ui.text({ text: t11("patternType") }),
+          ui.text({ text: t12("patternType") }),
           ui.select({
             key: "patternType",
             value: params.patternType,
             options: [
-              { label: t11("blockPattern"), value: "block" },
-              { label: t11("ripplePattern"), value: "ripple" },
-              { label: t11("mixedPattern"), value: "mixed" }
+              { label: t12("blockPattern"), value: "block" },
+              { label: t12("ripplePattern"), value: "ripple" },
+              { label: t12("mixedPattern"), value: "mixed" }
             ]
           })
         ]),
         ui.group({ direction: "col", disabled: !params.enableRefraction }, [
-          ui.text({ text: t11("refraction") }),
+          ui.text({ text: t12("refraction") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "refraction",
@@ -6339,7 +6817,7 @@ var downsampler = definePlugin({
           ])
         ]),
         ui.group({ direction: "col", disabled: !params.enableRefraction }, [
-          ui.text({ text: t11("seed") }),
+          ui.text({ text: t12("seed") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "seed",
@@ -6355,7 +6833,7 @@ var downsampler = definePlugin({
           direction: "col",
           disabled: !params.enableRefraction || params.patternType === "block"
         }, [
-          ui.text({ text: t11("rippleFrequency") }),
+          ui.text({ text: t12("rippleFrequency") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "rippleFrequency",
@@ -6371,7 +6849,7 @@ var downsampler = definePlugin({
           direction: "col",
           disabled: !params.enableRefraction || params.patternType === "block"
         }, [
-          ui.text({ text: t11("rippleComplexity") }),
+          ui.text({ text: t12("rippleComplexity") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "rippleComplexity",
@@ -6617,7 +7095,7 @@ var downsampler = definePlugin({
             label: "Downsampler Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions10(code);
+          const pipelineDef = makeShaderDataDefinitions11(code);
           const pipeline = device.createComputePipeline({
             label: "Downsampler Pipeline",
             layout: "auto",
@@ -6668,7 +7146,7 @@ var downsampler = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformValues = makeStructuredView10(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView11(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -6760,10 +7238,10 @@ var downsampler = definePlugin({
 
 // src/js/src/live-effects/wave-distortion.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions11,
-  makeStructuredView as makeStructuredView11
+  makeShaderDataDefinitions as makeShaderDataDefinitions12,
+  makeStructuredView as makeStructuredView12
 } from "npm:webgpu-utils";
-var t12 = createTranslator({
+var t13 = createTranslator({
   en: {
     title: "Wave Distortion",
     amplitude: "Amplitude",
@@ -6791,7 +7269,7 @@ var t12 = createTranslator({
 });
 var waveDistortion = definePlugin({
   id: "wave-distortion-v1",
-  title: t12("title"),
+  title: t13("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -6812,7 +7290,7 @@ var waveDistortion = definePlugin({
         default: 0
       },
       crossWave: {
-        type: "boolean",
+        type: "bool",
         default: false
       },
       time: {
@@ -6832,52 +7310,48 @@ var waveDistortion = definePlugin({
         amplitude: params.amplitude * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        amplitude: lerp(paramsA.amplitude, paramsB.amplitude, t15),
-        frequency: lerp(paramsA.frequency, paramsB.frequency, t15),
-        angleValue: lerp(paramsA.angleValue, paramsB.angleValue, t15),
-        crossWave: t15 < 0.5 ? paramsA.crossWave : paramsB.crossWave,
-        time: lerp(paramsA.time, paramsB.time, t15)
+        amplitude: lerp(paramsA.amplitude, paramsB.amplitude, t17),
+        frequency: lerp(paramsA.frequency, paramsB.frequency, t17),
+        angleValue: lerp(paramsA.angleValue, paramsB.angleValue, t17),
+        crossWave: t17 < 0.5 ? paramsA.crossWave : paramsB.crossWave,
+        time: lerp(paramsA.time, paramsB.time, t17)
       };
     },
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t12("amplitude") }),
+          ui.text({ text: t13("amplitude") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "amplitude", dataType: "float", min: 0, max: 300, value: params.amplitude }),
             ui.numberInput({ key: "amplitude", dataType: "float", value: params.amplitude })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t12("frequency") }),
+          ui.text({ text: t13("frequency") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "frequency", dataType: "float", min: 0.1, max: 100, value: params.frequency }),
             ui.numberInput({ key: "frequency", dataType: "float", value: params.frequency })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t12("angle") }),
+          ui.text({ text: t13("angle") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "angleValue", dataType: "float", min: 0, max: 360, value: params.angleValue }),
             ui.numberInput({ key: "angleValue", dataType: "float", value: params.angleValue })
-          ])
-        ]),
-        ui.group({ direction: "col" }, [
-          ui.text({ text: t12("presets") }),
+          ]),
           ui.group({ direction: "row" }, [
-            ui.button({ text: t12("horizontal"), onClick: () => setParam({ angleValue: 0 }) }),
-            ui.button({ text: t12("vertical"), onClick: () => setParam({ angleValue: 90 }) }),
-            ui.button({ text: t12("diagonal"), onClick: () => setParam({ angleValue: 45 }) })
+            ui.button({ text: t13("horizontal"), onClick: () => setParam({ angleValue: 0 }) }),
+            ui.button({ text: t13("vertical"), onClick: () => setParam({ angleValue: 90 }) }),
+            ui.button({ text: t13("diagonal"), onClick: () => setParam({ angleValue: 45 }) })
           ])
         ]),
         ui.group({ direction: "row" }, [
-          ui.checkbox({ key: "crossWave", value: params.crossWave }),
-          ui.text({ text: t12("crossWave") })
+          ui.checkbox({ key: "crossWave", label: t13("crossWave"), value: params.crossWave })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t12("time") }),
+          ui.text({ text: t13("time") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "time", dataType: "float", min: 0, max: 100, value: params.time }),
             ui.numberInput({ key: "time", dataType: "float", value: params.time })
@@ -6893,14 +7367,14 @@ var waveDistortion = definePlugin({
         (device) => {
           const code = `
             struct Params {
-              inputDpi: i32,
-              baseDpi: i32,
+              outputSize: vec2f,
+              dpiScale: f32,
               amplitude: f32,
               frequency: f32,
               angleRad: f32,
               crossWave: f32,
               time: f32,
-              paddingSize: f32,  // \u30D1\u30C7\u30A3\u30F3\u30B0\u30B5\u30A4\u30BA\uFF08\u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\uFF09
+              paddingSize: f32,
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -6920,68 +7394,61 @@ var waveDistortion = definePlugin({
 
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-                let dims = vec2f(textureDimensions(inputTexture));
-                let texCoord = vec2f(id.xy) / dims;
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / adjustedDims;
 
-                // DPI\u30B9\u30B1\u30FC\u30EA\u30F3\u30B0: \u5165\u529BDPI\u3068\u30D9\u30FC\u30B9DPI\uFF08\u57FA\u6E96\u5024\uFF09\u306E\u6BD4\u7387
-                let dpiScale = f32(params.inputDpi) / f32(params.baseDpi);
+              // DPI\u30B9\u30B1\u30FC\u30EA\u30F3\u30B0: \u5165\u529BDPI\u3068\u30D9\u30FC\u30B9DPI\uFF08\u57FA\u6E96\u5024\uFF09\u306E\u6BD4\u7387
+              let dpiScale = params.dpiScale;
 
-                // \u632F\u5E45\u30D1\u30E9\u30E1\u30FC\u30BF\u306BDPI\u30B9\u30B1\u30FC\u30EB\u3092\u9069\u7528
-                let pixelNorm = vec2f(1.0) / dims;
-                let amplitudeNorm = pixelNorm * vec2f(params.amplitude * dpiScale);
+              // \u632F\u5E45\u30D1\u30E9\u30E1\u30FC\u30BF\u306BDPI\u30B9\u30B1\u30FC\u30EB\u3092\u9069\u7528
+              let pixelNorm = vec2f(1.0) / dims;
+              let amplitudeNorm = pixelNorm * vec2f(params.amplitude * dpiScale);
 
-                // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u5468\u6CE2\u6570\u8ABF\u6574
-                // baseDpi\u3092\u57FA\u6E96\u3068\u3057\u305F\u5468\u6CE2\u6570\u30B9\u30B1\u30FC\u30EA\u30F3\u30B0
-                let scaledFrequency = params.frequency * 3.14159 * (f32(params.baseDpi) / f32(params.inputDpi));
+              let frequency = params.frequency * 3.14159;
 
-                // Normalize coordinates to center
-                let centerCoord = texCoord * 2.0 - 1.0;
+              // Normalize coordinates to center
+              let centerCoord = texCoord * 2.0 - 1.0;
 
-                // Calculate main wave based on angle
-                let rotatedCoord = rotate2DAroundOrigin(centerCoord, params.angleRad);
+              // Calculate main wave based on angle
+              let rotatedCoord = rotate2DAroundOrigin(centerCoord, params.angleRad);
 
-                // \u30D1\u30C7\u30A3\u30F3\u30B0\u3092\u6B63\u898F\u5316\u5EA7\u6A19\u7CFB\u306B\u5909\u63DB\uFF08-1\u301C1\u306E\u30B9\u30B1\u30FC\u30EB\uFF09
-                let normalizedPadding = (params.paddingSize / dims.x) * 2.0;
+              // \u6CE2\u306E\u4F4D\u76F8\u3092\u8A08\u7B97
+              let wavePhase = rotatedCoord.x * frequency;
+              let crossWavePhase = rotatedCoord.y * frequency;
 
-                // \u4F4D\u76F8\u306E\u30B7\u30D5\u30C8\u91CF\u3092\u8A08\u7B97\uFF08\u89D2\u5EA6\u3082\u8003\u616E\uFF09
-                let phaseShift = normalizedPadding * scaledFrequency;
+              // \u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u306E\u632F\u5E45\u3092\u8A08\u7B97\u3057\u3001\u6B63\u898F\u5316\u5EA7\u6A19\u7CFB\u306B\u5909\u63DB\u3057\u3066\u9069\u7528
+              let distortion = sin(wavePhase + params.time * 0.1) * amplitudeNorm.y;
+              let distortedY = rotatedCoord.y + distortion;
 
-                // \u6CE2\u306E\u4F4D\u76F8\u3092\u8A08\u7B97\uFF08\u4F4D\u76F8\u30B7\u30D5\u30C8\u3067\u88DC\u6B63\uFF09
-                let wavePhase = rotatedCoord.x * scaledFrequency - phaseShift;
-                let crossWavePhase = rotatedCoord.y * scaledFrequency - phaseShift;
+              // \u30AF\u30ED\u30B9\u6CE2\u3067\u3082\u540C\u69D8\u306B\u6B63\u898F\u5316\u3057\u3066\u9069\u7528
+              let crossDistortion = sin(crossWavePhase + params.time * 0.1) * amplitudeNorm.x * params.crossWave;
+              let distortedX = rotatedCoord.x + crossDistortion;
 
-                // \u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u306E\u632F\u5E45\u3092\u8A08\u7B97\u3057\u3001\u6B63\u898F\u5316\u5EA7\u6A19\u7CFB\u306B\u5909\u63DB\u3057\u3066\u9069\u7528
-                // DPI\u304C\u5909\u308F\u3063\u3066\u3082\u540C\u3058\u4F4D\u7F6E\u3067\u540C\u3058\u6CE2\u5F62\u306B\u306A\u308B\u3088\u3046\u56FA\u5B9A\u4F4D\u76F8\u3067\u8A08\u7B97
-                let distortion = sin(wavePhase + params.time * 0.1) * amplitudeNorm.y;
-                let distortedY = rotatedCoord.y + distortion;
+              // Create distorted coordinate
+              let distortedCoord = vec2f(distortedX, distortedY);
 
-                // \u30AF\u30ED\u30B9\u6CE2\u3067\u3082\u540C\u69D8\u306B\u6B63\u898F\u5316\u3057\u3066\u9069\u7528
-                let crossDistortion = sin(crossWavePhase + params.time * 0.1) * amplitudeNorm.x * params.crossWave;
-                let distortedX = rotatedCoord.x + crossDistortion;
+              // Rotate back to original orientation
+              let finalRotatedCoord = rotate2DAroundOrigin(distortedCoord, -params.angleRad);
 
-                // Create distorted coordinate
-                let distortedCoord = vec2f(distortedX, distortedY);
+              // Convert back to texture coordinates
+              let finalCoord = (finalRotatedCoord + 1.0) * 0.5;
 
-                // Rotate back to original orientation
-                let finalRotatedCoord = rotate2DAroundOrigin(distortedCoord, -params.angleRad);
+              // Clamp coordinates to prevent sampling outside texture bounds
+              let clampedCoord = clamp(finalCoord, vec2f(0.0), vec2f(1.0));
 
-                // Convert back to texture coordinates
-                let finalCoord = (finalRotatedCoord + 1.0) * 0.5;
+              // Sample the texture with the distorted coordinates
+              let finalColor = textureSampleLevel(inputTexture, textureSampler, clampedCoord * toInputTexCoord, 0.0);
 
-                // Clamp coordinates to prevent sampling outside texture bounds
-                let clampedCoord = clamp(finalCoord, vec2f(0.0), vec2f(1.0));
-
-                // Sample the texture with the distorted coordinates
-                let finalColor = textureSampleLevel(inputTexture, textureSampler, clampedCoord, 0.0);
-
-                textureStore(resultTexture, id.xy, finalColor);
+              textureStore(resultTexture, id.xy, finalColor);
             }
           `;
           const shader = device.createShaderModule({
             label: "Wave Distortion Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions11(code);
+          const pipelineDef = makeShaderDataDefinitions12(code);
           const pipeline = device.createComputePipeline({
             label: "Wave Distortion Pipeline",
             layout: "auto",
@@ -6997,6 +7464,8 @@ var waveDistortion = definePlugin({
     goLiveEffect: async ({ device, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
       console.log("Wave Distortion", params);
       const dpiScale = dpi / baseDpi;
+      const sourceWidth = imgData.width;
+      const sourceHeight = imgData.height;
       const paddingSize = Math.ceil(params.amplitude / 2 * dpiScale);
       imgData = await paddingImageData(imgData, paddingSize);
       const outputWidth = imgData.width, outputHeight = imgData.height;
@@ -7019,16 +7488,20 @@ var waveDistortion = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformValues = makeStructuredView11(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView12(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
       const angleRad = params.angleValue * Math.PI / 180;
+      const dpiRatio = baseDpi / 72;
+      const referenceWidth = sourceWidth / dpiRatio;
+      const referenceHeight = sourceHeight / dpiRatio;
       uniformValues.set({
-        inputDpi: dpi,
-        baseDpi,
+        outputSize: [outputWidth, outputHeight],
+        dpiScale,
+        sourceSize: [referenceWidth, referenceHeight],
         amplitude: params.amplitude,
         frequency: params.frequency,
         angleRad,
@@ -7109,10 +7582,10 @@ var waveDistortion = definePlugin({
 
 // src/js/src/live-effects/selective-color-correction.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions12,
-  makeStructuredView as makeStructuredView12
+  makeShaderDataDefinitions as makeShaderDataDefinitions13,
+  makeStructuredView as makeStructuredView13
 } from "npm:webgpu-utils";
-var t13 = createTranslator({
+var t14 = createTranslator({
   en: {
     title: "Color Correction V1",
     conditionTitle: "Color Range Settings",
@@ -7166,9 +7639,18 @@ var t13 = createTranslator({
     advanced: "\u8A73\u7D30\u8A2D\u5B9A"
   }
 });
+var defaultCondition = {
+  targetHue: 0,
+  hueRange: 180,
+  // 180以上で「すべての色相」を意味する
+  saturationMin: 0,
+  saturationMax: 1,
+  brightnessMin: 0,
+  brightnessMax: 1
+};
 var selectiveColorCorrection = definePlugin({
   id: "color-correction-v1",
-  title: t13("title"),
+  title: t14("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -7193,7 +7675,7 @@ var selectiveColorCorrection = definePlugin({
         default: false
       },
       // 条件を表示するかどうか
-      showConditions: {
+      useCondition: {
         type: "bool",
         default: false
       },
@@ -7244,6 +7726,10 @@ var selectiveColorCorrection = definePlugin({
         // -1〜1の範囲 (0がニュートラル)
       }
     },
+    onAdjustColors: (params, adjustColor) => {
+      const dummy = { r: 1, g: 0, b: 0, a: 0 };
+      return params;
+    },
     onEditParameters: (params) => {
       const normalizedParams = { ...params };
       normalizedParams.targetHue = (normalizedParams.targetHue % 360 + 360) % 360;
@@ -7292,48 +7778,41 @@ var selectiveColorCorrection = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       const result = {
-        blendMode: t15 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
-        previewMask: t15 < 0.5 ? paramsA.previewMask : paramsB.previewMask,
-        showConditions: t15 < 0.5 ? paramsA.showConditions : paramsB.showConditions,
+        blendMode: t17 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
+        previewMask: t17 < 0.5 ? paramsA.previewMask : paramsB.previewMask,
+        useCondition: t17 < 0.5 ? paramsA.useCondition : paramsB.useCondition,
         // 数値パラメータの線形補間
-        featherEdges: lerp(paramsA.featherEdges, paramsB.featherEdges, t15),
+        featherEdges: lerp(paramsA.featherEdges, paramsB.featherEdges, t17),
         // 色選択パラメータの補間
-        targetHue: lerp(paramsA.targetHue, paramsB.targetHue, t15),
-        hueRange: lerp(paramsA.hueRange, paramsB.hueRange, t15),
-        saturationMin: lerp(paramsA.saturationMin, paramsB.saturationMin, t15),
-        saturationMax: lerp(paramsA.saturationMax, paramsB.saturationMax, t15),
-        brightnessMin: lerp(paramsA.brightnessMin, paramsB.brightnessMin, t15),
-        brightnessMax: lerp(paramsA.brightnessMax, paramsB.brightnessMax, t15),
+        targetHue: lerp(paramsA.targetHue, paramsB.targetHue, t17),
+        hueRange: lerp(paramsA.hueRange, paramsB.hueRange, t17),
+        saturationMin: lerp(paramsA.saturationMin, paramsB.saturationMin, t17),
+        saturationMax: lerp(paramsA.saturationMax, paramsB.saturationMax, t17),
+        brightnessMin: lerp(paramsA.brightnessMin, paramsB.brightnessMin, t17),
+        brightnessMax: lerp(paramsA.brightnessMax, paramsB.brightnessMax, t17),
         // 調整パラメータの補間
-        hueShift: lerp(paramsA.hueShift, paramsB.hueShift, t15),
+        hueShift: lerp(paramsA.hueShift, paramsB.hueShift, t17),
         saturationScale: lerp(
           paramsA.saturationScale,
           paramsB.saturationScale,
-          t15
+          t17
         ),
         brightnessScale: lerp(
           paramsA.brightnessScale,
           paramsB.brightnessScale,
-          t15
+          t17
         ),
-        contrast: lerp(paramsA.contrast, paramsB.contrast, t15)
+        contrast: lerp(paramsA.contrast, paramsB.contrast, t17)
       };
       return result;
     },
     renderUI: (params, setParam) => {
-      const resetButtonStyle = {
-        border: "1px solid #ccc",
-        borderRadius: "3px",
-        padding: "2px 6px",
-        marginLeft: "8px",
-        fontSize: "12px"
-      };
       const adjustmentsComponent = ui.group({ direction: "col" }, [
         // 色相シフト
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("hueShift") }),
+          ui.text({ text: t14("hueShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "hueShift",
@@ -7349,7 +7828,6 @@ var selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ hueShift: 0 });
               }
@@ -7358,7 +7836,7 @@ var selectiveColorCorrection = definePlugin({
         ]),
         // 彩度調整
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("saturationScale") }),
+          ui.text({ text: t14("saturationScale") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "saturationScale",
@@ -7374,7 +7852,6 @@ var selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ saturationScale: 0 });
               }
@@ -7383,7 +7860,7 @@ var selectiveColorCorrection = definePlugin({
         ]),
         // 明度調整
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("brightnessScale") }),
+          ui.text({ text: t14("brightnessScale") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "brightnessScale",
@@ -7399,7 +7876,6 @@ var selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ brightnessScale: 0 });
               }
@@ -7408,7 +7884,7 @@ var selectiveColorCorrection = definePlugin({
         ]),
         // コントラスト
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("contrast") }),
+          ui.text({ text: t14("contrast") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "contrast",
@@ -7424,7 +7900,6 @@ var selectiveColorCorrection = definePlugin({
             }),
             ui.button({
               text: "Reset",
-              style: resetButtonStyle,
               onClick: () => {
                 setParam({ contrast: 0 });
               }
@@ -7437,11 +7912,11 @@ var selectiveColorCorrection = definePlugin({
         ui.checkbox({
           key: "previewMask",
           value: params.previewMask,
-          label: t13("previewMask")
+          label: t14("previewMask")
         }),
         // エッジをぼかす（選択範囲をプレビューの下に配置）
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("featherEdges") }),
+          ui.text({ text: t14("featherEdges") }),
           ui.slider({
             key: "featherEdges",
             dataType: "float",
@@ -7453,7 +7928,7 @@ var selectiveColorCorrection = definePlugin({
         ui.separator(),
         // 色相設定
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("hue") }),
+          ui.text({ text: t14("hue") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "targetHue",
@@ -7471,7 +7946,7 @@ var selectiveColorCorrection = definePlugin({
         ]),
         // 色相範囲
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("hueRange") }),
+          ui.text({ text: t14("hueRange") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "hueRange",
@@ -7489,7 +7964,7 @@ var selectiveColorCorrection = definePlugin({
         ]),
         // 彩度範囲
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("saturationRange") }),
+          ui.text({ text: t14("saturationRange") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "saturationMin",
@@ -7510,7 +7985,7 @@ var selectiveColorCorrection = definePlugin({
         ]),
         // 明度範囲
         ui.group({ direction: "col" }, [
-          ui.text({ text: t13("brightnessRange") }),
+          ui.text({ text: t14("brightnessRange") }),
           ui.group({ direction: "row" }, [
             ui.slider({
               key: "brightnessMin",
@@ -7531,47 +8006,44 @@ var selectiveColorCorrection = definePlugin({
         ])
       ]);
       return ui.group({ direction: "col" }, [
-        // グローバル設定
         ui.group({ direction: "col" }, [
-          ui.group({ direction: "row", justifyContent: "space-between" }, [
-            ui.text({ text: t13("blendMode") }),
+          ui.group({ direction: "row" }, [
+            ui.text({ text: t14("blendMode") }),
             ui.select({
               key: "blendMode",
               value: params.blendMode,
               options: [
-                { label: t13("normal"), value: "normal" },
-                { label: t13("multiply"), value: "multiply" }
+                { label: t14("normal"), value: "normal" },
+                { label: t14("multiply"), value: "multiply" }
               ]
             })
           ])
         ]),
         ui.separator(),
-        // 調整セクション（常に表示）
-        ui.text({ text: t13("adjustments") }),
+        ui.text({ text: t14("adjustments") }),
         adjustmentsComponent,
         ui.separator(),
-        // 条件表示切り替えチェックボックス
         ui.checkbox({
-          key: "showConditions",
-          value: params.showConditions,
-          label: t13("conditionTitle"),
-          onChange: (e) => {
-            if (!e.value) {
-              setParam({
-                targetHue: 0,
-                hueRange: 180,
-                // 180以上で「すべての色相」を意味する
-                saturationMin: 0,
-                saturationMax: 1,
-                brightnessMin: 0,
-                brightnessMax: 1,
-                showConditions: false
-              });
-            }
-          }
+          key: "useCondition",
+          value: params.useCondition,
+          label: t14("conditionTitle")
+          // onChange: (e) => {
+          //   if (!e.value) {
+          //     // チェックが外れたとき、選択条件をデフォルト値（すべての色）にリセット
+          //     setParam({
+          //       targetHue: 0.0,
+          //       hueRange: 180.0,   // 180以上で「すべての色相」を意味する
+          //       saturationMin: 0.0,
+          //       saturationMax: 1.0,
+          //       brightnessMin: 0.0,
+          //       brightnessMax: 1.0,
+          //       useCondition: false
+          //     });
+          //   }
+          // }
         }),
         // 条件セクション（チェックボックスがオンの場合のみ表示）
-        params.showConditions ? colorConditionComponent : null
+        params.useCondition ? colorConditionComponent : null
       ]);
     },
     initLiveEffect: async () => {
@@ -7817,7 +8289,7 @@ var selectiveColorCorrection = definePlugin({
             label: "Selective Color Correction Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions12(code);
+          const pipelineDef = makeShaderDataDefinitions13(code);
           const pipeline = device.createComputePipeline({
             label: "Selective Color Correction Pipeline",
             layout: "auto",
@@ -7852,7 +8324,7 @@ var selectiveColorCorrection = definePlugin({
         magFilter: "linear",
         minFilter: "linear"
       });
-      const uniformValues = makeStructuredView12(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView13(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Selective Color Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -7866,12 +8338,7 @@ var selectiveColorCorrection = definePlugin({
         featherEdges: params.featherEdges,
         previewMask: params.previewMask ? 1 : 0,
         condition: {
-          targetHue: params.targetHue,
-          hueRange: params.hueRange,
-          saturationMin: params.saturationMin,
-          saturationMax: params.saturationMax,
-          brightnessMin: params.brightnessMin,
-          brightnessMax: params.brightnessMax,
+          ...params.useCondition ? params : defaultCondition,
           // JSの-1〜1の値をシェーダーで使う0〜2の値に変換
           hueShift: params.hueShift,
           saturationScale: params.saturationScale + 1,
@@ -7957,8 +8424,8 @@ var selectiveColorCorrection = definePlugin({
 
 // src/js/src/live-effects/data-mosh.ts
 import {
-  makeShaderDataDefinitions as makeShaderDataDefinitions13,
-  makeStructuredView as makeStructuredView13
+  makeShaderDataDefinitions as makeShaderDataDefinitions14,
+  makeStructuredView as makeStructuredView14
 } from "npm:webgpu-utils";
 function calculatePaddingNeeded(params, dpiScale, width, height) {
   const intensityPadding = Math.ceil(
@@ -7982,7 +8449,7 @@ function calculatePaddingNeeded(params, dpiScale, width, height) {
     colorShiftPadding
   );
 }
-var t14 = createTranslator({
+var t15 = createTranslator({
   en: {
     title: "DataMosh Extreme",
     intensity: "Intensity",
@@ -8022,7 +8489,7 @@ var t14 = createTranslator({
 });
 var dataMosh = definePlugin({
   id: "datamosh-filter",
-  title: t14("title"),
+  title: t15("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -8116,76 +8583,76 @@ var dataMosh = definePlugin({
         blockSize: Math.round(params.blockSize * scaleFactor)
       };
     },
-    onInterpolate: (paramsA, paramsB, t15) => {
+    onInterpolate: (paramsA, paramsB, t17) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t15),
-        blockSize: Math.round(lerp(paramsA.blockSize, paramsB.blockSize, t15)),
-        direction: t15 < 0.5 ? paramsA.direction : paramsB.direction,
-        seed: Math.round(lerp(paramsA.seed, paramsB.seed, t15)),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t15),
-        glitchFactor: lerp(paramsA.glitchFactor, paramsB.glitchFactor, t15),
-        pixelShuffle: lerp(paramsA.pixelShuffle, paramsB.pixelShuffle, t15),
-        lineShift: lerp(paramsA.lineShift, paramsB.lineShift, t15),
-        corruption: lerp(paramsA.corruption, paramsB.corruption, t15),
-        bitCorruption: lerp(paramsA.bitCorruption, paramsB.bitCorruption, t15),
-        bitShift: Math.round(lerp(paramsA.bitShift, paramsB.bitShift, t15)),
-        headerGlitch: lerp(paramsA.headerGlitch, paramsB.headerGlitch, t15)
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
+        blockSize: Math.round(lerp(paramsA.blockSize, paramsB.blockSize, t17)),
+        direction: t17 < 0.5 ? paramsA.direction : paramsB.direction,
+        seed: Math.round(lerp(paramsA.seed, paramsB.seed, t17)),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
+        glitchFactor: lerp(paramsA.glitchFactor, paramsB.glitchFactor, t17),
+        pixelShuffle: lerp(paramsA.pixelShuffle, paramsB.pixelShuffle, t17),
+        lineShift: lerp(paramsA.lineShift, paramsB.lineShift, t17),
+        corruption: lerp(paramsA.corruption, paramsB.corruption, t17),
+        bitCorruption: lerp(paramsA.bitCorruption, paramsB.bitCorruption, t17),
+        bitShift: Math.round(lerp(paramsA.bitShift, paramsB.bitShift, t17)),
+        headerGlitch: lerp(paramsA.headerGlitch, paramsB.headerGlitch, t17)
       };
     },
     renderUI: (params, setParam) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("intensity") }),
+          ui.text({ text: t15("intensity") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "intensity", dataType: "float", min: 0, max: 2, value: params.intensity }),
             ui.numberInput({ key: "intensity", dataType: "float", value: params.intensity })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("blockSize") }),
+          ui.text({ text: t15("blockSize") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "blockSize", dataType: "int", min: 1, max: 64, value: params.blockSize }),
             ui.numberInput({ key: "blockSize", dataType: "int", value: params.blockSize })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("direction") }),
+          ui.text({ text: t15("direction") }),
           ui.select({ key: "direction", value: params.direction, options: [
-            { label: t14("horizontal"), value: "horizontal" },
-            { label: t14("vertical"), value: "vertical" },
-            { label: t14("both"), value: "both" }
+            { label: t15("horizontal"), value: "horizontal" },
+            { label: t15("vertical"), value: "vertical" },
+            { label: t15("both"), value: "both" }
           ] })
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("colorShift") }),
+          ui.text({ text: t15("colorShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 2, value: params.colorShift }),
             ui.numberInput({ key: "colorShift", dataType: "float", value: params.colorShift })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("glitchFactor") }),
+          ui.text({ text: t15("glitchFactor") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "glitchFactor", dataType: "float", min: 0, max: 1, value: params.glitchFactor }),
             ui.numberInput({ key: "glitchFactor", dataType: "float", value: params.glitchFactor })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("pixelShuffle") }),
+          ui.text({ text: t15("pixelShuffle") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "pixelShuffle", dataType: "float", min: 0, max: 1, value: params.pixelShuffle }),
             ui.numberInput({ key: "pixelShuffle", dataType: "float", value: params.pixelShuffle })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("lineShift") }),
+          ui.text({ text: t15("lineShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "lineShift", dataType: "float", min: 0, max: 1, value: params.lineShift }),
             ui.numberInput({ key: "lineShift", dataType: "float", value: params.lineShift })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("corruption") }),
+          ui.text({ text: t15("corruption") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "corruption", dataType: "float", min: 0, max: 1, value: params.corruption }),
             ui.numberInput({ key: "corruption", dataType: "float", value: params.corruption })
@@ -8193,28 +8660,28 @@ var dataMosh = definePlugin({
         ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("bitCorruption") }),
+          ui.text({ text: t15("bitCorruption") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "bitCorruption", dataType: "float", min: 0, max: 1, value: params.bitCorruption }),
             ui.numberInput({ key: "bitCorruption", dataType: "float", value: params.bitCorruption })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("bitShift") }),
+          ui.text({ text: t15("bitShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "bitShift", dataType: "int", min: -7, max: 7, value: params.bitShift }),
             ui.numberInput({ key: "bitShift", dataType: "int", value: params.bitShift })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("headerGlitch") }),
+          ui.text({ text: t15("headerGlitch") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "headerGlitch", dataType: "float", min: 0, max: 1, value: params.headerGlitch }),
             ui.numberInput({ key: "headerGlitch", dataType: "float", value: params.headerGlitch })
           ])
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t14("seed") }),
+          ui.text({ text: t15("seed") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "seed", dataType: "int", min: 0, max: 1e3, value: params.seed }),
             ui.numberInput({ key: "seed", dataType: "int", value: params.seed })
@@ -8558,7 +9025,7 @@ var dataMosh = definePlugin({
             label: "DataMosh Shader",
             code
           });
-          const pipelineDef = makeShaderDataDefinitions13(code);
+          const pipelineDef = makeShaderDataDefinitions14(code);
           device.addEventListener("lost", (e) => {
             console.error(e);
           });
@@ -8609,7 +9076,7 @@ var dataMosh = definePlugin({
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge"
       });
-      const uniformValues = makeStructuredView13(pipelineDef.uniforms.params);
+      const uniformValues = makeStructuredView14(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
         label: "Params Buffer",
         size: uniformValues.arrayBuffer.byteLength,
@@ -8708,23 +9175,534 @@ var dataMosh = definePlugin({
   }
 });
 
+// src/js/src/live-effects/gaussian-blur.ts
+import {
+  makeShaderDataDefinitions as makeShaderDataDefinitions15,
+  makeStructuredView as makeStructuredView15
+} from "npm:webgpu-utils";
+var t16 = createTranslator({
+  en: {
+    title: "Gaussian Blur",
+    radius: "Blur Radius (px)",
+    strength: "Blur Strength"
+  },
+  ja: {
+    title: "\u30AC\u30A6\u30B9\u30D6\u30E9\u30FC",
+    radius: "\u307C\u304B\u3057\u534A\u5F84 (px)",
+    strength: "\u307C\u304B\u3057\u5F37\u5EA6"
+  }
+});
+var gaussianBlur = definePlugin({
+  id: "gaussian-blur-v1",
+  title: t16("title"),
+  version: { major: 1, minor: 0 },
+  liveEffect: {
+    styleFilterFlags: {
+      type: 2 /* kPostEffectFilter */,
+      features: []
+    },
+    paramSchema: {
+      radius: {
+        type: "int",
+        default: 10
+      },
+      strength: {
+        type: "real",
+        default: 1
+      }
+    },
+    onEditParameters: (params) => {
+      return {
+        ...params,
+        radius: Math.max(0, Math.min(200, params.radius)),
+        strength: Math.max(0, Math.min(2, params.strength))
+      };
+    },
+    onAdjustColors: (params, adjustColor) => {
+      return params;
+    },
+    onScaleParams(params, scaleFactor) {
+      return {
+        ...params,
+        radius: Math.round(params.radius * scaleFactor),
+        strength: params.strength
+      };
+    },
+    onInterpolate: (paramsA, paramsB, t17) => {
+      return {
+        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t17)),
+        strength: lerp(paramsA.strength, paramsB.strength, t17)
+      };
+    },
+    renderUI: (params, setParam) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t16("radius") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "radius", dataType: "int", min: 1, max: 200, value: params.radius }),
+            ui.numberInput({ key: "radius", dataType: "int", value: params.radius })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t16("strength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "strength", dataType: "float", min: 0, max: 2, value: params.strength }),
+            ui.numberInput({ key: "strength", dataType: "float", value: params.strength })
+          ])
+        ])
+      ]);
+    },
+    initLiveEffect: async () => {
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Gaussian Blur)" }
+        },
+        (device) => {
+          const verticalBlurCode = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              radius: i32,
+              strength: f32,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+
+            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
+              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
+              return exp(gaussianExp) / (2.5066282746 * sigma);
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / adjustedDims;
+
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+              // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u30D6\u30E9\u30FC\u534A\u5F84\u3068\u30B7\u30B0\u30DE\u306E\u8A08\u7B97
+              let radiusScaled = f32(params.radius) * params.dpiScale;
+              let sigma = radiusScaled * 0.33 * params.strength;
+
+              if (sigma <= 0.0) {
+                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
+              }
+
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // \u30A2\u30EB\u30D5\u30A1\u3068RGB\u3092\u5206\u3051\u3066\u8A08\u7B97\u3059\u308B\u305F\u3081\u306B\u5909\u6570\u3092\u5206\u3051\u308B
+              let centerWeight = gaussianWeight(0.0, sigma);
+
+              // \u30A2\u30EB\u30D5\u30A1\u8A08\u7B97\u7528
+              var totalWeightAlpha = centerWeight;
+              var resultAlpha = originalColor.a * centerWeight;
+
+              // RGB\u8A08\u7B97\u7528\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+              var totalWeightRGB = centerWeight * originalColor.a;
+              // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u3067\u3082RGB\u5024\u3092\u4FDD\u6301\u3059\u308B\uFF08\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u304B\u3089\u623B\u3059\uFF09
+              var resultRGB: vec3f;
+              if (originalColor.a > 0.0) {
+                resultRGB = originalColor.rgb * centerWeight * originalColor.a;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u306F\u5468\u56F2\u304B\u3089\u8272\u3092\u63A8\u6E2C\u3059\u308B\u305F\u3081\u521D\u671F\u5024\u306F0
+                resultRGB = vec3f(0.0);
+              }
+
+              let pixelStep = 1.0 / dims.y;
+              let radiusScaledInt = i32(ceil(radiusScaled));
+
+              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
+                let offset = f32(i);
+                let weight = gaussianWeight(offset, sigma);
+
+                let offsetUp = vec2f(0.0, pixelStep * offset);
+                let offsetDown = vec2f(0.0, -pixelStep * offset);
+
+                let upCoord = texCoord * toInputTexCoord + offsetUp;
+                let downCoord = texCoord * toInputTexCoord + offsetDown;
+
+                let sampleUp = textureSampleLevel(inputTexture, textureSampler, upCoord, 0.0);
+                let sampleDown = textureSampleLevel(inputTexture, textureSampler, downCoord, 0.0);
+
+                // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
+                resultAlpha += (sampleUp.a + sampleDown.a) * weight;
+                totalWeightAlpha += weight * 2.0;
+
+                // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u3067\u306A\u3051\u308C\u3070RGB\u3092\u8003\u616E
+                if (sampleUp.a > 0.0) {
+                  resultRGB += sampleUp.rgb * weight * sampleUp.a;
+                  totalWeightRGB += weight * sampleUp.a;
+                }
+
+                if (sampleDown.a > 0.0) {
+                  resultRGB += sampleDown.rgb * weight * sampleDown.a;
+                  totalWeightRGB += weight * sampleDown.a;
+                }
+              }
+
+              // \u6700\u7D42\u7684\u306A\u30A2\u30EB\u30D5\u30A1\u5024\u3092\u8A08\u7B97
+              resultAlpha = resultAlpha / totalWeightAlpha;
+
+              // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u91CD\u307F\u3067\u6B63\u898F\u5316\uFF09
+              var finalRGB: vec3f;
+              if (totalWeightRGB > 0.0) {
+                finalRGB = resultRGB / totalWeightRGB;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C\u3059\u3079\u30660\u306A\u3089\u3001\u5143\u306E\u8272\u3092\u4F7F\u7528
+                finalRGB = originalColor.rgb;
+              }
+
+              let finalColor = vec4f(finalRGB, resultAlpha);
+
+              textureStore(resultTexture, id.xy, finalColor);
+            }
+          `;
+          const horizontalBlurCode = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              radius: i32,
+              strength: f32,
+              alphaOnly: i32,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+
+            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
+              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
+              return exp(gaussianExp) / (2.5066282746 * sigma);
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / adjustedDims;
+
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+              // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u30D6\u30E9\u30FC\u534A\u5F84\u3068\u30B7\u30B0\u30DE\u306E\u8A08\u7B97
+              let radiusScaled = f32(params.radius) * params.dpiScale;
+              let sigma = radiusScaled * 0.33 * params.strength;
+
+              if (sigma <= 0.0) {
+                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+                textureStore(resultTexture, id.xy, originalColor);
+                return;
+              }
+
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // \u30A2\u30EB\u30D5\u30A1\u3068RGB\u3092\u5206\u3051\u3066\u8A08\u7B97\u3059\u308B\u305F\u3081\u306B\u5909\u6570\u3092\u5206\u3051\u308B
+              let centerWeight = gaussianWeight(0.0, sigma);
+
+              // \u30A2\u30EB\u30D5\u30A1\u8A08\u7B97\u7528
+              var totalWeightAlpha = centerWeight;
+              var resultAlpha = originalColor.a * centerWeight;
+
+              // RGB\u8A08\u7B97\u7528\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+              var totalWeightRGB = centerWeight * originalColor.a;
+              // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u3067\u3082RGB\u5024\u3092\u4FDD\u6301\u3059\u308B\uFF08\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u304B\u3089\u623B\u3059\uFF09
+              var resultRGB: vec3f;
+              if (originalColor.a > 0.0) {
+                resultRGB = originalColor.rgb * centerWeight * originalColor.a;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u306F\u5468\u56F2\u304B\u3089\u8272\u3092\u63A8\u6E2C\u3059\u308B\u305F\u3081\u521D\u671F\u5024\u306F0
+                resultRGB = vec3f(0.0);
+              }
+
+              let pixelStep = 1.0 / dims.x;
+              let radiusScaledInt = i32(ceil(radiusScaled));
+
+              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
+                let offset = f32(i);
+                let weight = gaussianWeight(offset, sigma);
+
+                let offsetRight = vec2f(pixelStep * offset, 0.0);
+                let offsetLeft = vec2f(-pixelStep * offset, 0.0);
+
+                let rightCoord = texCoord * toInputTexCoord + offsetRight;
+                let leftCoord = texCoord * toInputTexCoord + offsetLeft;
+
+                let sampleRight = textureSampleLevel(inputTexture, textureSampler, rightCoord, 0.0);
+                let sampleLeft = textureSampleLevel(inputTexture, textureSampler, leftCoord, 0.0);
+
+                // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
+                resultAlpha += (sampleRight.a + sampleLeft.a) * weight;
+                totalWeightAlpha += weight * 2.0;
+
+                // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+                // \u30A2\u30EB\u30D5\u30A1\u304C0\u3067\u306A\u3051\u308C\u3070RGB\u3092\u8003\u616E
+                if (sampleRight.a > 0.0) {
+                  resultRGB += sampleRight.rgb * weight * sampleRight.a;
+                  totalWeightRGB += weight * sampleRight.a;
+                }
+
+                if (sampleLeft.a > 0.0) {
+                  resultRGB += sampleLeft.rgb * weight * sampleLeft.a;
+                  totalWeightRGB += weight * sampleLeft.a;
+                }
+              }
+
+              // \u6700\u7D42\u7684\u306A\u30A2\u30EB\u30D5\u30A1\u5024\u3092\u8A08\u7B97
+              resultAlpha = resultAlpha / totalWeightAlpha;
+
+              // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u91CD\u307F\u3067\u6B63\u898F\u5316\uFF09
+              var finalRGB: vec3f;
+              if (totalWeightRGB > 0.0) {
+                finalRGB = resultRGB / totalWeightRGB;
+              } else {
+                // \u30A2\u30EB\u30D5\u30A1\u304C\u3059\u3079\u30660\u306A\u3089\u3001\u5143\u306E\u8272\u3092\u4F7F\u7528
+                finalRGB = originalColor.rgb;
+              }
+
+              let finalColor = vec4f(finalRGB, resultAlpha);
+              textureStore(resultTexture, id.xy, finalColor);
+            }
+          `;
+          const verticalShader = device.createShaderModule({
+            label: "Gaussian Blur Vertical Shader",
+            code: verticalBlurCode
+          });
+          const horizontalShader = device.createShaderModule({
+            label: "Gaussian Blur Horizontal Shader",
+            code: horizontalBlurCode
+          });
+          const verticalPipelineDef = makeShaderDataDefinitions15(verticalBlurCode);
+          const horizontalPipelineDef = makeShaderDataDefinitions15(horizontalBlurCode);
+          const verticalPipeline = device.createComputePipeline({
+            label: "Gaussian Blur Vertical Pipeline",
+            layout: "auto",
+            compute: {
+              module: verticalShader,
+              entryPoint: "computeMain"
+            }
+          });
+          const horizontalPipeline = device.createComputePipeline({
+            label: "Gaussian Blur Horizontal Pipeline",
+            layout: "auto",
+            compute: {
+              module: horizontalShader,
+              entryPoint: "computeMain"
+            }
+          });
+          return {
+            device,
+            verticalPipeline,
+            horizontalPipeline,
+            verticalPipelineDef,
+            horizontalPipelineDef
+          };
+        }
+      );
+    },
+    goLiveEffect: async ({
+      device,
+      verticalPipeline,
+      horizontalPipeline,
+      verticalPipelineDef,
+      horizontalPipelineDef
+    }, params, imgData, { dpi, baseDpi }) => {
+      console.log("Gaussian Blur V1", params);
+      const dpiRatio = dpi / baseDpi;
+      const paddingSize = Math.ceil(params.radius * dpiRatio);
+      imgData = await paddingImageData(imgData, paddingSize);
+      const outputWidth = imgData.width;
+      const outputHeight = imgData.height;
+      imgData = await addWebGPUAlignmentPadding(imgData);
+      const bufferInputWidth = imgData.width, bufferInputHeight = imgData.height;
+      const inputTexture = device.createTexture({
+        label: "Gaussian Blur Input Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
+      });
+      const intermediateTexture = device.createTexture({
+        label: "Gaussian Blur Intermediate Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
+      });
+      const resultTexture = device.createTexture({
+        label: "Gaussian Blur Result Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
+      });
+      const sampler = device.createSampler({
+        label: "Gaussian Blur Texture Sampler",
+        magFilter: "linear",
+        minFilter: "linear"
+      });
+      const verticalUniformValues = makeStructuredView15(
+        verticalPipelineDef.uniforms.params
+      );
+      const verticalUniformBuffer = device.createBuffer({
+        label: "Gaussian Blur Vertical Params Buffer",
+        size: verticalUniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      const horizontalUniformValues = makeStructuredView15(
+        horizontalPipelineDef.uniforms.params
+      );
+      const horizontalUniformBuffer = device.createBuffer({
+        label: "Gaussian Blur Horizontal Params Buffer",
+        size: horizontalUniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      verticalUniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
+        radius: params.radius,
+        strength: params.strength
+      });
+      horizontalUniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
+        radius: params.radius,
+        strength: params.strength
+      });
+      device.queue.writeBuffer(
+        verticalUniformBuffer,
+        0,
+        verticalUniformValues.arrayBuffer
+      );
+      device.queue.writeBuffer(
+        horizontalUniformBuffer,
+        0,
+        horizontalUniformValues.arrayBuffer
+      );
+      const verticalBindGroup = device.createBindGroup({
+        label: "Gaussian Blur Vertical Bind Group",
+        layout: verticalPipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: inputTexture.createView()
+          },
+          {
+            binding: 1,
+            resource: intermediateTexture.createView()
+          },
+          {
+            binding: 2,
+            resource: sampler
+          },
+          {
+            binding: 3,
+            resource: { buffer: verticalUniformBuffer }
+          }
+        ]
+      });
+      const horizontalBindGroup = device.createBindGroup({
+        label: "Gaussian Blur Horizontal Bind Group",
+        layout: horizontalPipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: intermediateTexture.createView()
+          },
+          {
+            binding: 1,
+            resource: resultTexture.createView()
+          },
+          {
+            binding: 2,
+            resource: sampler
+          },
+          {
+            binding: 3,
+            resource: { buffer: horizontalUniformBuffer }
+          }
+        ]
+      });
+      const stagingBuffer = device.createBuffer({
+        label: "Staging Buffer",
+        size: bufferInputWidth * bufferInputHeight * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeTexture(
+        { texture: inputTexture },
+        imgData.data,
+        { bytesPerRow: bufferInputWidth * 4, rowsPerImage: bufferInputHeight },
+        [bufferInputWidth, bufferInputHeight]
+      );
+      const commandEncoder = device.createCommandEncoder({
+        label: "Gaussian Blur Command Encoder"
+      });
+      const verticalPass = commandEncoder.beginComputePass({
+        label: "Gaussian Blur Vertical Pass"
+      });
+      verticalPass.setPipeline(verticalPipeline);
+      verticalPass.setBindGroup(0, verticalBindGroup);
+      verticalPass.dispatchWorkgroups(
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
+      );
+      verticalPass.end();
+      const horizontalPass = commandEncoder.beginComputePass({
+        label: "Gaussian Blur Horizontal Pass"
+      });
+      horizontalPass.setPipeline(horizontalPipeline);
+      horizontalPass.setBindGroup(0, horizontalBindGroup);
+      horizontalPass.dispatchWorkgroups(
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
+      );
+      horizontalPass.end();
+      commandEncoder.copyTextureToBuffer(
+        { texture: resultTexture },
+        { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
+        [bufferInputWidth, bufferInputHeight]
+      );
+      device.queue.submit([commandEncoder.finish()]);
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const copyArrayBuffer = stagingBuffer.getMappedRange();
+      const resultData = new Uint8Array(copyArrayBuffer.slice(0));
+      stagingBuffer.unmap();
+      const resultImageData = new ImageData(
+        new Uint8ClampedArray(resultData),
+        bufferInputWidth,
+        bufferInputHeight
+      );
+      return await removeWebGPUAlignmentPadding(
+        resultImageData,
+        outputWidth,
+        outputHeight
+      );
+    }
+  }
+});
+
 // src/js/src/main.ts
 var EFFECTS_DIR = new URL(toFileUrl2(join2(homedir(), ".ai-deno/effects")));
 var allPlugins = [
-  // blurEffect,
-  coastic,
   chromaticAberration,
+  coastic,
   dataMosh,
   directionalBlur,
   dithering,
   downsampler,
   fluidDistortion,
+  gaussianBlur,
   glitch,
   halftone,
   // innerGlow,
   kaleidoscope,
-  kirakiraGlow,
-  outlineEffect,
+  kirakiraBlur,
+  outline,
   // pixelSort,
   // randomNoiseEffect,
   selectiveColorCorrection,
@@ -8740,7 +9718,7 @@ try {
   await Promise.all(
     Object.values(allEffectPlugins).map(
       async (effect) => {
-        return retry(3, async () => {
+        return retry(6, async () => {
           var _a, _b;
           try {
             effectInits.set(
@@ -8748,6 +9726,7 @@ try {
               await ((_b = (_a = effect.liveEffect).initLiveEffect) == null ? void 0 : _b.call(_a)) ?? {}
             );
           } catch (e) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
             throw new Error(
               `[effect: ${effect.id}] Failed to initialize effect`,
               {
@@ -8767,8 +9746,6 @@ try {
     _AI_DENO_.op_ai_alert("[AiDeno] Failed to initialize effects\n\n" + logs);
   }
 }
-console.log(_AI_DENO_.op_ai_deno_get_user_locale());
-console.log(_AI_DENO_.op_ai_get_plugin_version());
 async function loadEffects() {
   ensureDirSync(EFFECTS_DIR);
   logger.log("loadEffects", `${fromFileUrl(EFFECTS_DIR)}/*/meta.json`);
@@ -8851,7 +9828,6 @@ async function editLiveEffectFireCallback(effectId, event, params) {
       updated: false
     };
   }
-  console.log(params);
   nodeState.latestParams = structuredClone(params);
   const current = params;
   switch (event.type) {
@@ -8916,12 +9892,12 @@ function liveEffectScaleParameters(id, params, scaleFactor) {
     params: result ?? params
   };
 }
-function liveEffectInterpolate(id, params, params2, t15) {
+function liveEffectInterpolate(id, params, params2, t17) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
   params = getParams(id, params);
   params2 = getParams(id, params2);
-  return effect.liveEffect.onInterpolate(params, params2, t15);
+  return effect.liveEffect.onInterpolate(params, params2, t17);
 }
 var goLiveEffect = async (id, params, env, width, height, data) => {
   const effect = findEffect(id);
@@ -8995,7 +9971,6 @@ async function retry(maxRetries, fn) {
       errors.push(e);
       retries++;
     }
-    await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new AggregateError(errors, "All retries failed");
 }

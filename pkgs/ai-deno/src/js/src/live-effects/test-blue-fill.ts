@@ -42,6 +42,10 @@ export const testBlueFill = definePlugin({
         type: "bool",
         default: false,
       },
+      halfFill: {
+        type: "bool",
+        default: false,
+      },
       padding: {
         type: "int",
         default: 0,
@@ -63,7 +67,9 @@ export const testBlueFill = definePlugin({
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
     onInterpolate: (paramsA, paramsB, t) => paramsA,
-    goLiveEffect: async (init, params, input) => {
+    goLiveEffect: async (init, params, input, env) => {
+      console.log("[test-blue-fill] goLiveEffect", { params, env });
+
       let width = input.width;
       let height = input.height;
       let len = input.data.length;
@@ -117,15 +123,17 @@ export const testBlueFill = definePlugin({
         };
       }
 
+      const start = params.halfFill ? Math.ceil((height * (width * 4)) / 2) : 0;
+
       if (params.fillOtherChannels) {
-        for (let i = 0; i < len; i += 4) {
+        for (let i = start; i < len; i += 4) {
           buffer[i] = 0;
           buffer[i + 1] = 0;
           buffer[i + 2] = 255;
           buffer[i + 3] = alpha;
         }
       } else {
-        for (let i = 0; i < len; i += 4) {
+        for (let i = start; i < len; i += 4) {
           buffer[i + 2] = 255;
           buffer[i + 3] = alpha;
         }

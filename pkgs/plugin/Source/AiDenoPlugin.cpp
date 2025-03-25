@@ -24,7 +24,7 @@ void FixupReload(Plugin* plugin) {
 }
 
 HelloWorldPlugin::HelloWorldPlugin(SPPluginRef pluginRef)
-    : Plugin(pluginRef), aiDenoMain(nullptr) {
+    : Plugin(pluginRef), aiDenoMain(nullptr), isInPreview(false) {
   strncpy(fPluginName, kPluginName, kMaxStringLength);
 }
 
@@ -305,7 +305,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
 
-    json env({{"dpi", dpi}, {"baseDpi", baseDpi}});
+    json env({{"dpi", dpi}, {"baseDpi", baseDpi}, {"isInPreview", isInPreview}});
 
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
         .width       = sourceWidth,
@@ -499,8 +499,6 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
         pluginParams.params.dump().c_str());
     CHKERR();
 
-    bool isPreviewed = false;
-
     json initialParams(pluginParams.params);
     json currentParams(initialParams);
     json nodeTree;
@@ -565,9 +563,9 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
         };
 
     ImGuiModal::OnChangeCallback modalOnChangeCallback =
-        [&pluginParams, &isModalOpened, &isPreviewed, &error, &message, &currentParams,
-         &nodeTree, &modal, this](json patch) {
-          if (isModalOpened) isPreviewed = true;
+        [&pluginParams, &isModalOpened, &error, &message, &currentParams, &nodeTree,
+         &modal, this](json patch) {
+          if (isModalOpened) this->isInPreview = true;
           csl("onChange:", patch.dump().c_str());
 
           currentParams.merge_patch(patch);
@@ -650,7 +648,7 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
 
       error = sAILiveEffect->UpdateParameters(message->context);
       CHKERR();
-    } else if (isPreviewed) {
+    } else if (this->isInPreview) {
       if (message->isNewInstance) {
         // Remove effect if canceled in first edit
         error = sAIUndo->UndoChanges();

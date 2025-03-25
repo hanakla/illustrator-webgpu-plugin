@@ -140,6 +140,7 @@ export type GoLiveEffectPayload = {
 export type LiveEffectEnv = {
   baseDpi: number;
   dpi: number;
+  isInPreview: boolean;
 };
 
 export type AIPlugin<

@@ -23,6 +23,8 @@ import { vhsInterlace } from "~ext/live-effects/vhs-interlace.ts";
 import { dataMosh } from "~ext/live-effects/data-mosh.ts";
 import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
 import { selectiveColorCorrection } from "~ext/live-effects/selective-color-correction.ts";
+import { husky } from "~ext/live-effects/husky.ts";
+import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
 
 import { compressor } from "~ext/live-effects/wips/compressor.ts";
 import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
@@ -30,6 +32,9 @@ import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
 
 const plugins = [
+  chromaticAberration,
+  husky,
+  cosmicWaves,
   exprTube,
   gaussianBlur,
   dithering,
@@ -50,7 +55,6 @@ const plugins = [
   outline,
   // innerGlow,
   testBlueFill,
-  chromaticAberration,
   directionalBlur,
 ];
 
@@ -92,6 +96,7 @@ function Controls({
   const [params, setParams] = useState<any>(getInitialParams(currentPlugin));
   const [dpi, setDpi] = useState(72);
   const [paused, setPaused] = useState(false);
+  const [isPreviewMode, setPreviewMode] = useState(false);
 
   const pausedRef = useThroughRef(paused);
   const paramsRef = useThroughRef(params);
@@ -105,8 +110,31 @@ function Controls({
   useEffect(() => {
     setParams(getInitialParams(currentPlugin));
 
+    const source1Btn = document.getElementById("img-source-1")!;
+    const source2Btn = document.getElementById("img-source-2")!;
+
     const abort = new AbortController();
     const signal = abort.signal;
+
+    source1Btn.addEventListener(
+      "click",
+      async () => {
+        const response = await fetch("./source.png");
+        const blob = await response.blob();
+        await onLoadImage(blob);
+      },
+      { signal }
+    );
+
+    source2Btn.addEventListener(
+      "click",
+      async () => {
+        const response = await fetch("./source2.png");
+        const blob = await response.blob();
+        await onLoadImage(blob);
+      },
+      { signal }
+    );
 
     window.addEventListener("dragover", (e) => e.preventDefault(), { signal });
 
@@ -204,6 +232,7 @@ function Controls({
         {
           dpi: dpiRef.current,
           baseDpi: 72,
+          isInPreview: isPreviewMode,
         }
       );
       if (signal.aborted) return;
@@ -256,7 +285,7 @@ function Controls({
       cancelAnimationFrame(animId);
       abort.abort();
     };
-  }, [currentPlugin]);
+  }, [currentPlugin, isPreviewMode]);
 
   const onParamChanged = useEventCallback((key, value) => {
     const nextParams = { ...params, [key]: value };
@@ -503,6 +532,15 @@ function Controls({
             </option>
           ))}
         </select>
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          checked={isPreviewMode}
+          onChange={(e) => setPreviewMode(e.currentTarget.checked)}
+        />
+        Preview mode
       </label>
 
       <button

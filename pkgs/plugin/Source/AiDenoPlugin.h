@@ -42,6 +42,7 @@ class HelloWorldPlugin : public Plugin {
   ASInt32            fNumEffects;
 
   ai_deno::OpaqueAiMain aiDenoMain;
+  bool                  isInPreview;
 
   ASErr Message(char* caller, char* selector, void* message);
 

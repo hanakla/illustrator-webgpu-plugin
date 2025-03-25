@@ -2,51 +2,94 @@ export const ui = {
   group: (
     { direction = "row" }: Omit<UINodeGroup, "type" | "children">,
     children: UINode[]
-  ): UINode => ({
-    type: "group",
-    direction,
-    children,
-  }),
-  button: (props: Omit<UINodeButton, "type">): UINodeButton => ({
-    ...props,
-    type: "button",
-  }),
-  slider: (props: Omit<UINodeSlider, "type">): UINode => ({
-    ...props,
-    type: "slider",
-  }),
-  checkbox: (props: Omit<UINodeCheckbox, "type">): UINode => ({
-    ...props,
-    type: "checkbox",
-  }),
-  textInput: (props: Omit<UINodeTextInput, "type">): UINode => ({
-    ...props,
-    type: "textInput",
-  }),
-  numberInput: (props: Omit<UINodeNumberInput, "type">): UINode => ({
-    ...props,
-    type: "numberInput",
-  }),
-  colorInput: (props: Omit<UINodeColorInput, "type">): UINode => ({
-    ...props,
-    type: "colorInput",
-  }),
-  text: (props: MakeOptional<Omit<UINodeText, "type">, "size">): UINode => ({
-    ...props,
-    size: props.size || "normal",
-    type: "text",
-  }),
-  select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect => ({
-    ...props,
-    selectedIndex: props.options.findIndex(
-      (option) => option.value === props.value
-    ),
-    type: "select",
-  }),
-  separator: (): UISeparator => ({
-    type: "separator",
-  }),
+  ): UINode =>
+    fillNull({
+      type: "group" as const,
+      direction,
+      children,
+    }),
+  button: (props: Omit<UINodeButton, "type">): UINodeButton =>
+    fillNull({
+      text: props.text,
+      onClick: props.onClick,
+      type: "button" as const,
+    }),
+  slider: (props: Omit<UINodeSlider, "type">): UINodeSlider =>
+    fillNull({
+      key: props.key,
+      dataType: props.dataType,
+      min: props.min,
+      max: props.max,
+      value: props.value,
+      onChange: props.onChange,
+      type: "slider" as const,
+    }),
+  checkbox: (props: Omit<UINodeCheckbox, "type">): UINodeCheckbox =>
+    fillNull({
+      key: props.key,
+      label: props.label,
+      value: props.value,
+      onChange: props.onChange,
+      type: "checkbox" as const,
+    }),
+  textInput: (props: Omit<UINodeTextInput, "type">): UINodeTextInput =>
+    fillNull({
+      key: props.key,
+      value: props.value,
+      onChange: props.onChange,
+      type: "textInput" as const,
+    }),
+  numberInput: (props: Omit<UINodeNumberInput, "type">): UINodeNumberInput =>
+    fillNull({
+      key: props.key,
+      dataType: props.dataType,
+      min: props.min,
+      max: props.max,
+      step: props.step,
+      value: props.value,
+      onChange: props.onChange,
+      type: "numberInput" as const,
+    }),
+  colorInput: (props: Omit<UINodeColorInput, "type">): UINodeColorInput =>
+    fillNull({
+      key: props.key,
+      value: props.value,
+      onChange: props.onChange,
+      type: "colorInput" as const,
+    }),
+  text: (props: MakeOptional<Omit<UINodeText, "type">, "size">): UINodeText =>
+    fillNull({
+      text: props.text,
+      size: props.size || "normal",
+      type: "text" as const,
+    }),
+  select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect =>
+    fillNull({
+      key: props.key,
+      options: props.options,
+      value: props.value,
+      onChange: props.onChange,
+      selectedIndex: props.options.findIndex(
+        (option) => option.value === props.value
+      ),
+      type: "select" as const,
+    }),
+  separator: (): UISeparator =>
+    fillNull({
+      type: "separator" as const,
+    }),
 };
+
+/** For improve debuggability in ImGup */
+function fillNull<T extends object>(obj: T): T {
+  Object.keys(obj).forEach((key) => {
+    const _k = key as keyof T;
+    if (obj[_k] === null) {
+      obj[_k] = obj[_k] ?? (null as any);
+    }
+  });
+  return obj;
+}
 
 type ChangeEvent<T = any> = {
   type: "change";

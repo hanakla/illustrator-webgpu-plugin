@@ -75,7 +75,6 @@ ModalStatusCode AiDenoImGuiRenderComponents(
               label.c_str(),
               ButtonProps{.kind = ButtonKind::Default, .size = ButtonSize::Sm}
           )) {
-        std::cout << "fireeeeeeee" << std::endl;
         onFireEventCallback(ImGuiModal::EventCallbackPayload{
             .type   = "click",
             .nodeId = nodeId,
@@ -98,10 +97,10 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       }
 
     } else if (type == "numberInput") {
-      std::string          dataType = node["dataType"];
-      std::optional<float> min      = getOptional<float>(node["min"]);
-      std::optional<float> max      = getOptional<float>(node["max"]);
-      float                step = node["step"].is_null() ? 1 : node["step"].get<float>();
+      std::string          dataType    = node["dataType"];
+      std::optional<float> min         = getOptional<float>(node["min"]);
+      std::optional<float> max         = getOptional<float>(node["max"]);
+      float                step        = getOptional<float>(node["step"]).value_or(1.0f);
       float                valueCommon = node["value"];
       float                original    = valueCommon;
       bool                 onChanged   = false;
@@ -140,7 +139,6 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       }
 
       if (!onChanged && ImGui::IsItemActive() && ImGui::IsItemFocused()) {
-        std::cout << "active" << std::endl;
         ImGui::SetItemKeyOwner(ImGuiKey_UpArrow);
         ImGui::SetItemKeyOwner(ImGuiKey_DownArrow);
 
@@ -280,7 +278,9 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       freeSelectOptions(labels, count);
 
     } else if (type == "separator") {
+      ui::styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 4.0f));
       ImGui::Separator();
+      ui::styleStack.clear();
     }
   };
 
@@ -310,6 +310,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     // ImVec2 size = ImGui::GetWindowSize();
 
     *currentSize = size;
+    std::cout << "WindowSize: " << size.x << ", " << size.y << std::endl;
   }
 
   ui::keyStack.reset();

@@ -225,6 +225,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
                lastPosition:(std::tuple<int, int>*)lastPosition
                    onChange:(ImGuiModal::OnChangeCallback)callbackFunc
                 onFireEvent:(ImGuiModal::OnFireEventCallback)onFireEventCallback {
+  std::cout << "running modal" << std::endl;
   ModalStatusCode result = ModalStatusCode::None;
   [self.window.contentView setOnChange:callbackFunc];
   [self.window.contentView setOnFireEventCallback:onFireEventCallback];
@@ -238,21 +239,26 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   NSTimeInterval lastFrameTime   = [NSDate timeIntervalSinceReferenceDate];
   NSTimeInterval targetFrameTime = 1.0 / 60.0;  // 60fps
 
-  while ([self.window isVisible]) {
-    if ([NSApp runModalSession:session] != NSModalResponseContinue) break;
+  try {
+    while ([self.window isVisible]) {
+      if ([NSApp runModalSession:session] != NSModalResponseContinue) break;
 
-    NSTimeInterval currentTime = [NSDate timeIntervalSinceReferenceDate];
-    NSTimeInterval elapsedTime = currentTime - lastFrameTime;
+      NSTimeInterval currentTime = [NSDate timeIntervalSinceReferenceDate];
+      NSTimeInterval elapsedTime = currentTime - lastFrameTime;
 
-    if (elapsedTime >= targetFrameTime) {
-      [self.window.contentView updateAndDrawView];
-      lastFrameTime = currentTime;
-    } else {
-      [NSThread sleepForTimeInterval:0.001];
+      if (elapsedTime >= targetFrameTime) {
+        [self.window.contentView updateAndDrawView];
+        lastFrameTime = currentTime;
+      } else {
+        [NSThread sleepForTimeInterval:0.001];
+      }
+
+      result = [self.window.contentView getStatusCode];
+      if (result != ModalStatusCode::None) break;
     }
-
-    result = [self.window.contentView getStatusCode];
-    if (result != ModalStatusCode::None) break;
+  } catch (...) {
+    [self.window.contentView releaseDialog];
+    throw;
   }
 
   [NSApp endModalSession:session];

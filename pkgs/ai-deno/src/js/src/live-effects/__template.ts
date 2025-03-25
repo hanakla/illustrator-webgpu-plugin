@@ -182,12 +182,12 @@ export const pluginTemplate = definePlugin({
 
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
               let dims = vec2f(params.outputSize);
               // RMIT: Use this coordinate for all computations
               let texCoord = vec2f(id.xy) / dims;
               // RMIT: Map texCoord space to input texture space, This is MUST to use when sampling inputTexture (likes textureSampleLevel())
-              let toInputTexCoord = dims / adjustedDims;
+              let toInputTexCoord = dims / dimsWithGPUPadding;
 
               // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }

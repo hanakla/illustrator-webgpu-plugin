@@ -222,8 +222,6 @@ export async function editLiveEffectFireCallback(
     };
   }
 
-  console.log(params);
-
   nodeState.latestParams = structuredClone(params);
   const current = params;
   switch (event.type) {
