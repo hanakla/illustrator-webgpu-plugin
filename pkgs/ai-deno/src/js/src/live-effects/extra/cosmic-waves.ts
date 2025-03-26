@@ -1,3 +1,7 @@
+//
+// Original Implementation by Peace in 2024-02-19
+// https://www.shadertoy.com/view/lX2GDR
+//
 import {
   makeShaderDataDefinitions,
   makeStructuredView,

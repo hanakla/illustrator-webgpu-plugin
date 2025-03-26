@@ -24,6 +24,7 @@ const t = createTranslator({
     behind: "Behind",
     front: "Front",
     both: "Both",
+    originalEmphasis: "Original Emphasis",
     fadeScale: "Scale to fade",
     fadeDirection: "Direction to fade",
   },
@@ -36,6 +37,7 @@ const t = createTranslator({
     behind: "後方",
     front: "前方",
     both: "両方",
+    originalEmphasis: "元画像の強調",
     fadeScale: "縮小率",
     fadeDirection: "縮小方向",
   },
@@ -43,7 +45,7 @@ const t = createTranslator({
 
 export const directionalBlur = definePlugin({
   id: "directional-blur-v1",
-  title: "Directional Blur V1",
+  title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
     styleFilterFlags: {
@@ -68,6 +70,10 @@ export const directionalBlur = definePlugin({
         enum: ["both", "behind", "front"],
         default: "both",
       },
+      originalEmphasis: {
+        type: "real",
+        default: 0.0,
+      },
       fadeOut: {
         type: "real",
         default: 0.0,
@@ -77,6 +83,7 @@ export const directionalBlur = definePlugin({
         default: 0.0,
       },
     },
+    onAdjustColors: (params, adjustColor) => params,
     onEditParameters: (params) => params,
     onInterpolate: (a, b, progress) => {
       return {
@@ -84,6 +91,11 @@ export const directionalBlur = definePlugin({
         angle: lerp(a.angle, b.angle, progress),
         opacity: lerp(a.opacity, b.opacity, progress),
         blurMode: b.blurMode,
+        originalEmphasis: lerp(
+          a.originalEmphasis || 0.0,
+          b.originalEmphasis || 0.0,
+          progress
+        ),
         fadeOut: lerp(a.fadeOut, b.fadeOut, progress),
         fadeDirection: lerp(a.fadeDirection, b.fadeDirection, progress),
       };
@@ -94,6 +106,7 @@ export const directionalBlur = definePlugin({
         angle: params.angle,
         opacity: params.opacity,
         blurMode: params.blurMode,
+        originalEmphasis: params.originalEmphasis,
         fadeOut: params.fadeOut,
         fadeDirection: params.fadeDirection,
       };
@@ -103,33 +116,54 @@ export const directionalBlur = definePlugin({
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
           ui.text({ text: t("strength") }),
-          ui.slider({
-            key: "strength",
-            dataType: "float",
-            min: 0,
-            max: 500,
-            value: params.strength,
-          }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "strength",
+              dataType: "float",
+              min: 0,
+              max: 500,
+              value: params.strength,
+            }),
+            ui.numberInput({
+              key: "strength",
+              dataType: "float",
+              value: params.strength,
+            }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("direction") }),
-          ui.slider({
-            key: "angle",
-            dataType: "float",
-            min: 0,
-            max: 360,
-            value: params.angle,
-          }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "angle",
+              dataType: "float",
+              min: 0,
+              max: 360,
+              value: params.angle,
+            }),
+            ui.numberInput({
+              key: "angle",
+              dataType: "float",
+              value: params.angle,
+            }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: "Opacity" }),
-          ui.slider({
-            key: "opacity",
-            dataType: "float",
-            min: 0,
-            max: 100,
-            value: params.opacity,
-          }),
+          ui.text({ text: t("opacity") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "opacity",
+              dataType: "float",
+              min: 0,
+              max: 100,
+              value: params.opacity,
+            }),
+            ui.numberInput({
+              key: "opacity",
+              dataType: "float",
+              value: params.opacity,
+            }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("blurMode") }),
@@ -144,324 +178,398 @@ export const directionalBlur = definePlugin({
           }),
         ]),
         ui.group({ direction: "col" }, [
+          ui.text({ text: t("originalEmphasis") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "originalEmphasis",
+              dataType: "float",
+              min: 0.0,
+              max: 1.0,
+              value: params.originalEmphasis || 0.0,
+            }),
+            ui.numberInput({
+              key: "originalEmphasis",
+              dataType: "float",
+              value: params.originalEmphasis || 0.0,
+            }),
+          ]),
+        ]),
+        ui.group({ direction: "col" }, [
           ui.text({ text: t("fadeScale") }),
-          ui.slider({
-            key: "fadeOut",
-            dataType: "float",
-            min: 0.0,
-            max: 1.0,
-            value: params.fadeOut,
-          }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "fadeOut",
+              dataType: "float",
+              min: 0.0,
+              max: 1.0,
+              value: params.fadeOut,
+            }),
+            ui.numberInput({
+              key: "fadeOut",
+              dataType: "float",
+              value: params.fadeOut,
+            }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("fadeDirection") }),
-          ui.slider({
-            key: "fadeDirection",
-            dataType: "float",
-            min: -1.0,
-            max: 1.0,
-            value: params.fadeDirection,
-          }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "fadeDirection",
+              dataType: "float",
+              min: -1.0,
+              max: 1.0,
+              value: params.fadeDirection,
+            }),
+            ui.numberInput({
+              key: "fadeDirection",
+              dataType: "float",
+              value: params.fadeDirection,
+            }),
+          ]),
         ]),
       ]);
     },
     initLiveEffect: async () => {
-      return await createGPUDevice({}, (device) => {
-        const code = `
-          struct Params {
-            strength: f32,
-            angle: f32,
-            opacity: f32,
-            blurMode: u32,
-            fadeOut: f32,     // 縮小率：サンプル番号が増えるほど図像が小さくなる
-            fadeDirection: f32, // 縮小方向：上寄り/下寄り
-          }
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Directional Blur V1)" },
+        },
+        (device) => {
+          const code = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              strength: f32,
+              angle: f32,
+              opacity: f32,
+              blurMode: u32,
+              originalEmphasis: f32, // 元画像の強調度（0.0～1.0）
+              fadeOut: f32,     // 縮小率：サンプル番号が増えるほど図像が小さくなる
+              fadeDirection: f32, // 縮小方向：上寄り/下寄り
+            }
 
-          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-          @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-          @group(0) @binding(2) var textureSampler: sampler;
-          @group(0) @binding(3) var<uniform> params: Params;
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
 
-          fn getOffset(angle: f32) -> vec2f {
-            let radians = angle * 3.14159 / 180.0;
-            return vec2f(cos(radians), sin(radians));
-          }
+            fn getOffset(angle: f32) -> vec2f {
+              let radians = angle * 3.14159 / 180.0;
+              return vec2f(cos(radians), sin(radians));
+            }
 
-          fn gaussianWeight(distance: f32, sigma: f32) -> f32 {
-            let normalized = distance / sigma;
-            return exp(-(normalized * normalized) / 2.0);
-          }
+            fn gaussianWeight(distance: f32, sigma: f32) -> f32 {
+              let normalized = distance / sigma;
+              return exp(-(normalized * normalized) / 2.0);
+            }
 
-          @compute @workgroup_size(16, 16)
-          fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-            let dims = vec2f(textureDimensions(inputTexture));
-            let texCoord = vec2f(id.xy) / dims;
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+              let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
+              let dims = vec2f(params.outputSize);
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / dimsWithGPUPadding;
 
-            // 元の画像を取得
-            let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+              // Ignore padded pixels
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-            // strength = 0 または opacity = 0 なら元の画像をそのまま返す
-            if (params.strength <= 0.0 || params.opacity <= 0.0) {
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              let normalizedOpacity = min(params.opacity * 1.5, 100.0) / 100.0;
+
+              if (params.strength <= 0.0 || params.opacity <= 0.0) {
                 textureStore(resultTexture, id.xy, originalColor);
                 return;
-            }
+              }
 
-            // 方向ベクトルの計算
-            let pixelOffset = getOffset(params.angle) * params.strength;
-            let texOffset = pixelOffset / dims;
+              // Keep the strength in pixel space
+              let adjustedStrength = params.strength * params.dpiScale;
+              let pixelOffset = getOffset(params.angle) * adjustedStrength;
+              let texOffset = pixelOffset / dims;
 
-            // strengthに応じたサンプル数の自動計算
-            // より多くのサンプルを使用してブラーを滑らかに
-            let numSamples = max(i32(params.strength), 5);
+              let numSamples = max(i32(adjustedStrength), 5);
 
-            // ブラー処理
-            var blurredColor = vec4f(0.0);
-            var totalWeight = 0.0;
+              // ブラー計算のための変数
+              var blurredColorRGB = vec3f(0.0);  // RGB成分
+              var blurredAlpha = 0.0;            // アルファ成分
+              var totalRgbWeight = 0.0;          // RGB用の重み
+              var totalAlphaWeight = 0.0;        // アルファ用の重み
 
-            // ブラーモードに応じてサンプリング範囲を調整
-            var startSample = -numSamples;
-            var endSample = numSamples;
+              var startSample = -numSamples;
+              var endSample = numSamples;
 
-            // blurMode: 0=both, 1=behind, 2=front
-            if (params.blurMode == 1u) { // behind
+              // blurMode: 0=both, 1=behind, 2=front
+              if (params.blurMode == 1u) { // behind
                 startSample = 0;
                 endSample = numSamples;  // 正の方向にブラー（元の画像の背後）
-            } else if (params.blurMode == 2u) { // front
+              } else if (params.blurMode == 2u) { // front
                 startSample = -numSamples;
                 endSample = 0;  // 負の方向にブラー（元の画像の前方）
-            }
+              }
 
-            // 中央と両方向にサンプリング
-            for (var i = startSample; i <= endSample; i++) {
+              for (var i = startSample; i <= endSample; i++) {
                 // 中央のサンプル（i = 0）は元の画像をそのまま使用
                 if (i == 0) {
-                    blurredColor += originalColor;
-                    totalWeight += 1.0;
-                    continue;
+                  // 中心サンプルは直接追加
+                  blurredColorRGB += originalColor.rgb * originalColor.a;
+                  blurredAlpha += originalColor.a;
+                  totalRgbWeight += 1.0;
+                  totalAlphaWeight += 1.0;
+                  continue;
                 }
 
-                // サンプリング位置の計算
-                let blurIntensity = 1.5; // ブラーの強度を上げるための係数
+                let blurIntensity = 1.5;
                 let sampleOffset = f32(i) / f32(numSamples) * blurIntensity;
 
-                // サンプル距離（0.0～1.0に正規化）
                 let normalizedDistance = f32(abs(i)) / f32(numSamples);
-
-                // 基本的なサンプリング座標（ブラー方向）
                 let baseCoord = texCoord + texOffset * sampleOffset;
 
-                // 縮小効果の適用
                 var sampleCoord = baseCoord;
                 if (params.fadeOut > 0.0) {
-                    // 縮小率の計算（0.0～1.0）
-                    let scale = max(1.0 - (normalizedDistance * params.fadeOut), 0.01);
+                  // 縮小率の計算（0.0～1.0）
+                  let scale = max(1.0 - (normalizedDistance * params.fadeOut), 0.01);
 
-                    // 画像中心を原点として拡大縮小
-                    let center = vec2f(0.5, 0.5);
-                    sampleCoord = center + (baseCoord - center) / scale;
+                  // 画像中心を原点として拡大縮小
+                  let center = vec2f(0.5, 0.5);
+                  sampleCoord = center + (baseCoord - center) / scale;
 
-                    // 縮小方向の適用（上下方向のシフト）
-                    if (params.fadeDirection != 0.0) {
-                        // 正の値：下方向、負の値：上方向
-                        let shift = (1.0 - scale) * 0.5 * params.fadeDirection;
-                        sampleCoord.y += shift;
-                    }
+                  // 縮小方向の適用（上下方向のシフト）
+                  if (params.fadeDirection != 0.0) {
+                    // 正の値：下方向、負の値：上方向
+                    let shift = (1.0 - scale) * 0.5 * params.fadeDirection;
+                    sampleCoord.y += shift;
+                  }
                 }
 
-                // サンプリング座標を0.0～1.0の範囲にクランプ
                 sampleCoord = clamp(sampleCoord, vec2f(0.0), vec2f(1.0));
+                let sampleColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord * toInputTexCoord, 0.0);
 
-                // サンプリング
-                let sampleColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord, 0.0);
-
-                // 重み計算
-                let sigma = 0.5; // 固定値を大きくしてぼかし効果を強化（元は0.3）
+                let sigma = 0.5;
                 let weight = gaussianWeight(normalizedDistance, sigma);
 
-                // 合計に加算
-                blurredColor += sampleColor * weight;
-                totalWeight += weight;
-            }
+                // サンプル色をプリマルチプライド形式で蓄積
+                blurredColorRGB += sampleColor.rgb * sampleColor.a * weight;
+                blurredAlpha += sampleColor.a * weight;
 
-            // 正規化
-            var finalColor = originalColor;
-            if (totalWeight > 0.0) {
-                blurredColor = blurredColor / totalWeight;
+                totalRgbWeight += weight;
+                totalAlphaWeight += weight;
+              }
 
-                // behindモードの場合は元の画像を強調
-                if (params.blurMode == 1u) { // behind
-                    // behindモードでは、元の画像が優先される単純なブレンド
-                    let behindOpacity = min(params.opacity * 0.7, 70.0) / 100.0; // 上限を引き上げ
-                    finalColor = mix(originalColor, blurredColor, behindOpacity);
-                } else {
-                    // 通常のブレンド
-                    finalColor = mix(originalColor, blurredColor, params.opacity / 100.0);
+              var finalColor = originalColor;
+
+              if (totalAlphaWeight > 0.0) {
+                // アルファを正規化
+                let normalizedAlpha = blurredAlpha / totalAlphaWeight;
+
+                // RGB値を正規化（プリマルチプライド状態）
+                var normalizedRGB = vec3f(0.0);
+                if (totalRgbWeight > 0.0) {
+                  normalizedRGB = blurredColorRGB / vec3f(totalRgbWeight);
                 }
+
+                // プリマルチプライドからストレートアルファに戻す
+                // (normalizedAlphaが0に近い場合は変換しない)
+                var unpremultipliedRGB = normalizedRGB;
+                if (normalizedAlpha > 0.001) {
+                  unpremultipliedRGB = normalizedRGB / vec3f(normalizedAlpha);
+                }
+
+                let blurredColor = vec4f(unpremultipliedRGB, normalizedAlpha);
+
+                finalColor = mix(originalColor, blurredColor, normalizedOpacity);
+
+                let emphasisFactor = params.originalEmphasis * originalColor.a;
+                let blendedRGB = mix(finalColor.rgb, originalColor.rgb, emphasisFactor);
+                finalColor = vec4f(blendedRGB, finalColor.a);
+              } else {
+                finalColor = originalColor;
+              }
+
+              textureStore(resultTexture, id.xy, finalColor);
             }
+          `;
 
-            textureStore(resultTexture, id.xy, finalColor);
-          }
-        `;
+          const shader = device.createShaderModule({
+            label: "Directional Blur V1 Shader",
+            code,
+          });
 
-        const shader = device.createShaderModule({
-          code,
-        });
+          const pipelineDef = makeShaderDataDefinitions(code);
 
-        console.log({ shader });
+          const pipeline = device.createComputePipeline({
+            label: "Directional Blur V1 Pipeline",
+            layout: "auto",
+            compute: {
+              module: shader,
+              entryPoint: "computeMain",
+            },
+          });
 
-        const defs = makeShaderDataDefinitions(code);
-
-        const pipeline = device.createComputePipeline({
-          layout: "auto",
-          compute: {
-            module: shader,
-            entryPoint: "computeMain",
-          },
-        });
-
-        return { device, pipeline, defs };
-      });
-    },
-    goLiveEffect: async ({ device, pipeline, defs }, params, imgData) => {
-      try {
-        // Make padding for blur overflow
-        imgData = await paddingImageData(imgData, Math.ceil(params.strength));
-        const outputWidth = imgData.width;
-        const outputHeight = imgData.height;
-
-        imgData = await addWebGPUAlignmentPadding(imgData);
-        const inputWidth = imgData.width;
-        const inputHeight = imgData.height;
-
-        // テクスチャ作成
-        const texture = device.createTexture({
-          size: [inputWidth, inputHeight],
-          format: "rgba8unorm",
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-        });
-
-        const resultTexture = device.createTexture({
-          size: [inputWidth, inputHeight],
-          format: "rgba8unorm",
-          usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
-        });
-
-        const sampler = device.createSampler({
-          magFilter: "linear",
-          minFilter: "linear",
-          addressModeU: "clamp-to-edge",
-          addressModeV: "clamp-to-edge",
-        });
-
-        // blurModeを数値に変換
-        let blurModeValue = 0; // デフォルトは "both"
-        if (params.blurMode === "behind") {
-          blurModeValue = 1;
-        } else if (params.blurMode === "front") {
-          blurModeValue = 2;
+          return { device, pipeline, pipelineDef };
         }
+      );
+    },
+    goLiveEffect: async (
+      { device, pipeline, pipelineDef },
+      params,
+      imgData,
+      { dpi, baseDpi }
+    ) => {
+      console.log("Directional Blur V1", params);
 
-        // ユニフォームバッファ
-        const uniformValues = makeStructuredView(defs.uniforms.params);
-        const uniformBuffer = device.createBuffer({
-          size: uniformValues.arrayBuffer.byteLength, // 6 * 4 bytes
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
+      const dpiScale = dpi / baseDpi;
 
-        uniformValues.set({
-          strength: params.strength,
-          angle: params.angle,
-          opacity: params.opacity,
-          blurMode: blurModeValue,
-          fadeOut: params.fadeOut || 0.0,
-          fadeDirection: params.fadeDirection || 0.0,
-        });
+      // Compute padding for blur overflow
+      const paddingSize = Math.ceil(params.strength * dpiScale);
+      imgData = await paddingImageData(imgData, paddingSize);
 
-        device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const outputWidth = imgData.width,
+        outputHeight = imgData.height;
 
-        // バインドグループの作成
-        const bindGroup = device.createBindGroup({
-          layout: pipeline.getBindGroupLayout(0),
-          entries: [
-            {
-              binding: 0,
-              resource: texture.createView(),
-            },
-            {
-              binding: 1,
-              resource: resultTexture.createView(),
-            },
-            {
-              binding: 2,
-              resource: sampler,
-            },
-            {
-              binding: 3,
-              resource: { buffer: uniformBuffer },
-            },
-          ],
-        });
+      // Don't change it
+      imgData = await addWebGPUAlignmentPadding(imgData);
 
-        // テクスチャに画像データを書き込む
-        device.queue.writeTexture(
-          { texture },
-          imgData.data,
-          { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
-          [inputWidth, inputHeight]
-        );
+      const bufferInputWidth = imgData.width,
+        bufferInputHeight = imgData.height;
 
-        // コンピュートシェーダー実行
-        const commandEncoder = device.createCommandEncoder();
-        const computePass = commandEncoder.beginComputePass();
-        computePass.setPipeline(pipeline);
-        computePass.setBindGroup(0, bindGroup);
-        computePass.dispatchWorkgroups(
-          Math.ceil(inputWidth / 16),
-          Math.ceil(inputHeight / 16)
-        );
-        computePass.end();
+      // Create textures
+      const texture = device.createTexture({
+        label: "Directional Blur Input Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.STORAGE_BINDING,
+      });
 
-        // 結果を読み取るためのステージングバッファ
-        const stagingBuffer = device.createBuffer({
-          size: inputWidth * inputHeight * 4,
-          usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-        });
+      const resultTexture = device.createTexture({
+        label: "Directional Blur Result Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
+      });
 
-        commandEncoder.copyTextureToBuffer(
-          { texture: resultTexture },
-          {
-            buffer: stagingBuffer,
-            bytesPerRow: inputWidth * 4,
-            rowsPerImage: inputHeight,
-          },
-          [inputWidth, inputHeight]
-        );
+      const sampler = device.createSampler({
+        label: "Directional Blur Texture Sampler",
+        magFilter: "linear",
+        minFilter: "linear",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge",
+      });
 
-        const commandBuffer = commandEncoder.finish();
-        device.queue.submit([commandBuffer]);
-
-        // バッファからデータを読み取る
-        await stagingBuffer.mapAsync(GPUMapMode.READ);
-        const copyArrayBuffer = stagingBuffer.getMappedRange();
-        const resultData = new Uint8Array(copyArrayBuffer.slice(0));
-        stagingBuffer.unmap();
-
-        // 結果を新しいImageDataに変換
-        const resultImageData = await removeWebGPUAlignmentPadding(
-          new ImageData(
-            new Uint8ClampedArray(resultData),
-            inputWidth,
-            inputHeight
-          ),
-          outputWidth,
-          outputHeight
-        );
-
-        return resultImageData;
-      } catch (err) {
-        console.error("WebGPU processing error:", err);
-        return imgData;
+      // blurModeを数値に変換
+      let blurModeValue = 0; // デフォルトは "both"
+      if (params.blurMode === "behind") {
+        blurModeValue = 1;
+      } else if (params.blurMode === "front") {
+        blurModeValue = 2;
       }
+
+      // Create uniform buffer
+      const uniformValues = makeStructuredView(pipelineDef.uniforms.params);
+      const uniformBuffer = device.createBuffer({
+        label: "Directional Blur Params Buffer",
+        size: uniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+
+      // Set uniform values with DPI scaling
+      uniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
+        strength: params.strength,
+        angle: params.angle,
+        opacity: params.opacity,
+        blurMode: blurModeValue,
+        originalEmphasis: params.originalEmphasis || 0.0,
+        fadeOut: params.fadeOut || 0.0,
+        fadeDirection: params.fadeDirection || 0.0,
+      });
+
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+
+      const bindGroup = device.createBindGroup({
+        label: "Directional Blur Main Bind Group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: texture.createView(),
+          },
+          {
+            binding: 1,
+            resource: resultTexture.createView(),
+          },
+          {
+            binding: 2,
+            resource: sampler,
+          },
+          {
+            binding: 3,
+            resource: { buffer: uniformBuffer },
+          },
+        ],
+      });
+
+      const stagingBuffer = device.createBuffer({
+        label: "Directional Blur Staging Buffer",
+        size: bufferInputWidth * bufferInputHeight * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      });
+
+      // Update source texture
+      device.queue.writeTexture(
+        { texture },
+        imgData.data,
+        {
+          bytesPerRow: bufferInputWidth * 4,
+          rowsPerImage: bufferInputHeight,
+        },
+        [bufferInputWidth, bufferInputHeight]
+      );
+
+      // Execute compute shader
+      const commandEncoder = device.createCommandEncoder({
+        label: "Directional Blur Command Encoder",
+      });
+
+      const computePass = commandEncoder.beginComputePass({
+        label: "Directional Blur Compute Pass",
+      });
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      computePass.dispatchWorkgroups(
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
+      );
+      computePass.end();
+
+      commandEncoder.copyTextureToBuffer(
+        { texture: resultTexture },
+        { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
+        [bufferInputWidth, bufferInputHeight]
+      );
+
+      device.queue.submit([commandEncoder.finish()]);
+
+      // Read back and display the result
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const copyArrayBuffer = stagingBuffer.getMappedRange();
+      const resultData = new Uint8Array(copyArrayBuffer.slice(0));
+      stagingBuffer.unmap();
+
+      const resultImageData = new ImageData(
+        new Uint8ClampedArray(resultData),
+        bufferInputWidth,
+        bufferInputHeight
+      );
+
+      return await removeWebGPUAlignmentPadding(
+        resultImageData,
+        outputWidth,
+        outputHeight
+      );
     },
   },
 });

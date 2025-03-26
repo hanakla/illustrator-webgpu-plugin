@@ -2,8 +2,7 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag, definePlugin, ColorRGBA } from "../types.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -192,6 +191,7 @@ export const pluginTemplate = definePlugin({
               // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
+              // RMIT: inputTexture is **straight alpha image**, not premultiplied alpha
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
               // TODO: Implement here

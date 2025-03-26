@@ -631,6 +631,8 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
         modalOnFireEventCallback
     );
 
+    this->isInPreview = false;
+
     if (lastPosition != nullptr) {
       pref.windowPosition    = new AIPoint();
       pref.windowPosition->h = std::get<0>(*lastPosition);

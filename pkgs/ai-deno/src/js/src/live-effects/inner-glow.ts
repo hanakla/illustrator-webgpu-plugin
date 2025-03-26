@@ -58,6 +58,7 @@ export const innerGlow = definePlugin({
     },
     onScaleParams(params, scaleFactor) {
       return {
+        ...params,
         weight: params.weight * scaleFactor,
       };
     },
