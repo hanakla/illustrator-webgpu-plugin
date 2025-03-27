@@ -16,7 +16,6 @@ import { glitch } from "./live-effects/glitch.ts";
 import { logger } from "./logger.ts";
 import { outline } from "./live-effects/outline.ts";
 import { innerGlow } from "./live-effects/inner-glow.ts";
-import { cropImageData, resizeImageData } from "./live-effects/_utils.ts";
 import { coastic } from "./live-effects/coastic.ts";
 import { halftone } from "./live-effects/halftone.ts";
 import { fluidDistortion } from "./live-effects/fluid-distortion.ts";
@@ -27,10 +26,12 @@ import { waveDistortion } from "./live-effects/wave-distortion.ts";
 import { selectiveColorCorrection } from "./live-effects/selective-color-correction.ts";
 import { dataMosh } from "./live-effects/data-mosh.ts";
 import { gaussianBlur } from "./live-effects/gaussian-blur.ts";
+import { brushStroke } from "./live-effects/blush-stroke.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
 const allPlugins: AIPlugin<any, any>[] = [
+  brushStroke,
   chromaticAberration,
   coastic,
   dataMosh,

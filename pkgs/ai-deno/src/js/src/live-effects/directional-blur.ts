@@ -16,7 +16,7 @@ import { createGPUDevice } from "./_shared.ts";
 
 const t = createTranslator({
   en: {
-    title: "Directional Blur",
+    title: "Directional Blur V1",
     strength: "Size (px)",
     direction: "Direction",
     opacity: "Opacity",
@@ -29,7 +29,7 @@ const t = createTranslator({
     fadeDirection: "Direction to fade",
   },
   ja: {
-    title: "方向性ブラー",
+    title: "方向ブラー V1",
     strength: "大きさ (px)",
     direction: "方向",
     opacity: "不透明度",
@@ -275,7 +275,7 @@ export const directionalBlur = definePlugin({
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-              let normalizedOpacity = min(params.opacity * 1.5, 100.0) / 100.0;
+              let normalizedOpacity = min(params.opacity, 100.0) / 100.0;
 
               if (params.strength <= 0.0 || params.opacity <= 0.0) {
                 textureStore(resultTexture, id.xy, originalColor);
@@ -289,7 +289,6 @@ export const directionalBlur = definePlugin({
 
               let numSamples = max(i32(adjustedStrength), 5);
 
-              // ブラー計算のための変数
               var blurredColorRGB = vec3f(0.0);  // RGB成分
               var blurredAlpha = 0.0;            // アルファ成分
               var totalRgbWeight = 0.0;          // RGB用の重み

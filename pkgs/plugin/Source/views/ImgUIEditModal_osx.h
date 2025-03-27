@@ -403,12 +403,14 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   if (!self->isFirstSized && ImGui::GetFrameCount() > 1) {
     self->isFirstSized = true;
 
-    NSRect frame = NSMakeRect(0, 0, windowSize.x, windowSize.y);
+    NSRect frame = NSMakeRect(
+        self.frame.origin.x, self.frame.origin.y, windowSize.x * 1.5, windowSize.y * 2
+    );
     [self setFrame:frame];
 
     NSRect winFrame = NSMakeRect(
         self.window.frame.origin.x, self.window.frame.origin.y,
-        MAX(windowSize.x, kMyDialogWidth), MAX(windowSize.y, kMyDialogWidth)
+        MAX(windowSize.x, kMyDialogWidth), MAX(windowSize.y * 2, kMyDialogWidth)
     );
 
     std::cout << "Window sized: " << windowSize.x << ", " << windowSize.y << std::endl;

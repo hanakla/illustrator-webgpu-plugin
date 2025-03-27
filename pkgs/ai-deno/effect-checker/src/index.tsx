@@ -25,6 +25,7 @@ import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
 import { selectiveColorCorrection } from "~ext/live-effects/selective-color-correction.ts";
 import { husky } from "~ext/live-effects/husky.ts";
 import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
+import { brushStroke } from "~ext/live-effects/blush-stroke.ts";
 
 import { compressor } from "~ext/live-effects/wips/compressor.ts";
 import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
@@ -32,9 +33,11 @@ import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
 
 const plugins = [
+  brushStroke,
   chromaticAberration,
-  husky,
   cosmicWaves,
+  directionalBlur,
+  husky,
   exprTube,
   gaussianBlur,
   dithering,
@@ -55,7 +58,6 @@ const plugins = [
   outline,
   // innerGlow,
   testBlueFill,
-  directionalBlur,
 ];
 
 const effectInits = new Map<string, any>();
@@ -195,8 +197,10 @@ function Controls({
         if (!resultImgData.current) return;
 
         // Get pixel color under mouse from resultImgData
-        const x = (e.offsetX * resultImgData.current!.width) / canvas.width;
-        const y = (e.offsetY * resultImgData.current!.height) / canvas.height;
+        const canvasSize = canvas.getBoundingClientRect();
+        const x = (e.offsetX / canvasSize.width) * resultImgData.current!.width;
+        const y =
+          (e.offsetY / canvasSize.height) * resultImgData.current!.height;
         const index = (y | 0) * resultImgData.current!.width + (x | 0);
         const i = index * 4;
         const r = resultImgData.current!.data[i];
@@ -263,6 +267,7 @@ function Controls({
       //   20
       // )}%)`;
       ctx.fillStyle = "#ddd";
+      // ctx.fillStyle = "#ddd";
       // ctx.fillRect(0, 0, result.width, result.height);
 
       // draw gradient background

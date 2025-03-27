@@ -19,7 +19,7 @@ import { createGPUDevice } from "./_shared.ts";
 // Translation texts for the plugin interfaces
 const t = createTranslator({
   en: {
-    title: "Downsampler",
+    title: "Downsampler V1",
     mode: "Sampling Quality",
     bilinear: "Standard",
     bicubic: "Smooth",
@@ -37,7 +37,7 @@ const t = createTranslator({
     rippleComplexity: "Ripple Complexity",
   },
   ja: {
-    title: "ダウンサンプラー",
+    title: "ダウンサンプラー V1",
     mode: "サンプリング品質",
     bilinear: "ふつう",
     bicubic: "なめらか",

@@ -95,7 +95,7 @@ function fillNull(obj) {
 }
 
 // src/js/src/ui/locale.ts
-var texts = (t17) => t17;
+var texts = (t18) => t18;
 function createTranslator(texts2) {
   const locale = getLocale(Object.keys(texts2), "en");
   return (key, params = {}) => {
@@ -210,8 +210,8 @@ async function toPng(imgData) {
   ctx.putImageData(img, 0, 0);
   return toBlob(canvas, "image/png", 100);
 }
-function lerp(a, b, t17) {
-  return a + (b - a) * t17;
+function lerp(a, b, t18) {
+  return a + (b - a) * t18;
 }
 function parseColorCode(color) {
   const hex = (color.startsWith("#") ? color.slice(1) : color).toUpperCase();
@@ -710,7 +710,7 @@ var chromaticAberration = definePlugin({
               }
             }
 
-            let opacity = params.opacity / 100.0;
+            let opacityFactor = params.opacity / 100.0;
 
             var effectColor: vec4f;
             let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
@@ -755,11 +755,11 @@ var chromaticAberration = definePlugin({
                   max(max(cyanColor.b, magentaColor.b), yellowColor.b)
               );
 
-              let a = screenBlend(screenBlend(cs.a, ms.a), ys.a) * opacity;
+              let a = screenBlend(screenBlend(cs.a, ms.a), ys.a) * opacityFactor;
 
               let strengthFactor = params.strength;
               let blendRatio = clamp(strengthFactor, 0.0, 1.0);
-              let result = mix(origs.rgb, combinedColor, blendRatio);
+              let result = mixOklch(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
             } else if (params.colorMode == 2u) { // Pastel mode
@@ -777,21 +777,17 @@ var chromaticAberration = definePlugin({
               let ch2 = vec3f(ch2s.r * 0, ch2s.g * 0.28, ch2s.b * 0.45);
               let ch3 = vec3f(ch3s.r * 0.44, ch3s.g * 0.43, ch3s.b * 0.13);
 
-              // let ch1 = vec3f(ch1s.r * 0.08, ch1s.g * 0.35, ch1s.b * 0.57);
-              // let ch2 = vec3f(ch2s.r * 0.44, ch2s.g * 0.13, ch2s.b * 0.31);
-              // let ch3 = vec3f(ch3s.r * 0.48, ch3s.g * 0.52, ch3s.b * 0.12);
-
               var combinedColor = vec3f(
                 ch1.r + ch2.r + ch3.r,
                 ch1.g + ch2.g + ch3.g,
                 ch1.b + ch2.b + ch3.b,
               );
 
-              let a = screenBlend(screenBlend(ch1s.a, ch2s.a), ch3s.a) * opacity;
+              let a = screenBlend(screenBlend(ch1s.a, ch2s.a), ch3s.a) * opacityFactor;
 
               let strengthFactor = params.strength;
               let blendRatio = clamp(strengthFactor, 0.0, 1.0);
-              let result = mix(origs.rgb, combinedColor, blendRatio);
+              let result = mixOklch(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
             } else if (params.colorMode == 3u) { // Red & Cyan mode
@@ -816,18 +812,23 @@ var chromaticAberration = definePlugin({
               );
             }
 
-            var finalColor = effectColor;
-            let opacityFactor = opacity;
+            // \u4E0D\u900F\u660E\u5EA6\u306B\u57FA\u3065\u3044\u3066\u30A8\u30D5\u30A7\u30AF\u30C8\u306E\u5F37\u3055\u3092\u8ABF\u6574
+            // \u4E0D\u900F\u660E\u5EA6\u304C0\u306E\u5834\u5408\u306F\u5143\u306E\u753B\u50CF\u3092\u305D\u306E\u307E\u307E\u8868\u793A\u3057\u30011\u306E\u5834\u5408\u306F\u30A8\u30D5\u30A7\u30AF\u30C8\u3092\u5B8C\u5168\u306B\u9069\u7528
+            var finalColor: vec4f;
 
-            // \u8272\u3092\u88DC\u9593\uFF08\u4E0D\u900F\u660E\u5EA6\u304C\u4E0B\u304C\u308B\u307B\u3069\u5143\u306E\u8272\u306B\u8FD1\u3065\u304F\uFF09
-            finalColor = vec4f(
-              mix(originalColor.rgb, effectColor.rgb, opacityFactor),
-              finalColor.a
-            );
+            if (opacityFactor <= 0.0) {
+              // \u4E0D\u900F\u660E\u5EA6\u304C0\u4EE5\u4E0B\u306E\u5834\u5408\u306F\u5143\u306E\u753B\u50CF\u3092\u305D\u306E\u307E\u307E\u8868\u793A
+              finalColor = originalColor;
+            } else {
+              // \u901A\u5E38\u306E\u30D6\u30EC\u30F3\u30C9\u51E6\u7406
+              let blendedRgb = mixOklch(originalColor.rgb, effectColor.rgb, opacityFactor);
 
-            // \u8272\u30BA\u30EC\u90E8\u5206\u306E\u307F\u900F\u660E\u5EA6\u304C\u9069\u7528\u3055\u308C\u308B\u3088\u3046\u306B\u8ABF\u6574
-            let alphaDifference = effectColor.a - originalColor.a;
-            finalColor.a = originalColor.a + alphaDifference * opacityFactor;
+              // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8ABF\u6574\uFF08\u5143\u306E\u900F\u660E\u5EA6\u3092\u7DAD\u6301\uFF09
+              let alphaDifference = effectColor.a - originalColor.a;
+              let adjustedAlpha = originalColor.a + alphaDifference * opacityFactor;
+
+              finalColor = vec4f(blendedRgb, adjustedAlpha);
+            }
 
             // \u30D7\u30EC\u30D3\u30E5\u30FC\u6642\u306B\u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u3092\u8868\u793A
             if (params.useFocusPoint != 0u && params.isInPreview != 0u) {
@@ -836,10 +837,120 @@ var chromaticAberration = definePlugin({
 
               let ringColor = vec4f(1.0, 1.0, 0.3, 1.0);
 
-              finalColor = mix(finalColor, ringColor, ringIntensity);
+              finalColor = mixOklchVec4(finalColor, ringColor, ringIntensity);
             }
 
             textureStore(resultTexture, id.xy, finalColor);
+          }
+
+          // Drop-in replacement for mix() that works with vec3f rgb colors
+          fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32> {
+            // RGB -> Linear RGB
+            let linearColor1 = vec3<f32>(
+              select(color1.r / 12.92, pow((color1.r + 0.055) / 1.055, 2.4), color1.r <= 0.04045),
+              select(color1.g / 12.92, pow((color1.g + 0.055) / 1.055, 2.4), color1.g <= 0.04045),
+              select(color1.b / 12.92, pow((color1.b + 0.055) / 1.055, 2.4), color1.b <= 0.04045),
+            );
+
+            let linearColor2 = vec3<f32>(
+              select(color2.r / 12.92, pow((color2.r + 0.055) / 1.055, 2.4), color2.r <= 0.04045),
+              select(color2.g / 12.92, pow((color2.g + 0.055) / 1.055, 2.4), color2.g <= 0.04045),
+              select(color2.b / 12.92, pow((color2.b + 0.055) / 1.055, 2.4), color2.b <= 0.04045),
+            );
+
+            // Linear RGB -> LMS
+            let lms1 = mat3x3<f32>(
+              0.4122214708, 0.5363325363, 0.0514459929,
+              0.2119034982, 0.6806995451, 0.1073969566,
+              0.0883024619, 0.2817188376, 0.6299787005
+            ) * linearColor1;
+
+            let lms2 = mat3x3<f32>(
+              0.4122214708, 0.5363325363, 0.0514459929,
+              0.2119034982, 0.6806995451, 0.1073969566,
+              0.0883024619, 0.2817188376, 0.6299787005
+            ) * linearColor2;
+
+            // LMS -> Oklab
+            let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
+            let lms2_pow = vec3<f32>(pow(lms2.x, 1.0/3.0), pow(lms2.y, 1.0/3.0), pow(lms2.z, 1.0/3.0));
+
+            let oklabMatrix = mat3x3<f32>(
+              0.2104542553, 0.7936177850, -0.0040720468,
+              1.9779984951, -2.4285922050, 0.4505937099,
+              0.0259040371, 0.7827717662, -0.8086757660
+            );
+
+            let oklab1 = oklabMatrix * lms1_pow;
+            let oklab2 = oklabMatrix * lms2_pow;
+
+            // Oklab -> OKLCH
+            let L1 = oklab1.x;
+            let L2 = oklab2.x;
+            let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
+            let C2 = sqrt(oklab2.y * oklab2.y + oklab2.z * oklab2.z);
+            let H1 = atan2(oklab1.z, oklab1.y);
+            let H2 = atan2(oklab2.z, oklab2.y);
+
+            // \u8272\u76F8\u306E\u88DC\u9593\uFF08\u6700\u77ED\u7D4C\u8DEF\uFF09
+            let hDiff = H2 - H1;
+            let hDiffAdjusted = select(
+              hDiff,
+              hDiff - 2.0 * 3.14159265359,
+              hDiff > 3.14159265359
+            );
+            let hDiffFinal = select(
+              hDiffAdjusted,
+              hDiffAdjusted + 2.0 * 3.14159265359,
+              hDiffAdjusted < -3.14159265359
+            );
+
+            let L = mix(L1, L2, t);
+            let C = mix(C1, C2, t);
+            let H = H1 + t * hDiffFinal;
+
+            // OKLCH -> Oklab
+            let a = C * cos(H);
+            let b = C * sin(H);
+
+            // Oklab -> LMS
+            let oklabInverseMatrix = mat3x3<f32>(
+              1.0, 0.3963377774, 0.2158037573,
+              1.0, -0.1055613458, -0.0638541728,
+              1.0, -0.0894841775, -1.2914855480
+            );
+
+            let lms_pow = oklabInverseMatrix * vec3<f32>(L, a, b);
+            let lms = vec3<f32>(
+              pow(lms_pow.x, 3.0),
+              pow(lms_pow.y, 3.0),
+              pow(lms_pow.z, 3.0)
+            );
+
+            // LMS -> Linear RGB
+            let lmsToRgbMatrix = mat3x3<f32>(
+              4.0767416621, -3.3077115913, 0.2309699292,
+              -1.2684380046, 2.6097574011, -0.3413193965,
+              -0.0041960863, -0.7034186147, 1.7076147010
+            );
+
+            let linearRgb = lmsToRgbMatrix * lms;
+
+            // Linear RGB -> RGB
+            let rgbResult = vec3<f32>(
+              select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
+              select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
+              select(12.92 * linearRgb.b, 1.055 * pow(linearRgb.b, 1.0/2.4) - 0.055, linearRgb.b <= 0.0031308),
+            );
+
+            return clamp(rgbResult, vec3<f32>(0.0), vec3<f32>(1.0));
+          }
+
+          fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32> {
+            return vec4<f32>(
+              mixOklch(color1.rgb, color2.rgb, t),
+              mix(color1.a, color2.a, t)
+            );
           }
       `;
         const shader = device.createShaderModule({
@@ -890,8 +1001,10 @@ var chromaticAberration = definePlugin({
       });
       const sampler = device.createSampler({
         label: "Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear"
+        magFilter: "nearest",
+        minFilter: "nearest",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge"
       });
       const uniformValues = makeStructuredView(defs.uniforms.params);
       const uniformBuffer = device.createBuffer({
@@ -1038,7 +1151,7 @@ var testBlueFill = definePlugin({
     onAdjustColors: (params, adjustColor) => params,
     onEditParameters: (params) => params,
     onScaleParams: (params, scaleFactor) => params,
-    onInterpolate: (paramsA, paramsB, t17) => paramsA,
+    onInterpolate: (paramsA, paramsB, t18) => paramsA,
     goLiveEffect: async (init, params, input, env) => {
       console.log("[test-blue-fill] goLiveEffect", { params, env });
       let width = input.width;
@@ -1215,7 +1328,7 @@ import {
 } from "npm:webgpu-utils";
 var t2 = createTranslator({
   en: {
-    title: "Directional Blur",
+    title: "Directional Blur V1",
     strength: "Size (px)",
     direction: "Direction",
     opacity: "Opacity",
@@ -1228,7 +1341,7 @@ var t2 = createTranslator({
     fadeDirection: "Direction to fade"
   },
   ja: {
-    title: "\u65B9\u5411\u6027\u30D6\u30E9\u30FC",
+    title: "\u65B9\u5411\u30D6\u30E9\u30FC V1",
     strength: "\u5927\u304D\u3055 (px)",
     direction: "\u65B9\u5411",
     opacity: "\u4E0D\u900F\u660E\u5EA6",
@@ -1472,7 +1585,7 @@ var directionalBlur = definePlugin({
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-              let normalizedOpacity = min(params.opacity * 1.5, 100.0) / 100.0;
+              let normalizedOpacity = min(params.opacity, 100.0) / 100.0;
 
               if (params.strength <= 0.0 || params.opacity <= 0.0) {
                 textureStore(resultTexture, id.xy, originalColor);
@@ -1486,7 +1599,6 @@ var directionalBlur = definePlugin({
 
               let numSamples = max(i32(adjustedStrength), 5);
 
-              // \u30D6\u30E9\u30FC\u8A08\u7B97\u306E\u305F\u3081\u306E\u5909\u6570
               var blurredColorRGB = vec3f(0.0);  // RGB\u6210\u5206
               var blurredAlpha = 0.0;            // \u30A2\u30EB\u30D5\u30A1\u6210\u5206
               var totalRgbWeight = 0.0;          // RGB\u7528\u306E\u91CD\u307F
@@ -1816,18 +1928,18 @@ var kirakiraBlur = definePlugin({
         customColor: params.customColor
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t17)),
-        strength: lerp(paramsA.strength, paramsB.strength, t17),
-        sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t17),
-        makeOriginalTransparent: t17 < 0.5 ? paramsA.makeOriginalTransparent : paramsB.makeOriginalTransparent,
-        useCustomColor: t17 < 0.5 ? paramsA.useCustomColor : paramsB.useCustomColor,
+        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t18)),
+        strength: lerp(paramsA.strength, paramsB.strength, t18),
+        sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t18),
+        makeOriginalTransparent: t18 < 0.5 ? paramsA.makeOriginalTransparent : paramsB.makeOriginalTransparent,
+        useCustomColor: t18 < 0.5 ? paramsA.useCustomColor : paramsB.useCustomColor,
         customColor: {
-          r: lerp(paramsA.customColor.r, paramsB.customColor.r, t17),
-          g: lerp(paramsA.customColor.g, paramsB.customColor.g, t17),
-          b: lerp(paramsA.customColor.b, paramsB.customColor.b, t17),
-          a: lerp(paramsA.customColor.a, paramsB.customColor.a, t17)
+          r: lerp(paramsA.customColor.r, paramsB.customColor.r, t18),
+          g: lerp(paramsA.customColor.g, paramsB.customColor.g, t18),
+          b: lerp(paramsA.customColor.b, paramsB.customColor.b, t18),
+          a: lerp(paramsA.customColor.a, paramsB.customColor.a, t18)
         }
       };
     },
@@ -2487,12 +2599,12 @@ var dithering = definePlugin({
         colorMode: params.colorMode
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        threshold: lerp(paramsA.threshold, paramsB.threshold, t17),
-        strength: lerp(paramsA.strength, paramsB.strength, t17),
-        patternType: t17 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        colorMode: t17 < 0.5 ? paramsA.colorMode : paramsB.colorMode
+        threshold: lerp(paramsA.threshold, paramsB.threshold, t18),
+        strength: lerp(paramsA.strength, paramsB.strength, t18),
+        patternType: t18 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        colorMode: t18 < 0.5 ? paramsA.colorMode : paramsB.colorMode
       };
     },
     renderUI: (params) => {
@@ -2830,13 +2942,13 @@ var glitch = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
-        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t17)),
-        angle: lerp(paramsA.angle, paramsB.angle, t17),
-        bias: lerp(paramsA.bias, paramsB.bias, t17),
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t18),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t18),
+        slices: Math.round(lerp(paramsA.slices, paramsB.slices, t18)),
+        angle: lerp(paramsA.angle, paramsB.angle, t18),
+        bias: lerp(paramsA.bias, paramsB.bias, t18),
         seed: paramsA.seed
         // シード値は補間しない
       };
@@ -3122,14 +3234,14 @@ var outline = definePlugin({
         size: params.size * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        size: lerp(paramsA.size, paramsB.size, t17),
+        size: lerp(paramsA.size, paramsB.size, t18),
         color: {
-          r: lerp(paramsA.color.r, paramsB.color.r, t17),
-          g: lerp(paramsA.color.g, paramsB.color.g, t17),
-          b: lerp(paramsA.color.b, paramsB.color.b, t17),
-          a: lerp(paramsA.color.a, paramsB.color.a, t17)
+          r: lerp(paramsA.color.r, paramsB.color.r, t18),
+          g: lerp(paramsA.color.g, paramsB.color.g, t18),
+          b: lerp(paramsA.color.b, paramsB.color.b, t18),
+          a: lerp(paramsA.color.a, paramsB.color.a, t18)
         }
       };
     },
@@ -3705,24 +3817,24 @@ var coastic = definePlugin({
         scale: params.scale * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
-        scale: lerp(paramsA.scale, paramsB.scale, t17),
-        complexity: lerp(paramsA.complexity, paramsB.complexity, t17),
-        speed: lerp(paramsA.speed, paramsB.speed, t17),
-        colorMode: t17 < 0.5 ? paramsA.colorMode : paramsB.colorMode,
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t18),
+        scale: lerp(paramsA.scale, paramsB.scale, t18),
+        complexity: lerp(paramsA.complexity, paramsB.complexity, t18),
+        speed: lerp(paramsA.speed, paramsB.speed, t18),
+        colorMode: t18 < 0.5 ? paramsA.colorMode : paramsB.colorMode,
         lightColor: {
-          r: lerp(paramsA.lightColor.r, paramsB.lightColor.r, t17),
-          g: lerp(paramsA.lightColor.g, paramsB.lightColor.g, t17),
-          b: lerp(paramsA.lightColor.b, paramsB.lightColor.b, t17),
-          a: lerp(paramsA.lightColor.a, paramsB.lightColor.a, t17)
+          r: lerp(paramsA.lightColor.r, paramsB.lightColor.r, t18),
+          g: lerp(paramsA.lightColor.g, paramsB.lightColor.g, t18),
+          b: lerp(paramsA.lightColor.b, paramsB.lightColor.b, t18),
+          a: lerp(paramsA.lightColor.a, paramsB.lightColor.a, t18)
         },
         bgColor: {
-          r: lerp(paramsA.bgColor.r, paramsB.bgColor.r, t17),
-          g: lerp(paramsA.bgColor.g, paramsB.bgColor.g, t17),
-          b: lerp(paramsA.bgColor.b, paramsB.bgColor.b, t17),
-          a: lerp(paramsA.bgColor.a, paramsB.bgColor.a, t17)
+          r: lerp(paramsA.bgColor.r, paramsB.bgColor.r, t18),
+          g: lerp(paramsA.bgColor.g, paramsB.bgColor.g, t18),
+          b: lerp(paramsA.bgColor.b, paramsB.bgColor.b, t18),
+          a: lerp(paramsA.bgColor.a, paramsB.bgColor.a, t18)
         }
       };
     },
@@ -4113,16 +4225,16 @@ var halftone = definePlugin({
         // Angle doesn't need scaling
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        size: lerp(paramsA.size, paramsB.size, t17),
-        interval: lerp(paramsA.interval, paramsB.interval, t17),
-        angle: lerp(paramsA.angle, paramsB.angle, t17),
+        size: lerp(paramsA.size, paramsB.size, t18),
+        interval: lerp(paramsA.interval, paramsB.interval, t18),
+        angle: lerp(paramsA.angle, paramsB.angle, t18),
         color: {
-          r: lerp(paramsA.color.r, paramsB.color.r, t17),
-          g: lerp(paramsA.color.g, paramsB.color.g, t17),
-          b: lerp(paramsA.color.b, paramsB.color.b, t17),
-          a: lerp(paramsA.color.a, paramsB.color.a, t17)
+          r: lerp(paramsA.color.r, paramsB.color.r, t18),
+          g: lerp(paramsA.color.g, paramsB.color.g, t18),
+          b: lerp(paramsA.color.b, paramsB.color.b, t18),
+          a: lerp(paramsA.color.a, paramsB.color.a, t18)
         }
       };
     },
@@ -4529,14 +4641,14 @@ var fluidDistortion = definePlugin({
         colorShift: params.colorShift
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
-        speed: lerp(paramsA.speed, paramsB.speed, t17),
-        scale: lerp(paramsA.scale, paramsB.scale, t17),
-        turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t17),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
-        timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t17)
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t18),
+        speed: lerp(paramsA.speed, paramsB.speed, t18),
+        scale: lerp(paramsA.scale, paramsB.scale, t18),
+        turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t18),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t18),
+        timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t18)
       };
     },
     renderUI: (params, setParam) => {
@@ -5202,21 +5314,21 @@ var kaleidoscope = definePlugin({
         padding: Math.round(params.padding * scaleFactor)
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        pattern: t17 < 0.5 ? paramsA.pattern : paramsB.pattern,
-        segments: Math.round(lerp(paramsA.segments, paramsB.segments, t17)),
-        rotation: lerp(paramsA.rotation, paramsB.rotation, t17),
-        centerX: lerp(paramsA.centerX, paramsB.centerX, t17),
-        centerY: lerp(paramsA.centerY, paramsB.centerY, t17),
-        zoom: lerp(paramsA.zoom, paramsB.zoom, t17),
-        distortion: lerp(paramsA.distortion, paramsB.distortion, t17),
-        complexity: lerp(paramsA.complexity, paramsB.complexity, t17),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
-        cellEffect: lerp(paramsA.cellEffect, paramsB.cellEffect, t17),
-        cellSize: lerp(paramsA.cellSize, paramsB.cellSize, t17),
-        blendMode: t17 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
-        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t17))
+        pattern: t18 < 0.5 ? paramsA.pattern : paramsB.pattern,
+        segments: Math.round(lerp(paramsA.segments, paramsB.segments, t18)),
+        rotation: lerp(paramsA.rotation, paramsB.rotation, t18),
+        centerX: lerp(paramsA.centerX, paramsB.centerX, t18),
+        centerY: lerp(paramsA.centerY, paramsB.centerY, t18),
+        zoom: lerp(paramsA.zoom, paramsB.zoom, t18),
+        distortion: lerp(paramsA.distortion, paramsB.distortion, t18),
+        complexity: lerp(paramsA.complexity, paramsB.complexity, t18),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t18),
+        cellEffect: lerp(paramsA.cellEffect, paramsB.cellEffect, t18),
+        cellSize: lerp(paramsA.cellSize, paramsB.cellSize, t18),
+        blendMode: t18 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
+        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t18))
       };
     },
     renderUI: (params, setParam) => {
@@ -6080,37 +6192,37 @@ var vhsInterlace = definePlugin({
         applyToTransparent: params.applyToTransparent
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
-        noise: lerp(paramsA.noise, paramsB.noise, t17),
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t18),
+        noise: lerp(paramsA.noise, paramsB.noise, t18),
         noiseDistortion: lerp(
           paramsA.noiseDistortion,
           paramsB.noiseDistortion,
-          t17
+          t18
         ),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
-        scanlines: lerp(paramsA.scanlines, paramsB.scanlines, t17),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t18),
+        scanlines: lerp(paramsA.scanlines, paramsB.scanlines, t18),
         interlaceGap: Math.round(
-          lerp(paramsA.interlaceGap, paramsB.interlaceGap, t17)
+          lerp(paramsA.interlaceGap, paramsB.interlaceGap, t18)
         ),
         brightnessJitter: lerp(
           paramsA.brightnessJitter,
           paramsB.brightnessJitter,
-          t17
+          t18
         ),
-        trackingError: lerp(paramsA.trackingError, paramsB.trackingError, t17),
-        verticalJitter: lerp(paramsA.verticalJitter, paramsB.verticalJitter, t17),
-        tilt: lerp(paramsA.tilt, paramsB.tilt, t17),
-        randomSeed: lerp(paramsA.randomSeed, paramsB.randomSeed, t17),
-        enableVHSColor: t17 < 0.5 ? paramsA.enableVHSColor : paramsB.enableVHSColor,
+        trackingError: lerp(paramsA.trackingError, paramsB.trackingError, t18),
+        verticalJitter: lerp(paramsA.verticalJitter, paramsB.verticalJitter, t18),
+        tilt: lerp(paramsA.tilt, paramsB.tilt, t18),
+        randomSeed: lerp(paramsA.randomSeed, paramsB.randomSeed, t18),
+        enableVHSColor: t18 < 0.5 ? paramsA.enableVHSColor : paramsB.enableVHSColor,
         vhsColor: {
-          r: lerp(paramsA.vhsColor.r, paramsB.vhsColor.r, t17),
-          g: lerp(paramsA.vhsColor.g, paramsB.vhsColor.g, t17),
-          b: lerp(paramsA.vhsColor.b, paramsB.vhsColor.b, t17),
-          a: lerp(paramsA.vhsColor.a, paramsB.vhsColor.a, t17)
+          r: lerp(paramsA.vhsColor.r, paramsB.vhsColor.r, t18),
+          g: lerp(paramsA.vhsColor.g, paramsB.vhsColor.g, t18),
+          b: lerp(paramsA.vhsColor.b, paramsB.vhsColor.b, t18),
+          a: lerp(paramsA.vhsColor.a, paramsB.vhsColor.a, t18)
         },
-        applyToTransparent: t17 < 0.5 ? paramsA.applyToTransparent : paramsB.applyToTransparent
+        applyToTransparent: t18 < 0.5 ? paramsA.applyToTransparent : paramsB.applyToTransparent
       };
     },
     renderUI: (params, setParam) => {
@@ -6709,7 +6821,7 @@ import {
 } from "npm:webgpu-utils";
 var t12 = createTranslator({
   en: {
-    title: "Downsampler",
+    title: "Downsampler V1",
     mode: "Sampling Quality",
     bilinear: "Standard",
     bicubic: "Smooth",
@@ -6727,7 +6839,7 @@ var t12 = createTranslator({
     rippleComplexity: "Ripple Complexity"
   },
   ja: {
-    title: "\u30C0\u30A6\u30F3\u30B5\u30F3\u30D7\u30E9\u30FC",
+    title: "\u30C0\u30A6\u30F3\u30B5\u30F3\u30D7\u30E9\u30FC V1",
     mode: "\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u54C1\u8CEA",
     bilinear: "\u3075\u3064\u3046",
     bicubic: "\u306A\u3081\u3089\u304B",
@@ -6808,25 +6920,25 @@ var downsampler = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        blocksX: lerp(paramsA.blocksX, paramsB.blocksX, t17),
-        blocksY: lerp(paramsA.blocksY, paramsB.blocksY, t17),
-        linkAxes: t17 < 0.5 ? paramsA.linkAxes : paramsB.linkAxes,
-        mode: t17 < 0.5 ? paramsA.mode : paramsB.mode,
-        enableRefraction: t17 < 0.5 ? paramsA.enableRefraction : paramsB.enableRefraction,
-        patternType: t17 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        refraction: lerp(paramsA.refraction, paramsB.refraction, t17),
-        seed: lerp(paramsA.seed, paramsB.seed, t17),
+        blocksX: lerp(paramsA.blocksX, paramsB.blocksX, t18),
+        blocksY: lerp(paramsA.blocksY, paramsB.blocksY, t18),
+        linkAxes: t18 < 0.5 ? paramsA.linkAxes : paramsB.linkAxes,
+        mode: t18 < 0.5 ? paramsA.mode : paramsB.mode,
+        enableRefraction: t18 < 0.5 ? paramsA.enableRefraction : paramsB.enableRefraction,
+        patternType: t18 < 0.5 ? paramsA.patternType : paramsB.patternType,
+        refraction: lerp(paramsA.refraction, paramsB.refraction, t18),
+        seed: lerp(paramsA.seed, paramsB.seed, t18),
         rippleFrequency: lerp(
           paramsA.rippleFrequency,
           paramsB.rippleFrequency,
-          t17
+          t18
         ),
         rippleComplexity: lerp(
           paramsA.rippleComplexity,
           paramsB.rippleComplexity,
-          t17
+          t18
         )
       };
     },
@@ -7404,13 +7516,13 @@ var waveDistortion = definePlugin({
         amplitude: params.amplitude * scaleFactor
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        amplitude: lerp(paramsA.amplitude, paramsB.amplitude, t17),
-        frequency: lerp(paramsA.frequency, paramsB.frequency, t17),
-        angleValue: lerp(paramsA.angleValue, paramsB.angleValue, t17),
-        crossWave: t17 < 0.5 ? paramsA.crossWave : paramsB.crossWave,
-        time: lerp(paramsA.time, paramsB.time, t17)
+        amplitude: lerp(paramsA.amplitude, paramsB.amplitude, t18),
+        frequency: lerp(paramsA.frequency, paramsB.frequency, t18),
+        angleValue: lerp(paramsA.angleValue, paramsB.angleValue, t18),
+        crossWave: t18 < 0.5 ? paramsA.crossWave : paramsB.crossWave,
+        time: lerp(paramsA.time, paramsB.time, t18)
       };
     },
     renderUI: (params, setParam) => {
@@ -7872,33 +7984,33 @@ var selectiveColorCorrection = definePlugin({
     onScaleParams(params, scaleFactor) {
       return params;
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       const result = {
-        blendMode: t17 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
-        previewMask: t17 < 0.5 ? paramsA.previewMask : paramsB.previewMask,
-        useCondition: t17 < 0.5 ? paramsA.useCondition : paramsB.useCondition,
+        blendMode: t18 < 0.5 ? paramsA.blendMode : paramsB.blendMode,
+        previewMask: t18 < 0.5 ? paramsA.previewMask : paramsB.previewMask,
+        useCondition: t18 < 0.5 ? paramsA.useCondition : paramsB.useCondition,
         // 数値パラメータの線形補間
-        featherEdges: lerp(paramsA.featherEdges, paramsB.featherEdges, t17),
+        featherEdges: lerp(paramsA.featherEdges, paramsB.featherEdges, t18),
         // 色選択パラメータの補間
-        targetHue: lerp(paramsA.targetHue, paramsB.targetHue, t17),
-        hueRange: lerp(paramsA.hueRange, paramsB.hueRange, t17),
-        saturationMin: lerp(paramsA.saturationMin, paramsB.saturationMin, t17),
-        saturationMax: lerp(paramsA.saturationMax, paramsB.saturationMax, t17),
-        brightnessMin: lerp(paramsA.brightnessMin, paramsB.brightnessMin, t17),
-        brightnessMax: lerp(paramsA.brightnessMax, paramsB.brightnessMax, t17),
+        targetHue: lerp(paramsA.targetHue, paramsB.targetHue, t18),
+        hueRange: lerp(paramsA.hueRange, paramsB.hueRange, t18),
+        saturationMin: lerp(paramsA.saturationMin, paramsB.saturationMin, t18),
+        saturationMax: lerp(paramsA.saturationMax, paramsB.saturationMax, t18),
+        brightnessMin: lerp(paramsA.brightnessMin, paramsB.brightnessMin, t18),
+        brightnessMax: lerp(paramsA.brightnessMax, paramsB.brightnessMax, t18),
         // 調整パラメータの補間
-        hueShift: lerp(paramsA.hueShift, paramsB.hueShift, t17),
+        hueShift: lerp(paramsA.hueShift, paramsB.hueShift, t18),
         saturationScale: lerp(
           paramsA.saturationScale,
           paramsB.saturationScale,
-          t17
+          t18
         ),
         brightnessScale: lerp(
           paramsA.brightnessScale,
           paramsB.brightnessScale,
-          t17
+          t18
         ),
-        contrast: lerp(paramsA.contrast, paramsB.contrast, t17)
+        contrast: lerp(paramsA.contrast, paramsB.contrast, t18)
       };
       return result;
     },
@@ -8677,20 +8789,20 @@ var dataMosh = definePlugin({
         blockSize: Math.round(params.blockSize * scaleFactor)
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        intensity: lerp(paramsA.intensity, paramsB.intensity, t17),
-        blockSize: Math.round(lerp(paramsA.blockSize, paramsB.blockSize, t17)),
-        direction: t17 < 0.5 ? paramsA.direction : paramsB.direction,
-        seed: Math.round(lerp(paramsA.seed, paramsB.seed, t17)),
-        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t17),
-        glitchFactor: lerp(paramsA.glitchFactor, paramsB.glitchFactor, t17),
-        pixelShuffle: lerp(paramsA.pixelShuffle, paramsB.pixelShuffle, t17),
-        lineShift: lerp(paramsA.lineShift, paramsB.lineShift, t17),
-        corruption: lerp(paramsA.corruption, paramsB.corruption, t17),
-        bitCorruption: lerp(paramsA.bitCorruption, paramsB.bitCorruption, t17),
-        bitShift: Math.round(lerp(paramsA.bitShift, paramsB.bitShift, t17)),
-        headerGlitch: lerp(paramsA.headerGlitch, paramsB.headerGlitch, t17)
+        intensity: lerp(paramsA.intensity, paramsB.intensity, t18),
+        blockSize: Math.round(lerp(paramsA.blockSize, paramsB.blockSize, t18)),
+        direction: t18 < 0.5 ? paramsA.direction : paramsB.direction,
+        seed: Math.round(lerp(paramsA.seed, paramsB.seed, t18)),
+        colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t18),
+        glitchFactor: lerp(paramsA.glitchFactor, paramsB.glitchFactor, t18),
+        pixelShuffle: lerp(paramsA.pixelShuffle, paramsB.pixelShuffle, t18),
+        lineShift: lerp(paramsA.lineShift, paramsB.lineShift, t18),
+        corruption: lerp(paramsA.corruption, paramsB.corruption, t18),
+        bitCorruption: lerp(paramsA.bitCorruption, paramsB.bitCorruption, t18),
+        bitShift: Math.round(lerp(paramsA.bitShift, paramsB.bitShift, t18)),
+        headerGlitch: lerp(paramsA.headerGlitch, paramsB.headerGlitch, t18)
       };
     },
     renderUI: (params, setParam) => {
@@ -9322,10 +9434,10 @@ var gaussianBlur = definePlugin({
         strength: params.strength
       };
     },
-    onInterpolate: (paramsA, paramsB, t17) => {
+    onInterpolate: (paramsA, paramsB, t18) => {
       return {
-        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t17)),
-        strength: lerp(paramsA.strength, paramsB.strength, t17)
+        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t18)),
+        strength: lerp(paramsA.strength, paramsB.strength, t18)
       };
     },
     renderUI: (params, setParam) => {
@@ -9780,9 +9892,680 @@ var gaussianBlur = definePlugin({
   }
 });
 
+// src/js/src/live-effects/blush-stroke.ts
+import {
+  makeShaderDataDefinitions as makeShaderDataDefinitions16,
+  makeStructuredView as makeStructuredView16
+} from "npm:webgpu-utils";
+var t17 = createTranslator({
+  en: {
+    title: "Brush Stroke V1",
+    angle: "Angle",
+    brushSize: "Brush Size",
+    strokeLength: "Stroke Length",
+    randomStrength: "Random Strength",
+    randomSeed: "Random Seed",
+    strokeDensity: "Stroke Density",
+    blendWithOriginal: "Blend with Original"
+  },
+  ja: {
+    title: "\u30D6\u30E9\u30B7\u30B9\u30C8\u30ED\u30FC\u30AF V1",
+    angle: "\u89D2\u5EA6",
+    brushSize: "\u30D6\u30E9\u30B7\u30B5\u30A4\u30BA",
+    strokeLength: "\u30B9\u30C8\u30ED\u30FC\u30AF\u9577",
+    randomStrength: "\u30E9\u30F3\u30C0\u30E0\u306B\u63CF\u753B",
+    randomSeed: "\u30E9\u30F3\u30C0\u30E0\u30B7\u30FC\u30C9",
+    strokeDensity: "\u63CF\u753B\u306E\u6FC3\u5EA6",
+    blendWithOriginal: "\u5143\u753B\u50CF\u3068\u30D6\u30EC\u30F3\u30C9"
+  }
+});
+var brushStroke = definePlugin({
+  id: "brush-stroke-v1",
+  title: t17("title"),
+  version: { major: 1, minor: 0 },
+  liveEffect: {
+    styleFilterFlags: {
+      type: 2 /* kPostEffectFilter */,
+      features: []
+    },
+    paramSchema: {
+      angle: {
+        type: "real",
+        default: 45
+      },
+      brushSize: {
+        // px
+        type: "real",
+        default: 10
+      },
+      strokeLength: {
+        // px
+        type: "real",
+        default: 25
+      },
+      strokeDensity: {
+        type: "real",
+        default: 1
+      },
+      randomStrength: {
+        type: "real",
+        default: 0.5
+      },
+      randomSeed: {
+        type: "int",
+        default: 12345
+      },
+      blendWithOriginal: {
+        type: "real",
+        default: 0
+      }
+    },
+    onEditParameters: (params) => {
+      return params;
+    },
+    onAdjustColors: (params, adjustColor) => {
+      return params;
+    },
+    onScaleParams(params, scaleFactor) {
+      return {
+        ...params,
+        brushSize: params.brushSize * scaleFactor,
+        strokeLength: params.strokeLength * scaleFactor
+      };
+    },
+    onInterpolate: (paramsA, paramsB, t18) => {
+      return {
+        angle: lerp(paramsA.angle, paramsB.angle, t18),
+        brushSize: lerp(paramsA.brushSize, paramsB.brushSize, t18),
+        strokeLength: lerp(paramsA.strokeLength, paramsB.strokeLength, t18),
+        randomStrength: lerp(paramsA.randomStrength, paramsB.randomStrength, t18),
+        randomSeed: Math.round(lerp(paramsA.randomSeed, paramsB.randomSeed, t18)),
+        strokeDensity: lerp(paramsA.strokeDensity, paramsB.strokeDensity, t18),
+        blendWithOriginal: lerp(
+          paramsA.blendWithOriginal,
+          paramsB.blendWithOriginal,
+          t18
+        )
+      };
+    },
+    renderUI: (params, setParam) => {
+      return ui.group({ direction: "col" }, [
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("angle") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "angle",
+              dataType: "float",
+              min: 0,
+              max: 360,
+              value: params.angle
+            }),
+            ui.numberInput({
+              key: "angle",
+              dataType: "float",
+              value: params.angle
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("brushSize") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "brushSize",
+              dataType: "float",
+              min: 0.5,
+              max: 20,
+              value: params.brushSize
+            }),
+            ui.numberInput({
+              key: "brushSize",
+              dataType: "float",
+              value: params.brushSize
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("strokeLength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "strokeLength",
+              dataType: "float",
+              min: 1,
+              max: 200,
+              value: params.strokeLength
+            }),
+            ui.numberInput({
+              key: "strokeLength",
+              dataType: "float",
+              value: params.strokeLength
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("strokeDensity") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "strokeDensity",
+              dataType: "float",
+              min: 0,
+              max: 2,
+              value: params.strokeDensity
+            }),
+            ui.numberInput({
+              key: "strokeDensity",
+              dataType: "float",
+              min: 0,
+              max: 2,
+              step: 0.1,
+              value: params.strokeDensity
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("randomStrength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "randomStrength",
+              dataType: "float",
+              min: 0,
+              max: 1,
+              value: params.randomStrength
+            }),
+            ui.numberInput({
+              key: "randomStrength",
+              dataType: "float",
+              min: 0,
+              max: 1,
+              step: 0.01,
+              value: params.randomStrength
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("randomSeed") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "randomSeed",
+              dataType: "int",
+              min: 1,
+              max: 99999,
+              value: params.randomSeed
+            }),
+            ui.numberInput({
+              key: "randomSeed",
+              dataType: "int",
+              value: params.randomSeed
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t17("blendWithOriginal") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "blendWithOriginal",
+              dataType: "float",
+              min: 0,
+              max: 100,
+              value: params.blendWithOriginal
+            }),
+            ui.numberInput({
+              key: "blendWithOriginal",
+              dataType: "float",
+              min: 0,
+              max: 100,
+              step: 1,
+              value: params.blendWithOriginal
+            })
+          ])
+        ])
+      ]);
+    },
+    initLiveEffect: async () => {
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Brush Stroke Effect)" }
+        },
+        (device) => {
+          const code = `
+            struct Params {
+              outputSize: vec2i,
+              dpiScale: f32,
+              angle: f32,
+              brushSize: f32,
+              strokeLength: f32,
+              randomStrength: f32,
+              randomSeed: i32,
+              strokeDensity: f32,
+              blendWithOriginal: f32,
+            }
+
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(3) var<uniform> params: Params;
+
+            fn hash(n: f32) -> f32 {
+              return fract(sin(n) * 43758.5453);
+            }
+
+            @compute @workgroup_size(16, 16)
+            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+              let dims = vec2f(params.outputSize);
+              let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
+              let texCoord = vec2f(id.xy) / dims;
+              let toInputTexCoord = dims / dimsWithGPUPadding;
+
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
+
+              // \u5143\u306E\u753B\u50CF\u306E\u8272\u3092\u53D6\u5F97 (\u975E\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u30A2\u30EB\u30D5\u30A1\u3068\u3057\u3066\u6271\u3046)
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
+              // \u6700\u7D42\u7684\u306A\u8272\uFF08\u521D\u671F\u5024\u306F\u5143\u753B\u50CF\uFF09
+              var finalColor = originalColor;
+
+              // \u30E9\u30F3\u30C0\u30E0\u30B7\u30FC\u30C9\u306E\u8A2D\u5B9A
+              let seed = f32(params.randomSeed);
+
+              // \u89D2\u5EA6\u3092\u30E9\u30B8\u30A2\u30F3\u306B\u5909\u63DB
+              let baseAngleRad = params.angle * 3.14159265359 / 180.0;
+
+              // \u7269\u7406\u7684\u306A\u5BF8\u6CD5\u306B\u57FA\u3065\u304F\u8A08\u7B97\uFF08DPI-aware)
+              let physicalScale = 1.0 / params.dpiScale; // \u7269\u7406\u30B9\u30B1\u30FC\u30EB\u4FC2\u6570
+
+              // \u30B0\u30EA\u30C3\u30C9\u69CB\u9020
+              let physicalBrushSize = params.brushSize; // \u3059\u3067\u306B\u7269\u7406\u5358\u4F4D
+              let physicalCellSize = sqrt(physicalBrushSize) * 5.0; // \u30D9\u30FC\u30B9\u30B5\u30A4\u30BA
+
+              // \u6A2A\u65B9\u5411\u3068\u7E26\u65B9\u5411\u3067\u7570\u306A\u308B\u5BC6\u5EA6\u3092\u9069\u7528
+              let baseDensity = 1.0 / (physicalCellSize * params.dpiScale);
+              // \u6A2A\u65B9\u5411\u306E\u5BC6\u5EA6\u306F\u30D9\u30FC\u30B9\u5BC6\u5EA6
+              let densityX = baseDensity;
+              // \u7E26\u65B9\u5411\u306E\u5BC6\u5EA6\u306FstrokeDensity\u306B\u3088\u3063\u3066\u7279\u306B\u5F71\u97FF\u3092\u53D7\u3051\u308B
+              let densityY = baseDensity * params.strokeDensity * 1.5;
+
+              // \u7570\u306A\u308B\u5BC6\u5EA6\u3067\u30B0\u30EA\u30C3\u30C9\u5EA7\u6A19\u3092\u8A08\u7B97
+              let gridCoordX = floor(texCoord.x * dims.x * densityX);
+              let gridCoordY = floor(texCoord.y * dims.y * densityY);
+              let gridCoord = vec2f(gridCoordX, gridCoordY);
+
+              // \u3053\u306E\u30D4\u30AF\u30BB\u30EB\u304C\u542B\u307E\u308C\u308B\u30BB\u30EB\u3068\u305D\u306E\u5468\u8FBA\u30BB\u30EB\u3092\u30EB\u30FC\u30D7
+              // \u4E0B\u304B\u3089\u4E0A\u3078\u30B9\u30AD\u30E3\u30F3 (dy=-1\u304B\u30891) \u3059\u308B\u3053\u3068\u3067\u3001\u4E0A\u90E8\u306E\u30B9\u30C8\u30ED\u30FC\u30AF\u304C\u4E0B\u90E8\u306E\u30B9\u30C8\u30ED\u30FC\u30AF\u3092\u4E0A\u66F8\u304D\u3059\u308B
+              for (var dy = -1; dy <= 1; dy++) {
+                for (var dx = -1; dx <= 1; dx++) {
+                  let cellPos = gridCoord + vec2f(f32(dx), f32(dy));
+
+                  // \u30B9\u30C8\u30ED\u30FC\u30AF1\u3064\u3042\u305F\u308A\u306E\u57FA\u672C\u7684\u306A\u30E9\u30F3\u30C0\u30E0\u5024
+                  let cellHash = fract(sin(dot(cellPos, vec2f(12.9898, 78.233)) + seed * 0.01) * 43758.5453);
+
+                  // \u3053\u306E\u30BB\u30EB\u3092\u63CF\u753B\u3059\u308B\u304B\u3069\u3046\u304B\u306E\u30E9\u30F3\u30C0\u30E0\u5224\u5B9A\uFF08\u5BC6\u5EA6\u8ABF\u6574\uFF09
+                  // \u30D6\u30E9\u30B7\u30B5\u30A4\u30BA\u304C\u5927\u304D\u3044\u307B\u3069\u3001\u3088\u308A\u591A\u304F\u306E\u30BB\u30EB\u3092\u63CF\u753B - \u7269\u7406\u5358\u4F4D\u3067\u4E00\u5B9A
+                  // strokeDensity\u3082\u6A2A\u65B9\u5411\u306E\u5BC6\u5EA6\u306B\u5F71\u97FF
+                  let cellDrawProb = min(0.95, 0.7 + physicalBrushSize * 0.015) * params.strokeDensity;
+                  if (cellHash < cellDrawProb) {
+
+                    // \u30BB\u30EB\u3054\u3068\u306B\u500B\u5225\u306E\u89D2\u5EA6\u5909\u52D5
+                    let angleJitter = (cellHash * 2.0 - 1.0) * 0.6;
+                    let strokeAngle = baseAngleRad + (angleJitter * params.randomStrength);
+                    let strokeDir = vec2f(cos(strokeAngle), sin(strokeAngle));
+
+                    let densityVec = vec2f(densityX, densityY);
+                    let cellCenter = (cellPos + vec2f(0.5)) / (dims * densityVec);
+
+                    // \u30B9\u30C8\u30ED\u30FC\u30AF\u306E\u9577\u3055 - \u7269\u7406\u5358\u4F4D\u3067\u4E00\u5B9A
+                    let physicalStrokeLength = params.strokeLength;
+                    let pixelStrokeLength = physicalStrokeLength * params.dpiScale;
+                    let strokeLen = (pixelStrokeLength * 0.3) / dims.x;
+
+                    // \u30B9\u30C8\u30ED\u30FC\u30AF\u306F\u8907\u6570\u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u3067\u306F\u306A\u304F\u3001\u72EC\u7ACB\u3057\u305F\u77ED\u3044\u7DDA\u5206\u3068\u3057\u3066
+                    let halfLen = strokeLen * 0.5;
+                    let strokeStart = cellCenter - strokeDir * halfLen;
+                    let strokeEnd = cellCenter + strokeDir * halfLen;
+
+                    // \u73FE\u5728\u306E\u30D4\u30AF\u30BB\u30EB\u304B\u3089\u30B9\u30C8\u30ED\u30FC\u30AF\u307E\u3067\u306E\u8DDD\u96E2\u8A08\u7B97
+                    // \u7DDA\u5206\u3078\u306E\u6700\u77ED\u8DDD\u96E2\u3092\u8A08\u7B97
+                    let toPixel = texCoord - strokeStart;
+                    let projLen = dot(toPixel, strokeDir);
+                    let paramT = clamp(projLen / (strokeLen), 0.0, 1.0);
+
+                    // \u30B9\u30C8\u30ED\u30FC\u30AF\u4E0A\u306E\u6700\u8FD1\u70B9
+                    let closestPt = strokeStart + strokeDir * paramT * strokeLen;
+
+                    // \u30D4\u30AF\u30BB\u30EB\u304B\u3089\u30B9\u30C8\u30ED\u30FC\u30AF\u3078\u306E\u8DDD\u96E2\uFF08\u7DDA\u5206\u304B\u3089\u306E\u8DDD\u96E2\uFF09- \u7269\u7406\u5358\u4F4D\u3067\u8A08\u7B97
+                    let distToLine = distance(texCoord, closestPt) * dims.x * physicalScale;
+
+                    // \u7DDA\u7AEF\u306E\u4E38\u3081\u51E6\u7406\u306B\u4F7F\u7528\u3059\u308B\u7AEF\u70B9\u304B\u3089\u306E\u8DDD\u96E2
+                    let distToEnds = min(
+                      distance(texCoord, strokeStart),
+                      distance(texCoord, strokeEnd)
+                    ) * dims.x * physicalScale;
+
+                    // \u7AEF\u3092\u4E38\u304F\u3059\u308B\u8DDD\u96E2\u5834
+                    let brushWidth = physicalBrushSize * 0.4; // \u7269\u7406\u5358\u4F4D\u3067\u306E\u30D6\u30E9\u30B7\u5E45
+
+                    // \u7DDA\u5206\u4E0A\u306E\u5834\u5408\u306F\u7DDA\u304B\u3089\u306E\u8DDD\u96E2\u3001\u7AEF\u70B9\u8FD1\u304F\u3067\u306F\u7AEF\u70B9\u304B\u3089\u306E\u8DDD\u96E2\u3092\u4F7F\u7528
+                    let endCapT = 0.1; // \u7AEF\u70B9\u306E\u5F71\u97FF\u7BC4\u56F2\uFF080\uFF5E1\uFF09
+                    let endCapBlend = step(endCapT, paramT) * step(endCapT, 1.0 - paramT);
+
+                    // \u7DDA\u5206\u307E\u305F\u306F\u7AEF\u70B9\u304B\u3089\u306E\u8DDD\u96E2\uFF08\u4E38\u3044\u7AEF\u90E8\u3092\u4F5C\u6210\uFF09
+                    let finalDist = mix(distToEnds, distToLine, endCapBlend);
+
+                    // \u30D6\u30E9\u30B7\u306E\u5F62\u72B6\uFF08\u91CD\u307F\u4ED8\u3051\uFF09
+                    let weight = 1.0 - step(brushWidth, finalDist);
+
+                    // \u30B9\u30C8\u30ED\u30FC\u30AF\u306E\u8272\u3092\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\uFF08\u4E2D\u5FC3\u70B9\u304B\u3089\uFF09- \u30B9\u30C8\u30EC\u30FC\u30C8\u30A2\u30EB\u30D5\u30A1\u3068\u3057\u3066\u6271\u3046
+                    let samplePos = cellCenter;
+                    let sampledColor = textureSampleLevel(inputTexture, textureSampler, samplePos * toInputTexCoord, 0.0);
+
+                    // \u660E\u793A\u7684\u306B\u30B9\u30C8\u30EC\u30FC\u30C8\u30A2\u30EB\u30D5\u30A1\u3068\u3057\u3066\u51E6\u7406
+                    var strokeColor = sampledColor;
+
+                    // \u8272\u306E\u5FAE\u8ABF\u6574\uFF08\u975E\u5E38\u306B\u63A7\u3048\u3081\u306B\uFF09
+                    let colorShift = (fract(cellHash * 456.789) - 0.5) * 0.05;
+                    strokeColor = vec4f(
+                      clamp(strokeColor.r + colorShift, 0.0, 1.0),
+                      clamp(strokeColor.g + colorShift, 0.0, 1.0),
+                      clamp(strokeColor.b + colorShift, 0.0, 1.0),
+                      strokeColor.a
+                    );
+
+                    // \u91CD\u307F\u306B\u57FA\u3065\u3044\u3066\u6700\u7D42\u8272\u306B\u30D6\u30EC\u30F3\u30C9
+                    if (weight > 0.01 && strokeColor.a > 0.001) {
+                      let opacity = weight * strokeColor.a; // \u5143\u306E\u900F\u660E\u5EA6\u3092\u4FDD\u6301
+                      // \u4E0D\u900F\u660E\u5EA6\u3092\u7D2F\u7A4D\u7684\u306B\u8A08\u7B97\uFF08\u4EE5\u524D\u306E\u7D50\u679C\u3092\u8003\u616E\uFF09
+                      let newAlpha = opacity + finalColor.a * (1.0 - opacity);
+
+                      if (newAlpha > 0.001) {
+                        // \u8272\u3092\u9069\u5207\u306B\u30D6\u30EC\u30F3\u30C9\uFF08\u30A2\u30EB\u30D5\u30A1\u3092\u8003\u616E\uFF09
+                        let blendedRGB = (strokeColor.rgb * opacity + finalColor.rgb * finalColor.a * (1.0 - opacity)) / newAlpha;
+                        finalColor = vec4f(blendedRGB, newAlpha);
+                      }
+                    }
+                  }
+                }
+              }
+
+              // \u6700\u7D42\u7684\u306A\u30B9\u30C8\u30ED\u30FC\u30AF\u52B9\u679C\u3092\u5143\u753B\u50CF\u3068\u30D6\u30EC\u30F3\u30C9\uFF08Oklch\u30AB\u30E9\u30FC\u30B9\u30DA\u30FC\u30B9\u3067\uFF09
+              let blendFactor = params.blendWithOriginal / 100.0;
+
+              // \u30D6\u30EC\u30F3\u30C9\u304C0\u3088\u308A\u5927\u304D\u3044\u5834\u5408\u306E\u307F\u30D6\u30EC\u30F3\u30C9\u51E6\u7406\u3092\u884C\u3046
+              if (blendFactor > 0.001) {
+                // \u30A2\u30EB\u30D5\u30A1\u5024\u3092\u500B\u5225\u306B\u8A08\u7B97
+                let targetAlpha = mix(finalColor.a, originalColor.a, blendFactor);
+
+                if (targetAlpha > 0.001) {
+                  // \u5B8C\u5168\u900F\u660E\u3067\u306A\u3044\u5834\u5408\u306E\u307FOklch\u30D6\u30EC\u30F3\u30C9\u3092\u9069\u7528
+                  let colorA = vec4f(finalColor.rgb, 1.0);   // \u4E00\u6642\u7684\u306B\u30A2\u30EB\u30D5\u30A1\u30921\u306B\u3057\u3066\u8272\u306E\u307F\u3092\u30D6\u30EC\u30F3\u30C9
+                  let colorB = vec4f(originalColor.rgb, 1.0);
+
+                  // Oklch\u3067\u30AB\u30E9\u30FC\u30D6\u30EC\u30F3\u30C9
+                  let blendedColor = mixOklchVec4(colorA, colorB, blendFactor);
+                  finalColor = vec4f(blendedColor.rgb, targetAlpha);
+                } else {
+                  // \u5B8C\u5168\u900F\u660E\u306E\u5834\u5408
+                  finalColor = vec4f(0.0, 0.0, 0.0, 0.0);
+                }
+              }
+
+              // \u30D6\u30EC\u30F3\u30C9\u3057\u306A\u3044\u5834\u5408\u3084\u3001\u6700\u7D42\u7D50\u679C\u304C\u5143\u306E\u52B9\u679C\u3068\u540C\u3058\u5834\u5408\u306F\u3001\u7D50\u679C\u304C\u306A\u3044\u3068\u304D\u306B\u5143\u753B\u50CF\u3092\u4F7F\u7528
+              if (finalColor.a < 0.001) {
+                // \u30B9\u30C8\u30ED\u30FC\u30AF\u52B9\u679C\u304C\u307B\u3068\u3093\u3069\u306A\u304F\u3001\u5143\u753B\u50CF\u3068\u306E\u30D6\u30EC\u30F3\u30C9\u3082\u5C11\u306A\u3044\u5834\u5408
+                if (blendFactor > 0.9) {
+                  // \u307B\u307C\u5B8C\u5168\u306B\u5143\u753B\u50CF\u3092\u8868\u793A
+                  finalColor = originalColor;
+                }
+              }
+
+              textureStore(resultTexture, id.xy, finalColor);
+            }
+
+            // Drop-in replacement for mix() that works with vec3f rgb colors
+            fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32> {
+              // RGB -> Linear RGB
+              let linearColor1 = vec3<f32>(
+                select(color1.r / 12.92, pow((color1.r + 0.055) / 1.055, 2.4), color1.r <= 0.04045),
+                select(color1.g / 12.92, pow((color1.g + 0.055) / 1.055, 2.4), color1.g <= 0.04045),
+                select(color1.b / 12.92, pow((color1.b + 0.055) / 1.055, 2.4), color1.b <= 0.04045),
+              );
+
+              let linearColor2 = vec3<f32>(
+                select(color2.r / 12.92, pow((color2.r + 0.055) / 1.055, 2.4), color2.r <= 0.04045),
+                select(color2.g / 12.92, pow((color2.g + 0.055) / 1.055, 2.4), color2.g <= 0.04045),
+                select(color2.b / 12.92, pow((color2.b + 0.055) / 1.055, 2.4), color2.b <= 0.04045),
+              );
+
+              // Linear RGB -> LMS
+              let lms1 = mat3x3<f32>(
+                0.4122214708, 0.5363325363, 0.0514459929,
+                0.2119034982, 0.6806995451, 0.1073969566,
+                0.0883024619, 0.2817188376, 0.6299787005
+              ) * linearColor1;
+
+              let lms2 = mat3x3<f32>(
+                0.4122214708, 0.5363325363, 0.0514459929,
+                0.2119034982, 0.6806995451, 0.1073969566,
+                0.0883024619, 0.2817188376, 0.6299787005
+              ) * linearColor2;
+
+              // LMS -> Oklab
+              let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
+              let lms2_pow = vec3<f32>(pow(lms2.x, 1.0/3.0), pow(lms2.y, 1.0/3.0), pow(lms2.z, 1.0/3.0));
+
+              let oklabMatrix = mat3x3<f32>(
+                0.2104542553, 0.7936177850, -0.0040720468,
+                1.9779984951, -2.4285922050, 0.4505937099,
+                0.0259040371, 0.7827717662, -0.8086757660
+              );
+
+              let oklab1 = oklabMatrix * lms1_pow;
+              let oklab2 = oklabMatrix * lms2_pow;
+
+              // Oklab -> OKLCH
+              let L1 = oklab1.x;
+              let L2 = oklab2.x;
+              let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
+              let C2 = sqrt(oklab2.y * oklab2.y + oklab2.z * oklab2.z);
+              let H1 = atan2(oklab1.z, oklab1.y);
+              let H2 = atan2(oklab2.z, oklab2.y);
+
+              // \u8272\u76F8\u306E\u88DC\u9593\uFF08\u6700\u77ED\u7D4C\u8DEF\uFF09
+              let hDiff = H2 - H1;
+              let hDiffAdjusted = select(
+                hDiff,
+                hDiff - 2.0 * 3.14159265359,
+                hDiff > 3.14159265359
+              );
+              let hDiffFinal = select(
+                hDiffAdjusted,
+                hDiffAdjusted + 2.0 * 3.14159265359,
+                hDiffAdjusted < -3.14159265359
+              );
+
+              let L = mix(L1, L2, t);
+              let C = mix(C1, C2, t);
+              let H = H1 + t * hDiffFinal;
+
+              // OKLCH -> Oklab
+              let a = C * cos(H);
+              let b = C * sin(H);
+
+              // Oklab -> LMS
+              let oklabInverseMatrix = mat3x3<f32>(
+                1.0, 0.3963377774, 0.2158037573,
+                1.0, -0.1055613458, -0.0638541728,
+                1.0, -0.0894841775, -1.2914855480
+              );
+
+              let lms_pow = oklabInverseMatrix * vec3<f32>(L, a, b);
+              let lms = vec3<f32>(
+                pow(lms_pow.x, 3.0),
+                pow(lms_pow.y, 3.0),
+                pow(lms_pow.z, 3.0)
+              );
+
+              // LMS -> Linear RGB
+              let lmsToRgbMatrix = mat3x3<f32>(
+                4.0767416621, -3.3077115913, 0.2309699292,
+                -1.2684380046, 2.6097574011, -0.3413193965,
+                -0.0041960863, -0.7034186147, 1.7076147010
+              );
+
+              let linearRgb = lmsToRgbMatrix * lms;
+
+              // Linear RGB -> RGB
+              let rgbResult = vec3<f32>(
+                select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
+                select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
+                select(12.92 * linearRgb.b, 1.055 * pow(linearRgb.b, 1.0/2.4) - 0.055, linearRgb.b <= 0.0031308),
+              );
+
+              return clamp(rgbResult, vec3<f32>(0.0), vec3<f32>(1.0));
+            }
+
+            fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32> {
+              return vec4<f32>(
+                mixOklch(color1.rgb, color2.rgb, t),
+                mix(color1.a, color2.a, t)
+              );
+            }
+          `;
+          const shader = device.createShaderModule({
+            label: "Brush Stroke Shader",
+            code
+          });
+          const pipelineDef = makeShaderDataDefinitions16(code);
+          const pipeline = device.createComputePipeline({
+            label: "Brush Stroke Pipeline",
+            layout: "auto",
+            compute: {
+              module: shader,
+              entryPoint: "computeMain"
+            }
+          });
+          return { device, pipeline, pipelineDef };
+        }
+      );
+    },
+    goLiveEffect: async ({ device, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
+      console.log("Brush Stroke Effect", params);
+      const dpiScale = dpi / baseDpi;
+      imgData = await paddingImageData(
+        imgData,
+        Math.ceil(params.strokeLength / 3 * dpiScale)
+      );
+      const outputWidth = imgData.width, outputHeight = imgData.height;
+      imgData = await addWebGPUAlignmentPadding(imgData);
+      const bufferInputWidth = imgData.width, bufferInputHeight = imgData.height;
+      const texture = device.createTexture({
+        label: "Brush Stroke Input Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
+      });
+      const resultTexture = device.createTexture({
+        label: "Brush Stroke Result Texture",
+        size: [bufferInputWidth, bufferInputHeight],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
+      });
+      const sampler = device.createSampler({
+        label: "Brush Stroke Texture Sampler",
+        magFilter: "nearest",
+        minFilter: "nearest",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge"
+      });
+      const uniformValues = makeStructuredView16(pipelineDef.uniforms.params);
+      const uniformBuffer = device.createBuffer({
+        label: "Brush Stroke Params Buffer",
+        size: uniformValues.arrayBuffer.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      uniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale,
+        angle: params.angle,
+        brushSize: params.brushSize,
+        strokeLength: params.strokeLength,
+        randomStrength: params.randomStrength,
+        randomSeed: params.randomSeed,
+        strokeDensity: params.strokeDensity,
+        blendWithOriginal: params.blendWithOriginal
+      });
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+      const bindGroup = device.createBindGroup({
+        label: "Brush Stroke Main Bind Group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: texture.createView()
+          },
+          {
+            binding: 1,
+            resource: resultTexture.createView()
+          },
+          {
+            binding: 2,
+            resource: sampler
+          },
+          {
+            binding: 3,
+            resource: { buffer: uniformBuffer }
+          }
+        ]
+      });
+      const stagingBuffer = device.createBuffer({
+        label: "Staging Buffer",
+        size: bufferInputWidth * bufferInputHeight * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeTexture(
+        { texture },
+        imgData.data,
+        { bytesPerRow: bufferInputWidth * 4, rowsPerImage: bufferInputHeight },
+        [bufferInputWidth, bufferInputHeight]
+      );
+      const commandEncoder = device.createCommandEncoder({
+        label: "Main Command Encoder"
+      });
+      const computePass = commandEncoder.beginComputePass({
+        label: "Brush Stroke Compute Pass"
+      });
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      computePass.dispatchWorkgroups(
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
+      );
+      computePass.end();
+      commandEncoder.copyTextureToBuffer(
+        { texture: resultTexture },
+        { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
+        [bufferInputWidth, bufferInputHeight]
+      );
+      device.queue.submit([commandEncoder.finish()]);
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const copyArrayBuffer = stagingBuffer.getMappedRange();
+      const resultData = new Uint8Array(copyArrayBuffer.slice(0));
+      stagingBuffer.unmap();
+      const resultImageData = new ImageData(
+        new Uint8ClampedArray(resultData),
+        bufferInputWidth,
+        bufferInputHeight
+      );
+      return await removeWebGPUAlignmentPadding(
+        resultImageData,
+        outputWidth,
+        outputHeight
+      );
+    }
+  }
+});
+
 // src/js/src/main.ts
 var EFFECTS_DIR = new URL(toFileUrl2(join2(homedir(), ".ai-deno/effects")));
 var allPlugins = [
+  brushStroke,
   chromaticAberration,
   coastic,
   dataMosh,
@@ -9986,12 +10769,12 @@ function liveEffectScaleParameters(id, params, scaleFactor) {
     params: result ?? params
   };
 }
-function liveEffectInterpolate(id, params, params2, t17) {
+function liveEffectInterpolate(id, params, params2, t18) {
   const effect = findEffect(id);
   if (!effect) throw new Error(`Effect not found: ${id}`);
   params = getParams(id, params);
   params2 = getParams(id, params2);
-  return effect.liveEffect.onInterpolate(params, params2, t17);
+  return effect.liveEffect.onInterpolate(params, params2, t18);
 }
 var goLiveEffect = async (id, params, env, width, height, data) => {
   const effect = findEffect(id);
