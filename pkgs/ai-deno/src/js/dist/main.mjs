@@ -542,15 +542,15 @@ var chromaticAberration = definePlugin({
             dpiScale: f32,
             strength: f32,
             angle: f32,
-            colorMode: u32,  // 0: RGB, 1: CMYK, 2: Pastel, 3: Red & Cyan
+            colorMode: u32,
             opacity: f32,
-            blendMode: u32,  // 0: over, 1: under
-            useFocusPoint: u32,  // 0: false, 1: true
+            blendMode: u32,
+            useFocusPoint: u32,
             focusPointX: f32,
             focusPointY: f32,
             focusGradient: f32,
-            isInPreview: u32,  // 0: false, 1: true
-            shiftType: u32  // 0: move, 1: zoom
+            isInPreview: u32,
+            shiftType: u32
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -567,7 +567,6 @@ var chromaticAberration = definePlugin({
               return 1.0 - (1.0 - a) * (1.0 - b);
           }
 
-          // RGB \u304B\u3089 CMYK \u3078\u306E\u5909\u63DB\u95A2\u6570
           fn rgbToCmyk(rgb: vec3f) -> vec4f {
               let r = rgb.r;
               let g = rgb.g;
@@ -575,7 +574,6 @@ var chromaticAberration = definePlugin({
 
               let k = 1.0 - max(max(r, g), b);
 
-              // \u9ED2\u304C1.0\uFF08\u5B8C\u5168\u306A\u9ED2\uFF09\u306E\u5834\u5408\u3001\u4ED6\u306E\u30C1\u30E3\u30F3\u30CD\u30EB\u306F0\u306B
               if (k == 1.0) {
                   return vec4f(0.0, 0.0, 0.0, 1.0);
               }
@@ -587,7 +585,6 @@ var chromaticAberration = definePlugin({
               return vec4f(c, m, y, k);
           }
 
-          // CMYK \u304B\u3089 RGB \u3078\u306E\u5909\u63DB\u95A2\u6570
           fn cmykToRgb(cmyk: vec4f) -> vec3f {
               let c = cmyk.x;
               let m = cmyk.y;
@@ -601,65 +598,50 @@ var chromaticAberration = definePlugin({
               return vec3f(r, g, b);
           }
 
-          // RGB\u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u3092\u30D1\u30B9\u30C6\u30EB\u30AB\u30E9\u30FC\u306B\u5909\u63DB\u3059\u308B\u95A2\u6570
           fn rgbChannelToPastel(r: f32, g: f32, b: f32) -> vec3f {
-              // R -> \u30D1\u30B9\u30C6\u30EB\u30D4\u30F3\u30AF (\u8D64+\u5C11\u3057\u9752)
               let pastelPink = vec3f(min(r * 1.0, 1.0), r * 0.6, r * 0.8);
-
-              // G -> \u30D1\u30B9\u30C6\u30EB\u30A4\u30A8\u30ED\u30FC (\u7DD1+\u8D64)
               let pastelYellow = vec3f(g * 0.8, min(g * 1.0, 1.0), g * 0.2);
-
-              // B -> \u30D1\u30B9\u30C6\u30EB\u30B7\u30A2\u30F3 (\u9752+\u7DD1)
               let pastelCyan = vec3f(b * 0.2, b * 0.8, min(b * 1.0, 1.0));
 
               return pastelPink + pastelYellow + pastelCyan;
           }
 
-          // \u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u91CD\u306A\u308A\u5177\u5408\u3092\u691C\u51FA\u3059\u308B\u95A2\u6570
           fn detectChannelOverlap(r: f32, g: f32, b: f32) -> f32 {
-            // \u5404\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5B58\u5728\u3092\u78BA\u8A8D (\u3057\u304D\u3044\u50240.15\u4EE5\u4E0A\u3067\u5B58\u5728\u3068\u307F\u306A\u3059)
             let threshold = 0.15;
             let hasR = select(0.0, 1.0, r > threshold);
             let hasG = select(0.0, 1.0, g > threshold);
             let hasB = select(0.0, 1.0, b > threshold);
 
-            // \u5B58\u5728\u3059\u308B\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u6570
             let channelCount = hasR + hasG + hasB;
 
-            // 3\u30C1\u30E3\u30F3\u30CD\u30EB\u3059\u3079\u3066\u304C\u5B58\u5728\u3059\u308B\u5834\u5408\u306F1.0\u3001\u305D\u3046\u3067\u306A\u3051\u308C\u30700.0
             return select(0.0, 1.0, channelCount >= 2.5);
           }
 
-          // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u306B\u30EA\u30F3\u30B0\u3092\u63CF\u753B\u3059\u308B\u95A2\u6570
           fn drawFocusRing(texCoord: vec2f, focusPoint: vec2f) -> f32 {
             let distance = length(texCoord - focusPoint);
 
-            // \u30EA\u30F3\u30B0\u306E\u5185\u5074\u3068\u5916\u5074\u306E\u534A\u5F84
             let innerRadius = 0.02;
             let outerRadius = 0.02;
 
-            // \u5186\u306E\u4E2D\u304C0.0\u3001\u5186\u306E\u5916\u304C1.0\u306B\u306A\u308B\u3088\u3046\u306A\u30B9\u30E0\u30FC\u30BA\u306A\u5024\u3092\u751F\u6210
             let ring = smoothstep(innerRadius - 0.005, innerRadius, distance) * (1.0 - smoothstep(outerRadius, outerRadius + 0.005, distance));
 
             return ring;
           }
 
           fn calculateDistanceBasedOffset(texCoord: vec2f, focusPoint: vec2f, baseOffset: vec2f, gradient: f32) -> vec2f {
-            // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u304B\u3089\u306E\u8DDD\u96E2\u3092\u8A08\u7B97\uFF080-1\u306E\u7BC4\u56F2\uFF09
             let distance = length(texCoord - focusPoint);
-
-            // \u52FE\u914D\u306B\u57FA\u3065\u3044\u3066\u8DDD\u96E2\u306E\u52B9\u679C\u3092\u8ABF\u6574
-            // gradient\u304C1.0\u306E\u5834\u5408\u306F\u7DDA\u5F62\u3001\u5927\u304D\u3044\u307B\u3069\u6025\u5CFB\u3001\u5C0F\u3055\u3044\u307B\u3069\u7DE9\u3084\u304B
             let adjustedDistance = pow(distance, gradient);
-
-            // \u8ABF\u6574\u3055\u308C\u305F\u8DDD\u96E2\u306B\u5FDC\u3058\u3066\u30AA\u30D5\u30BB\u30C3\u30C8\u3092\u8ABF\u6574
             return baseOffset * adjustedDistance;
           }
 
-          fn calculateZoomOffset(texCoord: vec2f, focusPoint: vec2f, strength: f32) -> vec2f {
+          fn calculateZoomOffset(texCoord: vec2f, focusPoint: vec2f, strengthPixels: f32, dims: vec2f) -> vec2f {
             let direction = texCoord - focusPoint;
-            let zoomStrength = strength / 100.0;
-            return direction * zoomStrength;
+            // \u65B9\u5411\u30D9\u30AF\u30C8\u30EB\u3092\u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u306E\u5F37\u5EA6\u3067\u30B9\u30B1\u30FC\u30EB
+            // X\u65B9\u5411\u3068Y\u65B9\u5411\u305D\u308C\u305E\u308C\u3092\u305D\u306E\u65B9\u5411\u306E\u6B21\u5143\u3067\u6B63\u898F\u5316
+            return vec2f(
+              direction.x * (strengthPixels / dims.x),
+              direction.y * (strengthPixels / dims.y)
+            );
           }
 
           @compute @workgroup_size(16, 16)
@@ -669,29 +651,25 @@ var chromaticAberration = definePlugin({
             let texCoord = vec2f(id.xy) / dims;
             let toInputTexCoord = dims / dimsWithGPUPadding;
 
-            // strength\u3092\u30D4\u30AF\u30BB\u30EB\u5358\u4F4D\u3068\u3057\u3066\u51E6\u7406\u3057\u3001\u30C6\u30AF\u30B9\u30C1\u30E3\u5EA7\u6A19\u306B\u5909\u63DB
             let basePixelOffset = getOffset(params.angle) * params.strength * params.dpiScale;
             let baseTexOffset = basePixelOffset / dims;
 
-            // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u4F4D\u7F6E\u3092\u53D6\u5F97\uFF08\u4F7F\u7528\u3057\u306A\u3044\u5834\u5408\u306F\u30C7\u30D5\u30A9\u30EB\u30C80.5, 0.5\uFF09
             let focusPoint = select(
               vec2f(0.5, 0.5),
               vec2f(params.focusPointX, params.focusPointY),
               params.useFocusPoint != 0u
             );
 
-            // \u305A\u308C\u30BF\u30A4\u30D7\u306B\u5FDC\u3058\u3066\u30AA\u30D5\u30BB\u30C3\u30C8\u3092\u8A08\u7B97
             var texOffset: vec2f;
-            if (params.shiftType == 0u) { // \u79FB\u52D5\u30E2\u30FC\u30C9
+            if (params.shiftType == 0u) {
               if (params.useFocusPoint != 0u) {
                 texOffset = calculateDistanceBasedOffset(texCoord, focusPoint, baseTexOffset, params.focusGradient);
               } else {
                 texOffset = baseTexOffset;
               }
-            } else { // \u30BA\u30FC\u30E0\u30E2\u30FC\u30C9
-              let zoomOffset = calculateZoomOffset(texCoord, focusPoint, params.strength);
+            } else {
+              let zoomOffset = calculateZoomOffset(texCoord, focusPoint, params.strength * params.dpiScale, dims);
 
-              // \u89D2\u5EA6\u306B\u57FA\u3065\u3044\u3066\u56DE\u8EE2\u3055\u305B\u308B
               let angleRad = params.angle * 3.14159 / 180.0;
               let rotCos = cos(angleRad);
               let rotSin = sin(angleRad);
@@ -702,7 +680,6 @@ var chromaticAberration = definePlugin({
 
               texOffset = rotatedOffset;
 
-              // \u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u4F7F\u7528\u6642\u306F\u8DDD\u96E2\u306B\u57FA\u3065\u3044\u3066\u52B9\u679C\u3092\u8ABF\u6574
               if (params.useFocusPoint != 0u) {
                 let distance = length(texCoord - focusPoint);
                 let adjustedDistance = pow(distance, params.focusGradient);
@@ -715,7 +692,7 @@ var chromaticAberration = definePlugin({
             var effectColor: vec4f;
             let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
 
-            if (params.colorMode == 0u) { // RGB mode
+            if (params.colorMode == 0u) {
               let redOffset = texCoord + texOffset;
               let blueOffset = texCoord - texOffset;
 
@@ -735,7 +712,7 @@ var chromaticAberration = definePlugin({
                 bs.b,
                 a
               );
-            } else if (params.colorMode == 1u) { // CMYK mode
+            } else if (params.colorMode == 1u) {
               let cyanOffset = texCoord + texOffset;
               let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
               let yellowOffset = texCoord - texOffset;
@@ -762,7 +739,7 @@ var chromaticAberration = definePlugin({
               let result = mixOklch(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
-            } else if (params.colorMode == 2u) { // Pastel mode
+            } else if (params.colorMode == 2u) {
               let ch1Offset = texCoord + texOffset;
               let ch2Offset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
               let ch3Offset = texCoord - texOffset;
@@ -772,7 +749,6 @@ var chromaticAberration = definePlugin({
               let ch3s = textureSampleLevel(inputTexture, textureSampler, ch3Offset * toInputTexCoord, 0.0);
               let origs = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
-              // pastel color
               let ch1 = vec3f(ch1s.r * 0.56, ch1s.g * 0.29, ch1s.b * 0.42);
               let ch2 = vec3f(ch2s.r * 0, ch2s.g * 0.28, ch2s.b * 0.45);
               let ch3 = vec3f(ch3s.r * 0.44, ch3s.g * 0.43, ch3s.b * 0.13);
@@ -790,7 +766,7 @@ var chromaticAberration = definePlugin({
               let result = mixOklch(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
-            } else if (params.colorMode == 3u) { // Red & Cyan mode
+            } else if (params.colorMode == 3u) {
               let redOffset = texCoord + texOffset;
               let cyanOffset = texCoord - texOffset;
 
@@ -812,25 +788,19 @@ var chromaticAberration = definePlugin({
               );
             }
 
-            // \u4E0D\u900F\u660E\u5EA6\u306B\u57FA\u3065\u3044\u3066\u30A8\u30D5\u30A7\u30AF\u30C8\u306E\u5F37\u3055\u3092\u8ABF\u6574
-            // \u4E0D\u900F\u660E\u5EA6\u304C0\u306E\u5834\u5408\u306F\u5143\u306E\u753B\u50CF\u3092\u305D\u306E\u307E\u307E\u8868\u793A\u3057\u30011\u306E\u5834\u5408\u306F\u30A8\u30D5\u30A7\u30AF\u30C8\u3092\u5B8C\u5168\u306B\u9069\u7528
             var finalColor: vec4f;
 
             if (opacityFactor <= 0.0) {
-              // \u4E0D\u900F\u660E\u5EA6\u304C0\u4EE5\u4E0B\u306E\u5834\u5408\u306F\u5143\u306E\u753B\u50CF\u3092\u305D\u306E\u307E\u307E\u8868\u793A
               finalColor = originalColor;
             } else {
-              // \u901A\u5E38\u306E\u30D6\u30EC\u30F3\u30C9\u51E6\u7406
               let blendedRgb = mixOklch(originalColor.rgb, effectColor.rgb, opacityFactor);
 
-              // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8ABF\u6574\uFF08\u5143\u306E\u900F\u660E\u5EA6\u3092\u7DAD\u6301\uFF09
               let alphaDifference = effectColor.a - originalColor.a;
               let adjustedAlpha = originalColor.a + alphaDifference * opacityFactor;
 
               finalColor = vec4f(blendedRgb, adjustedAlpha);
             }
 
-            // \u30D7\u30EC\u30D3\u30E5\u30FC\u6642\u306B\u30D5\u30A9\u30FC\u30AB\u30B9\u30DD\u30A4\u30F3\u30C8\u3092\u8868\u793A
             if (params.useFocusPoint != 0u && params.isInPreview != 0u) {
               let focusPoint = vec2f(params.focusPointX, params.focusPointY);
               let ringIntensity = drawFocusRing(texCoord, focusPoint);
@@ -843,9 +813,7 @@ var chromaticAberration = definePlugin({
             textureStore(resultTexture, id.xy, finalColor);
           }
 
-          // Drop-in replacement for mix() that works with vec3f rgb colors
           fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32> {
-            // RGB -> Linear RGB
             let linearColor1 = vec3<f32>(
               select(color1.r / 12.92, pow((color1.r + 0.055) / 1.055, 2.4), color1.r <= 0.04045),
               select(color1.g / 12.92, pow((color1.g + 0.055) / 1.055, 2.4), color1.g <= 0.04045),
@@ -858,7 +826,6 @@ var chromaticAberration = definePlugin({
               select(color2.b / 12.92, pow((color2.b + 0.055) / 1.055, 2.4), color2.b <= 0.04045),
             );
 
-            // Linear RGB -> LMS
             let lms1 = mat3x3<f32>(
               0.4122214708, 0.5363325363, 0.0514459929,
               0.2119034982, 0.6806995451, 0.1073969566,
@@ -871,7 +838,6 @@ var chromaticAberration = definePlugin({
               0.0883024619, 0.2817188376, 0.6299787005
             ) * linearColor2;
 
-            // LMS -> Oklab
             let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
             let lms2_pow = vec3<f32>(pow(lms2.x, 1.0/3.0), pow(lms2.y, 1.0/3.0), pow(lms2.z, 1.0/3.0));
 
@@ -884,7 +850,6 @@ var chromaticAberration = definePlugin({
             let oklab1 = oklabMatrix * lms1_pow;
             let oklab2 = oklabMatrix * lms2_pow;
 
-            // Oklab -> OKLCH
             let L1 = oklab1.x;
             let L2 = oklab2.x;
             let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
@@ -892,7 +857,6 @@ var chromaticAberration = definePlugin({
             let H1 = atan2(oklab1.z, oklab1.y);
             let H2 = atan2(oklab2.z, oklab2.y);
 
-            // \u8272\u76F8\u306E\u88DC\u9593\uFF08\u6700\u77ED\u7D4C\u8DEF\uFF09
             let hDiff = H2 - H1;
             let hDiffAdjusted = select(
               hDiff,
@@ -909,11 +873,9 @@ var chromaticAberration = definePlugin({
             let C = mix(C1, C2, t);
             let H = H1 + t * hDiffFinal;
 
-            // OKLCH -> Oklab
             let a = C * cos(H);
             let b = C * sin(H);
 
-            // Oklab -> LMS
             let oklabInverseMatrix = mat3x3<f32>(
               1.0, 0.3963377774, 0.2158037573,
               1.0, -0.1055613458, -0.0638541728,
@@ -927,7 +889,6 @@ var chromaticAberration = definePlugin({
               pow(lms_pow.z, 3.0)
             );
 
-            // LMS -> Linear RGB
             let lmsToRgbMatrix = mat3x3<f32>(
               4.0767416621, -3.3077115913, 0.2309699292,
               -1.2684380046, 2.6097574011, -0.3413193965,
@@ -936,7 +897,6 @@ var chromaticAberration = definePlugin({
 
             let linearRgb = lmsToRgbMatrix * lms;
 
-            // Linear RGB -> RGB
             let rgbResult = vec3<f32>(
               select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
               select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
@@ -2541,7 +2501,8 @@ var t4 = createTranslator({
     colorMode: "Color Mode",
     monochrome: "Monochrome",
     color: "Color",
-    strength: "Strength"
+    strength: "Strength",
+    patternScale: "Pattern Scale"
   },
   ja: {
     title: "\u30C7\u30A3\u30B6\u30EA\u30F3\u30B0 V1",
@@ -2553,7 +2514,8 @@ var t4 = createTranslator({
     colorMode: "\u30AB\u30E9\u30FC\u30E2\u30FC\u30C9",
     monochrome: "\u30E2\u30CE\u30AF\u30ED",
     color: "\u30AB\u30E9\u30FC",
-    strength: "\u5F37\u5EA6"
+    strength: "\u5F37\u5EA6",
+    patternScale: "\u30D1\u30BF\u30FC\u30F3\u30B9\u30B1\u30FC\u30EB"
   }
 });
 var dithering = definePlugin({
@@ -2573,7 +2535,7 @@ var dithering = definePlugin({
       },
       threshold: {
         type: "real",
-        default: 0.5
+        default: 50
       },
       colorMode: {
         type: "string",
@@ -2583,6 +2545,10 @@ var dithering = definePlugin({
       strength: {
         type: "real",
         default: 100
+      },
+      patternScale: {
+        type: "real",
+        default: 1
       }
     },
     onEditParameters: (params) => {
@@ -2596,7 +2562,8 @@ var dithering = definePlugin({
         threshold: params.threshold,
         strength: params.strength,
         patternType: params.patternType,
-        colorMode: params.colorMode
+        colorMode: params.colorMode,
+        patternScale: params.patternScale
       };
     },
     onInterpolate: (paramsA, paramsB, t18) => {
@@ -2604,7 +2571,8 @@ var dithering = definePlugin({
         threshold: lerp(paramsA.threshold, paramsB.threshold, t18),
         strength: lerp(paramsA.strength, paramsB.strength, t18),
         patternType: t18 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        colorMode: t18 < 0.5 ? paramsA.colorMode : paramsB.colorMode
+        colorMode: t18 < 0.5 ? paramsA.colorMode : paramsB.colorMode,
+        patternScale: lerp(paramsA.patternScale, paramsB.patternScale, t18)
       };
     },
     renderUI: (params) => {
@@ -2623,6 +2591,13 @@ var dithering = definePlugin({
             { value: "bayer4x4", label: "4x4 Bayer" },
             { value: "bayer8x8", label: "8x8 Bayer" }
           ] })
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t4("patternScale") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "patternScale", dataType: "float", min: 0.25, max: 4, value: params.patternScale }),
+            ui.numberInput({ key: "patternScale", dataType: "float", min: 0.25, max: 4, step: 0.05, value: params.patternScale })
+          ])
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t4("threshold") }),
@@ -2648,6 +2623,362 @@ var dithering = definePlugin({
           }
         },
         (device) => {
+          const ditherPatterns = {
+            bayer2x2: {
+              data: new Uint8Array([
+                0,
+                0,
+                0,
+                255,
+                128,
+                128,
+                128,
+                255,
+                192,
+                192,
+                192,
+                255,
+                64,
+                64,
+                64,
+                255
+              ]),
+              width: 2,
+              height: 2
+            },
+            bayer4x4: {
+              data: new Uint8Array([
+                0,
+                0,
+                0,
+                255,
+                128,
+                128,
+                128,
+                255,
+                32,
+                32,
+                32,
+                255,
+                160,
+                160,
+                160,
+                255,
+                192,
+                192,
+                192,
+                255,
+                64,
+                64,
+                64,
+                255,
+                224,
+                224,
+                224,
+                255,
+                96,
+                96,
+                96,
+                255,
+                48,
+                48,
+                48,
+                255,
+                176,
+                176,
+                176,
+                255,
+                16,
+                16,
+                16,
+                255,
+                144,
+                144,
+                144,
+                255,
+                240,
+                240,
+                240,
+                255,
+                112,
+                112,
+                112,
+                255,
+                208,
+                208,
+                208,
+                255,
+                80,
+                80,
+                80,
+                255
+              ]),
+              width: 4,
+              height: 4
+            },
+            bayer8x8: {
+              data: new Uint8Array([
+                0,
+                0,
+                0,
+                255,
+                128,
+                128,
+                128,
+                255,
+                32,
+                32,
+                32,
+                255,
+                160,
+                160,
+                160,
+                255,
+                8,
+                8,
+                8,
+                255,
+                136,
+                136,
+                136,
+                255,
+                40,
+                40,
+                40,
+                255,
+                168,
+                168,
+                168,
+                255,
+                192,
+                192,
+                192,
+                255,
+                64,
+                64,
+                64,
+                255,
+                224,
+                224,
+                224,
+                255,
+                96,
+                96,
+                96,
+                255,
+                200,
+                200,
+                200,
+                255,
+                72,
+                72,
+                72,
+                255,
+                232,
+                232,
+                232,
+                255,
+                104,
+                104,
+                104,
+                255,
+                48,
+                48,
+                48,
+                255,
+                176,
+                176,
+                176,
+                255,
+                16,
+                16,
+                16,
+                255,
+                144,
+                144,
+                144,
+                255,
+                56,
+                56,
+                56,
+                255,
+                184,
+                184,
+                184,
+                255,
+                24,
+                24,
+                24,
+                255,
+                152,
+                152,
+                152,
+                255,
+                240,
+                240,
+                240,
+                255,
+                112,
+                112,
+                112,
+                255,
+                208,
+                208,
+                208,
+                255,
+                80,
+                80,
+                80,
+                255,
+                248,
+                248,
+                248,
+                255,
+                120,
+                120,
+                120,
+                255,
+                216,
+                216,
+                216,
+                255,
+                88,
+                88,
+                88,
+                255,
+                12,
+                12,
+                12,
+                255,
+                140,
+                140,
+                140,
+                255,
+                44,
+                44,
+                44,
+                255,
+                172,
+                172,
+                172,
+                255,
+                4,
+                4,
+                4,
+                255,
+                132,
+                132,
+                132,
+                255,
+                36,
+                36,
+                36,
+                255,
+                164,
+                164,
+                164,
+                255,
+                204,
+                204,
+                204,
+                255,
+                76,
+                76,
+                76,
+                255,
+                236,
+                236,
+                236,
+                255,
+                108,
+                108,
+                108,
+                255,
+                196,
+                196,
+                196,
+                255,
+                68,
+                68,
+                68,
+                255,
+                228,
+                228,
+                228,
+                255,
+                100,
+                100,
+                100,
+                255,
+                60,
+                60,
+                60,
+                255,
+                188,
+                188,
+                188,
+                255,
+                28,
+                28,
+                28,
+                255,
+                156,
+                156,
+                156,
+                255,
+                52,
+                52,
+                52,
+                255,
+                180,
+                180,
+                180,
+                255,
+                20,
+                20,
+                20,
+                255,
+                148,
+                148,
+                148,
+                255,
+                252,
+                252,
+                252,
+                255,
+                124,
+                124,
+                124,
+                255,
+                220,
+                220,
+                220,
+                255,
+                92,
+                92,
+                92,
+                255,
+                244,
+                244,
+                244,
+                255,
+                116,
+                116,
+                116,
+                255,
+                212,
+                212,
+                212,
+                255,
+                84,
+                84,
+                84,
+                255
+              ]),
+              width: 8,
+              height: 8
+            }
+          };
           const code = `
             struct Params {
               outputSize: vec2f,
@@ -2656,67 +2987,94 @@ var dithering = definePlugin({
               strength: f32,
               patternType: u32,  // 0: bayer2x2, 1: bayer4x4, 2: bayer8x8
               colorMode: u32,    // 0: monochrome, 1: color
+              patternScale: f32,
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
             @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(2) var inputTextureSampler: sampler;
             @group(0) @binding(3) var<uniform> params: Params;
-
-            // Bayer matrices for ordered dithering
-            const bayer2x2: array<f32, 4> = array<f32, 4>(
-              0.0, 0.5,
-              0.75, 0.25
-            );
-
-            const bayer4x4: array<f32, 16> = array<f32, 16>(
-              0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
-              12.0/16.0, 4.0/16.0, 14.0/16.0, 6.0/16.0,
-              3.0/16.0, 11.0/16.0, 1.0/16.0, 9.0/16.0,
-              15.0/16.0, 7.0/16.0, 13.0/16.0, 5.0/16.0
-            );
-
-            const bayer8x8: array<f32, 64> = array<f32, 64>(
-              0.0/64.0, 32.0/64.0, 8.0/64.0, 40.0/64.0, 2.0/64.0, 34.0/64.0, 10.0/64.0, 42.0/64.0,
-              48.0/64.0, 16.0/64.0, 56.0/64.0, 24.0/64.0, 50.0/64.0, 18.0/64.0, 58.0/64.0, 26.0/64.0,
-              12.0/64.0, 44.0/64.0, 4.0/64.0, 36.0/64.0, 14.0/64.0, 46.0/64.0, 6.0/64.0, 38.0/64.0,
-              60.0/64.0, 28.0/64.0, 52.0/64.0, 20.0/64.0, 62.0/64.0, 30.0/64.0, 54.0/64.0, 22.0/64.0,
-              3.0/64.0, 35.0/64.0, 11.0/64.0, 43.0/64.0, 1.0/64.0, 33.0/64.0, 9.0/64.0, 41.0/64.0,
-              51.0/64.0, 19.0/64.0, 59.0/64.0, 27.0/64.0, 49.0/64.0, 17.0/64.0, 57.0/64.0, 25.0/64.0,
-              15.0/64.0, 47.0/64.0, 7.0/64.0, 39.0/64.0, 13.0/64.0, 45.0/64.0, 5.0/64.0, 37.0/64.0,
-              63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0, 21.0/64.0
-            );
-
-            // Get Bayer matrix value based on pattern type and coordinates
-            fn getBayerValue(x: u32, y: u32, patternType: u32) -> f32 {
-              if (patternType == 0u) {
-                // 2x2 Bayer matrix
-                return bayer2x2[(y % 2u) * 2u + (x % 2u)];
-              } else if (patternType == 1u) {
-                // 4x4 Bayer matrix
-                return bayer4x4[(y % 4u) * 4u + (x % 4u)];
-              } else {
-                // 8x8 Bayer matrix
-                return bayer8x8[(y % 8u) * 8u + (x % 8u)];
-              }
-            }
+            @group(0) @binding(4) var ditherPatternTexture: texture_2d<f32>;
+            @group(0) @binding(5) var patternTextureSampler: sampler;
 
             // Convert RGB to grayscale
             fn rgbToGrayscale(color: vec3f) -> f32 {
               return dot(color, vec3f(0.299, 0.587, 0.114));
             }
 
+            // Apply Gaussian-like blur to the pixel at given coordinates
+            // Handles straight (non-premultiplied) alpha correctly
+            fn applyBlur(tex: texture_2d<f32>, samp: sampler, coords: vec2f, blurSize: f32, dims: vec2f) -> vec4f {
+              // When blur amount is 0, just return the original color
+              if (blurSize <= 0.0) {
+                return textureSampleLevel(tex, samp, coords, 0.0);
+              }
+
+              let step = 1.0 / dims;
+              let offset = step * blurSize;
+
+              // 3x3 blur kernel with weighted samples
+              let c00 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, -offset.y), 0.0);
+              let c10 = textureSampleLevel(tex, samp, coords + vec2f(0.0, -offset.y), 0.0);
+              let c20 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, -offset.y), 0.0);
+
+              let c01 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, 0.0), 0.0);
+              let c11 = textureSampleLevel(tex, samp, coords, 0.0);
+              let c21 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, 0.0), 0.0);
+
+              let c02 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, offset.y), 0.0);
+              let c12 = textureSampleLevel(tex, samp, coords + vec2f(0.0, offset.y), 0.0);
+              let c22 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, offset.y), 0.0);
+
+              // First handle alpha channel separately with weighted sum
+              let alphaSum = c00.a * 0.0625 + c10.a * 0.125 + c20.a * 0.0625 +
+                             c01.a * 0.125  + c11.a * 0.25  + c21.a * 0.125 +
+                             c02.a * 0.0625 + c12.a * 0.125 + c22.a * 0.0625;
+
+              // Premultiply alpha before summing
+              let pc00 = vec4f(c00.rgb * c00.a, c00.a) * 0.0625;
+              let pc10 = vec4f(c10.rgb * c10.a, c10.a) * 0.125;
+              let pc20 = vec4f(c20.rgb * c20.a, c20.a) * 0.0625;
+
+              let pc01 = vec4f(c01.rgb * c01.a, c01.a) * 0.125;
+              let pc11 = vec4f(c11.rgb * c11.a, c11.a) * 0.25;
+              let pc21 = vec4f(c21.rgb * c21.a, c21.a) * 0.125;
+
+              let pc02 = vec4f(c02.rgb * c02.a, c02.a) * 0.0625;
+              let pc12 = vec4f(c12.rgb * c12.a, c12.a) * 0.125;
+              let pc22 = vec4f(c22.rgb * c22.a, c22.a) * 0.0625;
+
+              // Sum the premultiplied values
+              let premultResult = pc00 + pc10 + pc20 + pc01 + pc11 + pc21 + pc02 + pc12 + pc22;
+
+              // Convert back to straight alpha (unpremultiply)
+              var result = premultResult;
+              if (alphaSum > 0.0) {
+                result = vec4f(premultResult.rgb / alphaSum, alphaSum);
+              }
+
+              return result;
+            }
+
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
               let dims = vec2f(params.outputSize);
               let texCoord = vec2f(id.xy) / dims;
-              let toInputTexCoord = dims / adjustedDims;
+              let toInputTexCoord = dims / dimsWithGPUPadding;
 
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+              // Ignore 256 padded pixels
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // Get Bayer matrix value for the current pixel
-              let bayerValue = getBayerValue(id.x, id.y, params.patternType);
+              // Apply blur for anti-moir\xE9 if needed
+              let originalColor = applyBlur(inputTexture, inputTextureSampler, texCoord * toInputTexCoord, params.blurAmount, dimsWithGPUPadding);
+
+              let patternDims = vec2f(textureDimensions(ditherPatternTexture));
+              // Apply pattern scale to coordinates
+              let patternCoord = vec2f(id.xy) / (params.dpiScale * params.patternScale);
+
+              let patternTexCoord = vec2f(patternCoord.x % patternDims.x, patternCoord.y % patternDims.y) / patternDims;
+              let bayerValue = textureSampleLevel(ditherPatternTexture, patternTextureSampler, patternTexCoord, 0.0).r;
 
               // Apply threshold and create dithering effect
               var finalColor: vec4f;
@@ -2739,7 +3097,7 @@ var dithering = definePlugin({
 
               textureStore(resultTexture, id.xy, finalColor);
             }
-        `;
+          `;
           const shader = device.createShaderModule({
             label: "Dithering Effect Shader",
             code
@@ -2753,15 +3111,16 @@ var dithering = definePlugin({
               entryPoint: "computeMain"
             }
           });
-          return { device, pipeline, defs };
+          return { device, pipeline, defs, ditherPatterns };
         }
       );
     },
-    goLiveEffect: async ({ device, pipeline, defs }, params, imgData, { baseDpi, dpi }) => {
+    goLiveEffect: async ({ device, pipeline, defs, ditherPatterns }, params, imgData, { baseDpi, dpi }) => {
       console.log("Dithering Effect V1", params);
       const outputWidth = imgData.width, outputHeight = imgData.height;
       imgData = await addWebGPUAlignmentPadding(imgData);
       const inputWidth = imgData.width, inputHeight = imgData.height;
+      const selectedPattern = ditherPatterns[params.patternType];
       const texture = device.createTexture({
         label: "Input Texture",
         size: [inputWidth, inputHeight],
@@ -2774,10 +3133,25 @@ var dithering = definePlugin({
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
       });
-      const sampler = device.createSampler({
-        label: "Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear"
+      const patternTexture = device.createTexture({
+        label: "Dither Pattern Texture",
+        size: [selectedPattern.width, selectedPattern.height],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      });
+      const inputTextureSampler = device.createSampler({
+        label: "Input Texture Sampler",
+        magFilter: "nearest",
+        minFilter: "nearest",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge"
+      });
+      const patternTextureSampler = device.createSampler({
+        label: "Pattern Texture Sampler",
+        magFilter: "nearest",
+        minFilter: "nearest",
+        addressModeU: "repeat",
+        addressModeV: "repeat"
       });
       const uniformData = makeStructuredView4(defs.uniforms.params);
       const uniformBuffer = device.createBuffer({
@@ -2788,13 +3162,16 @@ var dithering = definePlugin({
       uniformData.set({
         outputSize: [outputWidth, outputHeight],
         dpiScale: dpi / baseDpi,
+        // DPIスケールを正しく設定
         threshold: params.threshold / 100,
         strength: params.strength / 100,
         patternType: (
           // prettier-ignore
           params.patternType === "bayer2x2" ? 0 : params.patternType === "bayer4x4" ? 1 : params.patternType === "bayer8x8" ? 2 : 0
         ),
-        colorMode: params.colorMode === "monochrome" ? 0 : 1
+        colorMode: params.colorMode === "monochrome" ? 0 : 1,
+        blurAmount: params.blurAmount,
+        patternScale: params.patternScale
       });
       const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
@@ -2810,11 +3187,19 @@ var dithering = definePlugin({
           },
           {
             binding: 2,
-            resource: sampler
+            resource: inputTextureSampler
           },
           {
             binding: 3,
             resource: { buffer: uniformBuffer }
+          },
+          {
+            binding: 4,
+            resource: patternTexture.createView()
+          },
+          {
+            binding: 5,
+            resource: patternTextureSampler
           }
         ]
       });
@@ -2824,6 +3209,12 @@ var dithering = definePlugin({
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
       });
       device.queue.writeBuffer(uniformBuffer, 0, uniformData.arrayBuffer);
+      device.queue.writeTexture(
+        { texture: patternTexture },
+        selectedPattern.data,
+        { bytesPerRow: selectedPattern.width * 4 },
+        [selectedPattern.width, selectedPattern.height]
+      );
       device.queue.writeTexture(
         { texture },
         imgData.data,
@@ -9970,7 +10361,8 @@ var brushStroke = definePlugin({
       return {
         ...params,
         brushSize: params.brushSize * scaleFactor,
-        strokeLength: params.strokeLength * scaleFactor
+        strokeLength: params.strokeLength * scaleFactor,
+        strokeDensity: params.strokeDensity * scaleFactor
       };
     },
     onInterpolate: (paramsA, paramsB, t18) => {
@@ -10170,7 +10562,7 @@ var brushStroke = definePlugin({
               let baseAngleRad = params.angle * 3.14159265359 / 180.0;
 
               // \u7269\u7406\u7684\u306A\u5BF8\u6CD5\u306B\u57FA\u3065\u304F\u8A08\u7B97\uFF08DPI-aware)
-              let physicalScale = 1.0 / params.dpiScale; // \u7269\u7406\u30B9\u30B1\u30FC\u30EB\u4FC2\u6570
+              let onTex1PxFactor = 1.0 / params.dpiScale; // \u7269\u7406\u30B9\u30B1\u30FC\u30EB\u4FC2\u6570
 
               // \u30B0\u30EA\u30C3\u30C9\u69CB\u9020
               let physicalBrushSize = params.brushSize; // \u3059\u3067\u306B\u7269\u7406\u5358\u4F4D
@@ -10231,13 +10623,13 @@ var brushStroke = definePlugin({
                     let closestPt = strokeStart + strokeDir * paramT * strokeLen;
 
                     // \u30D4\u30AF\u30BB\u30EB\u304B\u3089\u30B9\u30C8\u30ED\u30FC\u30AF\u3078\u306E\u8DDD\u96E2\uFF08\u7DDA\u5206\u304B\u3089\u306E\u8DDD\u96E2\uFF09- \u7269\u7406\u5358\u4F4D\u3067\u8A08\u7B97
-                    let distToLine = distance(texCoord, closestPt) * dims.x * physicalScale;
+                    let distToLine = distance(texCoord, closestPt) * dims.x * onTex1PxFactor;
 
                     // \u7DDA\u7AEF\u306E\u4E38\u3081\u51E6\u7406\u306B\u4F7F\u7528\u3059\u308B\u7AEF\u70B9\u304B\u3089\u306E\u8DDD\u96E2
                     let distToEnds = min(
                       distance(texCoord, strokeStart),
                       distance(texCoord, strokeEnd)
-                    ) * dims.x * physicalScale;
+                    ) * dims.x * onTex1PxFactor;
 
                     // \u7AEF\u3092\u4E38\u304F\u3059\u308B\u8DDD\u96E2\u5834
                     let brushWidth = physicalBrushSize * 0.4; // \u7269\u7406\u5358\u4F4D\u3067\u306E\u30D6\u30E9\u30B7\u5E45

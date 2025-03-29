@@ -26,6 +26,7 @@ import { selectiveColorCorrection } from "~ext/live-effects/selective-color-corr
 import { husky } from "~ext/live-effects/husky.ts";
 import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
 import { brushStroke } from "~ext/live-effects/blush-stroke.ts";
+import { comicTone } from "~ext/live-effects/comic-tone.ts";
 
 import { compressor } from "~ext/live-effects/wips/compressor.ts";
 import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
@@ -33,6 +34,7 @@ import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
 
 const plugins = [
+  comicTone,
   brushStroke,
   chromaticAberration,
   cosmicWaves,

@@ -149,9 +149,11 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   csl("**");
   csl("** GO LIVE!! EFFECT!!!");
   csl("**");
+    
+  suai::LiveEffect* effect = new suai::LiveEffect(message->effect);
+  std::string effectName  = effect->getName();
 
   AIArtHandle art     = message->art;
-  auto        artType = suai::art::getArtType(art);
 
   // It is must be 72, if it changed, illustrator will be crash
   int baseDpi = 72;
@@ -170,9 +172,9 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   );
   CHKERR();
 
-  AIDocumentSetup docSetup;
-  error = sAIDocument->GetDocumentSetup(&docSetup);
-  CHKERR();
+  std::string normalizeEffectId = std::regex_replace(
+      effectName, std::regex("^" + escapeStringRegexp(EFFECT_PREFIX)), ""
+  );
 
   AIRasterizeSettings settings = suai::createAIRasterSetting(
       {.type               = suai::RasterType::ARGB,
@@ -292,7 +294,6 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     print_AIArt(art, "art", "  ");
     print_AIRasterRecord(sourceRasterRecord, "rasterArt", "  ");
     print_AITile(&workTile, "workTile(after)");
-    print_AIDocumentSetup(docSetup, "", "  ");
 
     // check
     {
@@ -305,7 +306,12 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     ai::uint8*       pixelData   = static_cast<ai::uint8*>(workTile.data);
     uintptr_t        byteLength  = totalPixels * pixelStride;
 
-    json env({{"dpi", dpi}, {"baseDpi", baseDpi}, {"isInPreview", isInPreview}});
+    json env(
+        {{"dpi", dpi},
+         {"baseDpi", baseDpi},
+         {"isInPreview",
+          isInPreview && this->editingEffectId == (std::string)normalizeEffectId}}
+    );
 
     ai_deno::ImageDataPayload input = ai_deno::ImageDataPayload{
         .width       = sourceWidth,
@@ -624,14 +630,13 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
       lastPosition = &pos;
     }
 
-    isModalOpened = true;
+    isModalOpened         = true;
+    this->editingEffectId = normalizeEffectId;
     csl("Opening modal: %s", nodeTree.dump().c_str());
     ModalStatusCode dialogResult = modal->runModal(
         nodeTree, effectTitle, lastPosition, modalOnChangeCallback,
         modalOnFireEventCallback
     );
-
-    this->isInPreview = false;
 
     if (lastPosition != nullptr) {
       pref.windowPosition    = new AIPoint();
@@ -670,6 +675,9 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     error = kCantHappenErr;
     cse("Error: %s", ex.what());
   } catch (...) { error = kCantHappenErr; }
+
+  this->isInPreview     = false;
+  this->editingEffectId = std::nullopt;
 
   return error;
 }

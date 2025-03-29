@@ -41,8 +41,9 @@ class HelloWorldPlugin : public Plugin {
   AILiveEffectHandle fEffects[kMaxEffects];
   ASInt32            fNumEffects;
 
-  ai_deno::OpaqueAiMain aiDenoMain;
-  bool                  isInPreview;
+  ai_deno::OpaqueAiMain      aiDenoMain;
+  std::optional<std::string> editingEffectId;
+  bool                       isInPreview;
 
   ASErr Message(char* caller, char* selector, void* message);
 

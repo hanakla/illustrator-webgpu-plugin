@@ -231,15 +231,15 @@ export const chromaticAberration = definePlugin({
             dpiScale: f32,
             strength: f32,
             angle: f32,
-            colorMode: u32,  // 0: RGB, 1: CMYK, 2: Pastel, 3: Red & Cyan
+            colorMode: u32,
             opacity: f32,
-            blendMode: u32,  // 0: over, 1: under
-            useFocusPoint: u32,  // 0: false, 1: true
+            blendMode: u32,
+            useFocusPoint: u32,
             focusPointX: f32,
             focusPointY: f32,
             focusGradient: f32,
-            isInPreview: u32,  // 0: false, 1: true
-            shiftType: u32  // 0: move, 1: zoom
+            isInPreview: u32,
+            shiftType: u32
           }
 
           @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -256,7 +256,6 @@ export const chromaticAberration = definePlugin({
               return 1.0 - (1.0 - a) * (1.0 - b);
           }
 
-          // RGB から CMYK への変換関数
           fn rgbToCmyk(rgb: vec3f) -> vec4f {
               let r = rgb.r;
               let g = rgb.g;
@@ -264,7 +263,6 @@ export const chromaticAberration = definePlugin({
 
               let k = 1.0 - max(max(r, g), b);
 
-              // 黒が1.0（完全な黒）の場合、他のチャンネルは0に
               if (k == 1.0) {
                   return vec4f(0.0, 0.0, 0.0, 1.0);
               }
@@ -276,7 +274,6 @@ export const chromaticAberration = definePlugin({
               return vec4f(c, m, y, k);
           }
 
-          // CMYK から RGB への変換関数
           fn cmykToRgb(cmyk: vec4f) -> vec3f {
               let c = cmyk.x;
               let m = cmyk.y;
@@ -290,65 +287,50 @@ export const chromaticAberration = definePlugin({
               return vec3f(r, g, b);
           }
 
-          // RGB各チャンネルをパステルカラーに変換する関数
           fn rgbChannelToPastel(r: f32, g: f32, b: f32) -> vec3f {
-              // R -> パステルピンク (赤+少し青)
               let pastelPink = vec3f(min(r * 1.0, 1.0), r * 0.6, r * 0.8);
-
-              // G -> パステルイエロー (緑+赤)
               let pastelYellow = vec3f(g * 0.8, min(g * 1.0, 1.0), g * 0.2);
-
-              // B -> パステルシアン (青+緑)
               let pastelCyan = vec3f(b * 0.2, b * 0.8, min(b * 1.0, 1.0));
 
               return pastelPink + pastelYellow + pastelCyan;
           }
 
-          // チャンネルの重なり具合を検出する関数
           fn detectChannelOverlap(r: f32, g: f32, b: f32) -> f32 {
-            // 各チャンネルの存在を確認 (しきい値0.15以上で存在とみなす)
             let threshold = 0.15;
             let hasR = select(0.0, 1.0, r > threshold);
             let hasG = select(0.0, 1.0, g > threshold);
             let hasB = select(0.0, 1.0, b > threshold);
 
-            // 存在するチャンネルの数
             let channelCount = hasR + hasG + hasB;
 
-            // 3チャンネルすべてが存在する場合は1.0、そうでなければ0.0
             return select(0.0, 1.0, channelCount >= 2.5);
           }
 
-          // フォーカスポイントにリングを描画する関数
           fn drawFocusRing(texCoord: vec2f, focusPoint: vec2f) -> f32 {
             let distance = length(texCoord - focusPoint);
 
-            // リングの内側と外側の半径
             let innerRadius = 0.02;
             let outerRadius = 0.02;
 
-            // 円の中が0.0、円の外が1.0になるようなスムーズな値を生成
             let ring = smoothstep(innerRadius - 0.005, innerRadius, distance) * (1.0 - smoothstep(outerRadius, outerRadius + 0.005, distance));
 
             return ring;
           }
 
           fn calculateDistanceBasedOffset(texCoord: vec2f, focusPoint: vec2f, baseOffset: vec2f, gradient: f32) -> vec2f {
-            // フォーカスポイントからの距離を計算（0-1の範囲）
             let distance = length(texCoord - focusPoint);
-
-            // 勾配に基づいて距離の効果を調整
-            // gradientが1.0の場合は線形、大きいほど急峻、小さいほど緩やか
             let adjustedDistance = pow(distance, gradient);
-
-            // 調整された距離に応じてオフセットを調整
             return baseOffset * adjustedDistance;
           }
 
-          fn calculateZoomOffset(texCoord: vec2f, focusPoint: vec2f, strength: f32) -> vec2f {
+          fn calculateZoomOffset(texCoord: vec2f, focusPoint: vec2f, strengthPixels: f32, dims: vec2f) -> vec2f {
             let direction = texCoord - focusPoint;
-            let zoomStrength = strength / 100.0;
-            return direction * zoomStrength;
+            // 方向ベクトルをピクセル単位の強度でスケール
+            // X方向とY方向それぞれをその方向の次元で正規化
+            return vec2f(
+              direction.x * (strengthPixels / dims.x),
+              direction.y * (strengthPixels / dims.y)
+            );
           }
 
           @compute @workgroup_size(16, 16)
@@ -358,29 +340,25 @@ export const chromaticAberration = definePlugin({
             let texCoord = vec2f(id.xy) / dims;
             let toInputTexCoord = dims / dimsWithGPUPadding;
 
-            // strengthをピクセル単位として処理し、テクスチャ座標に変換
             let basePixelOffset = getOffset(params.angle) * params.strength * params.dpiScale;
             let baseTexOffset = basePixelOffset / dims;
 
-            // フォーカスポイント位置を取得（使用しない場合はデフォルト0.5, 0.5）
             let focusPoint = select(
               vec2f(0.5, 0.5),
               vec2f(params.focusPointX, params.focusPointY),
               params.useFocusPoint != 0u
             );
 
-            // ずれタイプに応じてオフセットを計算
             var texOffset: vec2f;
-            if (params.shiftType == 0u) { // 移動モード
+            if (params.shiftType == 0u) {
               if (params.useFocusPoint != 0u) {
                 texOffset = calculateDistanceBasedOffset(texCoord, focusPoint, baseTexOffset, params.focusGradient);
               } else {
                 texOffset = baseTexOffset;
               }
-            } else { // ズームモード
-              let zoomOffset = calculateZoomOffset(texCoord, focusPoint, params.strength);
+            } else {
+              let zoomOffset = calculateZoomOffset(texCoord, focusPoint, params.strength * params.dpiScale, dims);
 
-              // 角度に基づいて回転させる
               let angleRad = params.angle * 3.14159 / 180.0;
               let rotCos = cos(angleRad);
               let rotSin = sin(angleRad);
@@ -391,7 +369,6 @@ export const chromaticAberration = definePlugin({
 
               texOffset = rotatedOffset;
 
-              // フォーカスポイント使用時は距離に基づいて効果を調整
               if (params.useFocusPoint != 0u) {
                 let distance = length(texCoord - focusPoint);
                 let adjustedDistance = pow(distance, params.focusGradient);
@@ -404,7 +381,7 @@ export const chromaticAberration = definePlugin({
             var effectColor: vec4f;
             let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
 
-            if (params.colorMode == 0u) { // RGB mode
+            if (params.colorMode == 0u) {
               let redOffset = texCoord + texOffset;
               let blueOffset = texCoord - texOffset;
 
@@ -424,7 +401,7 @@ export const chromaticAberration = definePlugin({
                 bs.b,
                 a
               );
-            } else if (params.colorMode == 1u) { // CMYK mode
+            } else if (params.colorMode == 1u) {
               let cyanOffset = texCoord + texOffset;
               let magentaOffset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
               let yellowOffset = texCoord - texOffset;
@@ -451,7 +428,7 @@ export const chromaticAberration = definePlugin({
               let result = mixOklch(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
-            } else if (params.colorMode == 2u) { // Pastel mode
+            } else if (params.colorMode == 2u) {
               let ch1Offset = texCoord + texOffset;
               let ch2Offset = texCoord + vec2f(-texOffset.y, texOffset.x) * 0.866;
               let ch3Offset = texCoord - texOffset;
@@ -461,7 +438,6 @@ export const chromaticAberration = definePlugin({
               let ch3s = textureSampleLevel(inputTexture, textureSampler, ch3Offset * toInputTexCoord, 0.0);
               let origs = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
-              // pastel color
               let ch1 = vec3f(ch1s.r * 0.56, ch1s.g * 0.29, ch1s.b * 0.42);
               let ch2 = vec3f(ch2s.r * 0, ch2s.g * 0.28, ch2s.b * 0.45);
               let ch3 = vec3f(ch3s.r * 0.44, ch3s.g * 0.43, ch3s.b * 0.13);
@@ -479,7 +455,7 @@ export const chromaticAberration = definePlugin({
               let result = mixOklch(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
-            } else if (params.colorMode == 3u) { // Red & Cyan mode
+            } else if (params.colorMode == 3u) {
               let redOffset = texCoord + texOffset;
               let cyanOffset = texCoord - texOffset;
 
@@ -501,25 +477,19 @@ export const chromaticAberration = definePlugin({
               );
             }
 
-            // 不透明度に基づいてエフェクトの強さを調整
-            // 不透明度が0の場合は元の画像をそのまま表示し、1の場合はエフェクトを完全に適用
             var finalColor: vec4f;
 
             if (opacityFactor <= 0.0) {
-              // 不透明度が0以下の場合は元の画像をそのまま表示
               finalColor = originalColor;
             } else {
-              // 通常のブレンド処理
               let blendedRgb = mixOklch(originalColor.rgb, effectColor.rgb, opacityFactor);
 
-              // アルファ値の調整（元の透明度を維持）
               let alphaDifference = effectColor.a - originalColor.a;
               let adjustedAlpha = originalColor.a + alphaDifference * opacityFactor;
 
               finalColor = vec4f(blendedRgb, adjustedAlpha);
             }
 
-            // プレビュー時にフォーカスポイントを表示
             if (params.useFocusPoint != 0u && params.isInPreview != 0u) {
               let focusPoint = vec2f(params.focusPointX, params.focusPointY);
               let ringIntensity = drawFocusRing(texCoord, focusPoint);
@@ -532,9 +502,7 @@ export const chromaticAberration = definePlugin({
             textureStore(resultTexture, id.xy, finalColor);
           }
 
-          // Drop-in replacement for mix() that works with vec3f rgb colors
           fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32> {
-            // RGB -> Linear RGB
             let linearColor1 = vec3<f32>(
               select(color1.r / 12.92, pow((color1.r + 0.055) / 1.055, 2.4), color1.r <= 0.04045),
               select(color1.g / 12.92, pow((color1.g + 0.055) / 1.055, 2.4), color1.g <= 0.04045),
@@ -547,7 +515,6 @@ export const chromaticAberration = definePlugin({
               select(color2.b / 12.92, pow((color2.b + 0.055) / 1.055, 2.4), color2.b <= 0.04045),
             );
 
-            // Linear RGB -> LMS
             let lms1 = mat3x3<f32>(
               0.4122214708, 0.5363325363, 0.0514459929,
               0.2119034982, 0.6806995451, 0.1073969566,
@@ -560,7 +527,6 @@ export const chromaticAberration = definePlugin({
               0.0883024619, 0.2817188376, 0.6299787005
             ) * linearColor2;
 
-            // LMS -> Oklab
             let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
             let lms2_pow = vec3<f32>(pow(lms2.x, 1.0/3.0), pow(lms2.y, 1.0/3.0), pow(lms2.z, 1.0/3.0));
 
@@ -573,7 +539,6 @@ export const chromaticAberration = definePlugin({
             let oklab1 = oklabMatrix * lms1_pow;
             let oklab2 = oklabMatrix * lms2_pow;
 
-            // Oklab -> OKLCH
             let L1 = oklab1.x;
             let L2 = oklab2.x;
             let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
@@ -581,7 +546,6 @@ export const chromaticAberration = definePlugin({
             let H1 = atan2(oklab1.z, oklab1.y);
             let H2 = atan2(oklab2.z, oklab2.y);
 
-            // 色相の補間（最短経路）
             let hDiff = H2 - H1;
             let hDiffAdjusted = select(
               hDiff,
@@ -598,11 +562,9 @@ export const chromaticAberration = definePlugin({
             let C = mix(C1, C2, t);
             let H = H1 + t * hDiffFinal;
 
-            // OKLCH -> Oklab
             let a = C * cos(H);
             let b = C * sin(H);
 
-            // Oklab -> LMS
             let oklabInverseMatrix = mat3x3<f32>(
               1.0, 0.3963377774, 0.2158037573,
               1.0, -0.1055613458, -0.0638541728,
@@ -616,7 +578,6 @@ export const chromaticAberration = definePlugin({
               pow(lms_pow.z, 3.0)
             );
 
-            // LMS -> Linear RGB
             let lmsToRgbMatrix = mat3x3<f32>(
               4.0767416621, -3.3077115913, 0.2309699292,
               -1.2684380046, 2.6097574011, -0.3413193965,
@@ -625,7 +586,6 @@ export const chromaticAberration = definePlugin({
 
             let linearRgb = lmsToRgbMatrix * lms;
 
-            // Linear RGB -> RGB
             let rgbResult = vec3<f32>(
               select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
               select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
@@ -672,7 +632,6 @@ export const chromaticAberration = definePlugin({
     },
     goLiveEffect: async ({ device, pipeline, defs }, params, imgData, env) => {
       console.log("Chromatic Aberration V1", params);
-      // const size = Math.max(imgData.width, imgData.height);
 
       const dpiScale = env.dpi / env.baseDpi;
 
@@ -722,7 +681,6 @@ export const chromaticAberration = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      // カラーモードのマッピング: rgb=0, cmyk=1, pastel=2
       // prettier-ignore
       const colorModeValue = params.colorMode === "rgb" ? 0 :
         params.colorMode === "cmyk" ? 1 :

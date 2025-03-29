@@ -26,6 +26,7 @@ const t = createTranslator({
     monochrome: "Monochrome",
     color: "Color",
     strength: "Strength",
+    patternScale: "Pattern Scale",
   },
   ja: {
     title: "ディザリング V1",
@@ -38,6 +39,7 @@ const t = createTranslator({
     monochrome: "モノクロ",
     color: "カラー",
     strength: "強度",
+    patternScale: "パターンスケール",
   },
 });
 
@@ -58,7 +60,7 @@ export const dithering = definePlugin({
       },
       threshold: {
         type: "real",
-        default: 0.5,
+        default: 50,
       },
       colorMode: {
         type: "string",
@@ -69,6 +71,10 @@ export const dithering = definePlugin({
         type: "real",
         default: 100,
       },
+      patternScale: {
+        type: "real",
+        default: 1.0,
+      },
     },
     onEditParameters: (params) => {
       // Normalize parameters if needed
@@ -78,12 +84,14 @@ export const dithering = definePlugin({
       return params;
     },
     onScaleParams(params, scaleFactor) {
-      // Scale parameters
+      // Scale parameters - but we keep patternType and other params as is
+      // to ensure consistent appearance across different scales
       return {
         threshold: params.threshold,
         strength: params.strength,
         patternType: params.patternType,
         colorMode: params.colorMode,
+        patternScale: params.patternScale,
       };
     },
     onInterpolate: (paramsA, paramsB, t) => {
@@ -93,6 +101,7 @@ export const dithering = definePlugin({
         strength: lerp(paramsA.strength, paramsB.strength, t),
         patternType: t < 0.5 ? paramsA.patternType : paramsB.patternType,
         colorMode: t < 0.5 ? paramsA.colorMode : paramsB.colorMode,
+        patternScale: lerp(paramsA.patternScale, paramsB.patternScale, t),
       };
     },
 
@@ -113,6 +122,13 @@ export const dithering = definePlugin({
             { value: 'bayer4x4', label: '4x4 Bayer' },
             { value: 'bayer8x8', label: '8x8 Bayer' },
           ]}),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({text: t("patternScale")}),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "patternScale", dataType: 'float', min: 0.25, max: 4, value: params.patternScale }),
+            ui.numberInput({ key: "patternScale", dataType: 'float', min: 0.25, max: 4, step: 0.05, value: params.patternScale }),
+          ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({text: t("threshold")}),
@@ -138,6 +154,55 @@ export const dithering = definePlugin({
           },
         },
         (device) => {
+          // ディザリングパターン用のデータを定義
+          const ditherPatterns = {
+            bayer2x2: {
+              data: new Uint8Array([
+                0, 0, 0, 255, 128, 128, 128, 255, 192, 192, 192, 255, 64, 64,
+                64, 255,
+              ]),
+              width: 2,
+              height: 2,
+            },
+            bayer4x4: {
+              data: new Uint8Array([
+                0, 0, 0, 255, 128, 128, 128, 255, 32, 32, 32, 255, 160, 160,
+                160, 255, 192, 192, 192, 255, 64, 64, 64, 255, 224, 224, 224,
+                255, 96, 96, 96, 255, 48, 48, 48, 255, 176, 176, 176, 255, 16,
+                16, 16, 255, 144, 144, 144, 255, 240, 240, 240, 255, 112, 112,
+                112, 255, 208, 208, 208, 255, 80, 80, 80, 255,
+              ]),
+              width: 4,
+              height: 4,
+            },
+            bayer8x8: {
+              data: new Uint8Array([
+                0, 0, 0, 255, 128, 128, 128, 255, 32, 32, 32, 255, 160, 160,
+                160, 255, 8, 8, 8, 255, 136, 136, 136, 255, 40, 40, 40, 255,
+                168, 168, 168, 255, 192, 192, 192, 255, 64, 64, 64, 255, 224,
+                224, 224, 255, 96, 96, 96, 255, 200, 200, 200, 255, 72, 72, 72,
+                255, 232, 232, 232, 255, 104, 104, 104, 255, 48, 48, 48, 255,
+                176, 176, 176, 255, 16, 16, 16, 255, 144, 144, 144, 255, 56, 56,
+                56, 255, 184, 184, 184, 255, 24, 24, 24, 255, 152, 152, 152,
+                255, 240, 240, 240, 255, 112, 112, 112, 255, 208, 208, 208, 255,
+                80, 80, 80, 255, 248, 248, 248, 255, 120, 120, 120, 255, 216,
+                216, 216, 255, 88, 88, 88, 255, 12, 12, 12, 255, 140, 140, 140,
+                255, 44, 44, 44, 255, 172, 172, 172, 255, 4, 4, 4, 255, 132,
+                132, 132, 255, 36, 36, 36, 255, 164, 164, 164, 255, 204, 204,
+                204, 255, 76, 76, 76, 255, 236, 236, 236, 255, 108, 108, 108,
+                255, 196, 196, 196, 255, 68, 68, 68, 255, 228, 228, 228, 255,
+                100, 100, 100, 255, 60, 60, 60, 255, 188, 188, 188, 255, 28, 28,
+                28, 255, 156, 156, 156, 255, 52, 52, 52, 255, 180, 180, 180,
+                255, 20, 20, 20, 255, 148, 148, 148, 255, 252, 252, 252, 255,
+                124, 124, 124, 255, 220, 220, 220, 255, 92, 92, 92, 255, 244,
+                244, 244, 255, 116, 116, 116, 255, 212, 212, 212, 255, 84, 84,
+                84, 255,
+              ]),
+              width: 8,
+              height: 8,
+            },
+          };
+
           const code = `
             struct Params {
               outputSize: vec2f,
@@ -146,67 +211,94 @@ export const dithering = definePlugin({
               strength: f32,
               patternType: u32,  // 0: bayer2x2, 1: bayer4x4, 2: bayer8x8
               colorMode: u32,    // 0: monochrome, 1: color
+              patternScale: f32,
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
             @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-            @group(0) @binding(2) var textureSampler: sampler;
+            @group(0) @binding(2) var inputTextureSampler: sampler;
             @group(0) @binding(3) var<uniform> params: Params;
-
-            // Bayer matrices for ordered dithering
-            const bayer2x2: array<f32, 4> = array<f32, 4>(
-              0.0, 0.5,
-              0.75, 0.25
-            );
-
-            const bayer4x4: array<f32, 16> = array<f32, 16>(
-              0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
-              12.0/16.0, 4.0/16.0, 14.0/16.0, 6.0/16.0,
-              3.0/16.0, 11.0/16.0, 1.0/16.0, 9.0/16.0,
-              15.0/16.0, 7.0/16.0, 13.0/16.0, 5.0/16.0
-            );
-
-            const bayer8x8: array<f32, 64> = array<f32, 64>(
-              0.0/64.0, 32.0/64.0, 8.0/64.0, 40.0/64.0, 2.0/64.0, 34.0/64.0, 10.0/64.0, 42.0/64.0,
-              48.0/64.0, 16.0/64.0, 56.0/64.0, 24.0/64.0, 50.0/64.0, 18.0/64.0, 58.0/64.0, 26.0/64.0,
-              12.0/64.0, 44.0/64.0, 4.0/64.0, 36.0/64.0, 14.0/64.0, 46.0/64.0, 6.0/64.0, 38.0/64.0,
-              60.0/64.0, 28.0/64.0, 52.0/64.0, 20.0/64.0, 62.0/64.0, 30.0/64.0, 54.0/64.0, 22.0/64.0,
-              3.0/64.0, 35.0/64.0, 11.0/64.0, 43.0/64.0, 1.0/64.0, 33.0/64.0, 9.0/64.0, 41.0/64.0,
-              51.0/64.0, 19.0/64.0, 59.0/64.0, 27.0/64.0, 49.0/64.0, 17.0/64.0, 57.0/64.0, 25.0/64.0,
-              15.0/64.0, 47.0/64.0, 7.0/64.0, 39.0/64.0, 13.0/64.0, 45.0/64.0, 5.0/64.0, 37.0/64.0,
-              63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0, 21.0/64.0
-            );
-
-            // Get Bayer matrix value based on pattern type and coordinates
-            fn getBayerValue(x: u32, y: u32, patternType: u32) -> f32 {
-              if (patternType == 0u) {
-                // 2x2 Bayer matrix
-                return bayer2x2[(y % 2u) * 2u + (x % 2u)];
-              } else if (patternType == 1u) {
-                // 4x4 Bayer matrix
-                return bayer4x4[(y % 4u) * 4u + (x % 4u)];
-              } else {
-                // 8x8 Bayer matrix
-                return bayer8x8[(y % 8u) * 8u + (x % 8u)];
-              }
-            }
+            @group(0) @binding(4) var ditherPatternTexture: texture_2d<f32>;
+            @group(0) @binding(5) var patternTextureSampler: sampler;
 
             // Convert RGB to grayscale
             fn rgbToGrayscale(color: vec3f) -> f32 {
               return dot(color, vec3f(0.299, 0.587, 0.114));
             }
 
+            // Apply Gaussian-like blur to the pixel at given coordinates
+            // Handles straight (non-premultiplied) alpha correctly
+            fn applyBlur(tex: texture_2d<f32>, samp: sampler, coords: vec2f, blurSize: f32, dims: vec2f) -> vec4f {
+              // When blur amount is 0, just return the original color
+              if (blurSize <= 0.0) {
+                return textureSampleLevel(tex, samp, coords, 0.0);
+              }
+
+              let step = 1.0 / dims;
+              let offset = step * blurSize;
+
+              // 3x3 blur kernel with weighted samples
+              let c00 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, -offset.y), 0.0);
+              let c10 = textureSampleLevel(tex, samp, coords + vec2f(0.0, -offset.y), 0.0);
+              let c20 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, -offset.y), 0.0);
+
+              let c01 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, 0.0), 0.0);
+              let c11 = textureSampleLevel(tex, samp, coords, 0.0);
+              let c21 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, 0.0), 0.0);
+
+              let c02 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, offset.y), 0.0);
+              let c12 = textureSampleLevel(tex, samp, coords + vec2f(0.0, offset.y), 0.0);
+              let c22 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, offset.y), 0.0);
+
+              // First handle alpha channel separately with weighted sum
+              let alphaSum = c00.a * 0.0625 + c10.a * 0.125 + c20.a * 0.0625 +
+                             c01.a * 0.125  + c11.a * 0.25  + c21.a * 0.125 +
+                             c02.a * 0.0625 + c12.a * 0.125 + c22.a * 0.0625;
+
+              // Premultiply alpha before summing
+              let pc00 = vec4f(c00.rgb * c00.a, c00.a) * 0.0625;
+              let pc10 = vec4f(c10.rgb * c10.a, c10.a) * 0.125;
+              let pc20 = vec4f(c20.rgb * c20.a, c20.a) * 0.0625;
+
+              let pc01 = vec4f(c01.rgb * c01.a, c01.a) * 0.125;
+              let pc11 = vec4f(c11.rgb * c11.a, c11.a) * 0.25;
+              let pc21 = vec4f(c21.rgb * c21.a, c21.a) * 0.125;
+
+              let pc02 = vec4f(c02.rgb * c02.a, c02.a) * 0.0625;
+              let pc12 = vec4f(c12.rgb * c12.a, c12.a) * 0.125;
+              let pc22 = vec4f(c22.rgb * c22.a, c22.a) * 0.0625;
+
+              // Sum the premultiplied values
+              let premultResult = pc00 + pc10 + pc20 + pc01 + pc11 + pc21 + pc02 + pc12 + pc22;
+
+              // Convert back to straight alpha (unpremultiply)
+              var result = premultResult;
+              if (alphaSum > 0.0) {
+                result = vec4f(premultResult.rgb / alphaSum, alphaSum);
+              }
+
+              return result;
+            }
+
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let adjustedDims = vec2f(textureDimensions(inputTexture));
+              let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
               let dims = vec2f(params.outputSize);
               let texCoord = vec2f(id.xy) / dims;
-              let toInputTexCoord = dims / adjustedDims;
+              let toInputTexCoord = dims / dimsWithGPUPadding;
 
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord, 0.0);
+              // Ignore 256 padded pixels
+              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // Get Bayer matrix value for the current pixel
-              let bayerValue = getBayerValue(id.x, id.y, params.patternType);
+              // Apply blur for anti-moiré if needed
+              let originalColor = applyBlur(inputTexture, inputTextureSampler, texCoord * toInputTexCoord, params.blurAmount, dimsWithGPUPadding);
+
+              let patternDims = vec2f(textureDimensions(ditherPatternTexture));
+              // Apply pattern scale to coordinates
+              let patternCoord = vec2f(id.xy) / (params.dpiScale * params.patternScale);
+
+              let patternTexCoord = vec2f(patternCoord.x % patternDims.x, patternCoord.y % patternDims.y) / patternDims;
+              let bayerValue = textureSampleLevel(ditherPatternTexture, patternTextureSampler, patternTexCoord, 0.0).r;
 
               // Apply threshold and create dithering effect
               var finalColor: vec4f;
@@ -229,7 +321,7 @@ export const dithering = definePlugin({
 
               textureStore(resultTexture, id.xy, finalColor);
             }
-        `;
+          `;
 
           const shader = device.createShaderModule({
             label: "Dithering Effect Shader",
@@ -247,12 +339,12 @@ export const dithering = definePlugin({
             },
           });
 
-          return { device, pipeline, defs };
+          return { device, pipeline, defs, ditherPatterns };
         }
       );
     },
     goLiveEffect: async (
-      { device, pipeline, defs },
+      { device, pipeline, defs, ditherPatterns },
       params,
       imgData,
       { baseDpi, dpi }
@@ -267,6 +359,9 @@ export const dithering = definePlugin({
 
       const inputWidth = imgData.width,
         inputHeight = imgData.height;
+
+      // 選択されたディザリングパターンを取得
+      const selectedPattern = ditherPatterns[params.patternType];
 
       // Create textures
       const texture = device.createTexture({
@@ -286,10 +381,30 @@ export const dithering = definePlugin({
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
-      const sampler = device.createSampler({
-        label: "Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+      // ディザリングパターン用のテクスチャを作成
+      const patternTexture = device.createTexture({
+        label: "Dither Pattern Texture",
+        size: [selectedPattern.width, selectedPattern.height],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      });
+
+      // 入力テクスチャ用のサンプラー（クランプモード）
+      const inputTextureSampler = device.createSampler({
+        label: "Input Texture Sampler",
+        magFilter: "nearest",
+        minFilter: "nearest",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge",
+      });
+
+      // パターンテクスチャ用のサンプラー（リピートモード）
+      const patternTextureSampler = device.createSampler({
+        label: "Pattern Texture Sampler",
+        magFilter: "nearest",
+        minFilter: "nearest",
+        addressModeU: "repeat",
+        addressModeV: "repeat",
       });
 
       // Create uniform buffer with parameters
@@ -304,7 +419,7 @@ export const dithering = definePlugin({
 
       uniformData.set({
         outputSize: [outputWidth, outputHeight],
-        dpiScale: dpi / baseDpi,
+        dpiScale: dpi / baseDpi, // DPIスケールを正しく設定
         threshold: params.threshold / 100,
         strength: params.strength / 100,
         patternType:
@@ -314,8 +429,11 @@ export const dithering = definePlugin({
             : params.patternType === "bayer8x8"? 2
             : 0,
         colorMode: params.colorMode === "monochrome" ? 0 : 1,
+        blurAmount: params.blurAmount,
+        patternScale: params.patternScale,
       });
 
+      // パターンテクスチャを追加したbindGroupを作成
       const bindGroup = device.createBindGroup({
         label: "Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
@@ -330,11 +448,19 @@ export const dithering = definePlugin({
           },
           {
             binding: 2,
-            resource: sampler,
+            resource: inputTextureSampler,
           },
           {
             binding: 3,
             resource: { buffer: uniformBuffer },
+          },
+          {
+            binding: 4,
+            resource: patternTexture.createView(),
+          },
+          {
+            binding: 5,
+            resource: patternTextureSampler,
           },
         ],
       });
@@ -346,6 +472,14 @@ export const dithering = definePlugin({
       });
 
       device.queue.writeBuffer(uniformBuffer, 0, uniformData.arrayBuffer);
+
+      // パターンテクスチャにデータを書き込む
+      device.queue.writeTexture(
+        { texture: patternTexture },
+        selectedPattern.data,
+        { bytesPerRow: selectedPattern.width * 4 },
+        [selectedPattern.width, selectedPattern.height]
+      );
 
       // Update source texture
       device.queue.writeTexture(
