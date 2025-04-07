@@ -30,7 +30,9 @@ use crate::deno::module::{Module, ModuleHandle};
 use crate::deno::module_loader::npm_package_manager::NpmPackageManager;
 use crate::deno::transpiler::transpile;
 use crate::deno_println;
+use deno_core::{CompiledWasmModuleStore, ImportAssertionsSupport};
 use deno_error::JsErrorBox;
+use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::{
     deno_broadcast_channel,
     deno_broadcast_channel::InMemoryBroadcastChannel,
@@ -110,6 +112,8 @@ impl Runtime {
         let bootstrap_options = BootstrapOptions {
             ..Default::default()
         };
+
+        JsRuntime::init_platform(None, true);
 
         let tokio = AsyncBridge::new(option.timeout)?;
         let mut runtime = JsRuntime::new(runtime_options);
@@ -419,28 +423,18 @@ fn runtime_options_factory(
     let module_loader = Rc::new(module_loader);
     let extension_transpiler = module_loader.extension_transpiler();
 
+    let wasm_store = CompiledWasmModuleStore::default();
+
     let runtime_options = RuntimeOptions {
         module_loader: Some(module_loader),
-        // module_loader: deno_module_loader::RustyLoader::new(LoaderOptions {
-        //     cache_provider: (),
-        //     fs_whitelist: (),
-        //     source_map_cache: (),
-        //     node_resolver: (),
-        //     import_provider: (),
-        //     schema_whlist: (),
-        //     cwd: (),
-        // }),
         startup_snapshot: None,
         extensions,
         extension_transpiler: Some(extension_transpiler),
         is_main: true,
+        compiled_wasm_module_store: Some(wasm_store),
+        import_assertions_support: ImportAssertionsSupport::Yes,
         ..Default::default()
     };
-
-    // let services = deno_runtime::worker::WorkerServiceOptions {
-    //   node_services: node_ext_init,
-    //   fs:Arc<deno_fs::RealFs::default()>,
-    // };
 
     runtime_options
 }
