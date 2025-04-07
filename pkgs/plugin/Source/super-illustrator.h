@@ -390,7 +390,8 @@ namespace suai {
       const char* effectTitle = NULL;
       sAILiveEffect->GetLiveEffectTitle(effectHandle, &effectTitle);
 
-      ai::UnicodeString title = ai::UnicodeString(effectTitle, kAIPlatformCharacterEncoding);
+      ai::UnicodeString title =
+          ai::UnicodeString(effectTitle, kAIPlatformCharacterEncoding);
 
       return title.as_UTF8().data();
     }
@@ -1170,12 +1171,22 @@ namespace suai {
   }  // namespace art
 
   namespace pref {
+    static std::unordered_map<std::string, AIPoint> prefPointCache;
+
+    inline std::string
+    makeCacheKey(const std::string& prefix, const std::string& suffix) {
+      return prefix + ":" + suffix;
+    }
+
     // memo: PreferenceExists returns false if preference is not stored in filesystem
     bool isExists(
         const std::string& prefix,
         const std::string& suffix,
         AIErr*             error = nullptr
     ) {
+      std::string key = makeCacheKey(prefix, suffix);
+      if (prefPointCache.find(key) != prefPointCache.end()) { return true; }
+
       const char* _prefix = prefix.c_str();
       const char* _suffix = suffix.c_str();
 
@@ -1187,27 +1198,28 @@ namespace suai {
       return (bool)exists;
     }
 
-    // bool isExists(const char* prefix, const char* suffix, AIErr* error = nullptr) {
-    //   AIBoolean exists = false;
-    //   AIErr     err    = sAIPref->PreferenceExists(prefix, suffix, &exists);
-    //   if (error != nullptr) *error = err;
-    //   return (bool)exists;
-    // }
-
     std::optional<AIPoint> getPoint(
         const std::string&     prefix,
         const std::string&     suffix,
         std::optional<AIPoint> defaultValue,
         AIErr*                 error = nullptr
     ) {
-      const char* _p = str::strdup(prefix.c_str());
-      const char* _s = str::strdup(suffix.c_str());
+      std::string key     = makeCacheKey(prefix, suffix);
+      auto        cacheIt = prefPointCache.find(key);
+      if (cacheIt != prefPointCache.end()) {
+        std::cout << "Cache hit: " << key << ":" << cacheIt->second.h << ", "
+                  << cacheIt->second.v << std::endl;
+        return cacheIt->second;
+      }
 
-      auto point = AIPoint{-1234, -12345};
-      sAIPref->GetPointPreference(_p, _s, &point);
+      auto  point = AIPoint{-1234, -12345};
+      AIErr err   = sAIPref->GetPointPreference(prefix.data(), suffix.data(), &point);
+      if (error != nullptr) *error = err;
 
       if (point.h == -1234 && point.v == -12345) { return defaultValue; }
 
+      // キャッシュに保存
+      prefPointCache[key] = point;
       return point;
     }
 
@@ -1217,13 +1229,11 @@ namespace suai {
         AIPoint*           value,
         AIErr*             error = nullptr
     ) {
-      const char* _p = prefix.c_str();
-      const char* _s = suffix.c_str();
-
-      std::cout << "putPoint: " << _p << " = " << _s << std::endl;
-
-      AIErr err = sAIPref->PutPointPreference(_p, _s, value);
+      AIErr err = sAIPref->PutPointPreference(prefix.data(), suffix.data(), value);
       if (error != nullptr) *error = err;
+
+      std::string key     = makeCacheKey(prefix, suffix);
+      prefPointCache[key] = *value;
     }
   }  // namespace pref
 

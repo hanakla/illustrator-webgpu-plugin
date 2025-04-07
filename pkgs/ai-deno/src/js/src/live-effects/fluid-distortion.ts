@@ -28,7 +28,7 @@ const t = createTranslator({
     padding: "Padding",
   },
   ja: {
-    title: "フルイド ディストーション V11",
+    title: "フルイド ディストーション V1",
     intensity: "強度",
     speed: "速度",
     scale: "スケール",
@@ -242,8 +242,8 @@ export const fluidDistortion = definePlugin({
         (device) => {
           const code = `
             struct Params {
-              inputDpi: i32,
-              baseDpi: i32,
+              outputSize: vec2i,
+              dpiScale: f32,
               intensity: f32,
               speed: f32,
               scale: f32,
@@ -379,44 +379,38 @@ export const fluidDistortion = definePlugin({
 
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-                let dims = vec2f(textureDimensions(inputTexture));
+                let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
+                let dims = vec2f(params.outputSize);
                 let texCoord = vec2f(id.xy) / dims;
+                let toInputTexCoord = dims / dimsWithGPUPadding;
+                let toScaledNomalizedAmountByPixels = 1.0 / (dims * params.dpiScale);
 
-                // Calculate DPI ratio to maintain consistent visual effect regardless of DPI
-                // baseDpi is reference DPI (usually 72), inputDpi is current image DPI
-                let dpiRatio = f32(params.baseDpi) / f32(params.inputDpi);
+                // Ignore 256 padded pixels
+                if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
                 // Apply fluid distortion with DPI-aware scaling
-                // For fluid noise scale, we need to ensure consistent spatial frequency
-                // We divide by dpiRatio so higher DPI will have smaller scale value,
-                // resulting in the same visual pattern size
-                let scaleFactor = params.scale / dpiRatio;
                 let distortionVec = fluidDistortion(
                     texCoord,
                     params.timeSeed * params.speed,
-                    scaleFactor,
+                    params.scale,
                     params.turbulence
                 );
 
                 // Adjust distortion amount based on turbulence
-                // We DON'T multiply by dpiRatio here so that intensity works consistently
-                // across different DPI values
                 let turbulenceBoost = 1.0 + (params.turbulence * 0.5);
                 let distortionAmount = (params.intensity / 1000.0) * turbulenceBoost;
                 let distortedCoord = texCoord + distortionVec * distortionAmount;
 
                 // Apply chromatic aberration
-                // We still need dpiRatio here for pixel-level effects to have the same
-                // visual size regardless of resolution
-                let chromaticShift = params.colorShift * 0.01 * (1.0 + params.turbulence * 0.3) * dpiRatio;
+                let chromaticShift = params.colorShift * 0.01 * (1.0 + params.turbulence * 0.3);
                 let redOffset = distortedCoord + distortionVec * chromaticShift;
                 let blueOffset = distortedCoord - distortionVec * chromaticShift;
 
                 // Sample the texture with the distorted coordinates
-                let colorR = textureSampleLevel(inputTexture, textureSampler, redOffset, 0.0).r;
-                let colorG = textureSampleLevel(inputTexture, textureSampler, distortedCoord, 0.0).g;
-                let colorB = textureSampleLevel(inputTexture, textureSampler, blueOffset, 0.0).b;
-                let colorA = textureSampleLevel(inputTexture, textureSampler, distortedCoord, 0.0).a;
+                let colorR = textureSampleLevel(inputTexture, textureSampler, redOffset * toInputTexCoord, 0.0).r;
+                let colorG = textureSampleLevel(inputTexture, textureSampler, distortedCoord * toInputTexCoord, 0.0).g;
+                let colorB = textureSampleLevel(inputTexture, textureSampler, blueOffset * toInputTexCoord, 0.0).b;
+                let colorA = textureSampleLevel(inputTexture, textureSampler, distortedCoord * toInputTexCoord, 0.0).a;
 
                 let finalColor = vec4f(colorR, colorG, colorB, colorA);
                 textureStore(resultTexture, id.xy, finalColor);
@@ -459,30 +453,23 @@ export const fluidDistortion = definePlugin({
     ) => {
       console.log("Fluid Distortion V1", params);
 
-      // DPI比率を計算
-      // 高DPIほど多くのピクセルが必要なので、baseDpi/dpiではなくdpi/baseDpiを使用
-      const dpiRatio = baseDpi / dpi; // 通常のdpiRatio (72/300 = 0.24など)
-      const inverseDpiRatio = dpi / baseDpi; // 逆のdpiRatio (300/72 = 4.17など)
+      const dpiScale = dpi / baseDpi;
 
-      // Calculate padding size based on all relevant parameters
       const intensityFactor = params.intensity / 10;
       const scaleFactor = 5 / Math.max(0.5, params.scale);
       const turbulenceFactor = params.turbulence * 1.5;
       const colorShiftFactor = params.colorShift * 2;
 
-      // パディングサイズを計算
-      // 視覚的に同じ大きさにするために必要なピクセル数は高DPIほど多くなる
-      // そのためinverseDpiRatioを掛けて調整する
       const paddingSize = Math.ceil(
-        (200 +
+        (params.padding +
           (intensityFactor * scaleFactor * (1 + turbulenceFactor) +
             (colorShiftFactor * params.intensity) / 20)) *
-          inverseDpiRatio
+          dpiScale
       );
 
       // Ensure minimum padding for any distortion effect
       // 最小パディングもDPIに応じて調整
-      const minimumPadding = Math.ceil(5 * inverseDpiRatio);
+      const minimumPadding = Math.ceil(5 * dpiScale);
       const finalPaddingSize = Math.max(minimumPadding, paddingSize);
 
       console.log(
@@ -540,13 +527,13 @@ export const fluidDistortion = definePlugin({
       });
 
       uniformValues.set({
-        inputDpi: dpi,
-        baseDpi: baseDpi,
+        outputSize: [outputWidth, outputHeight],
+        dpiScale,
         intensity: params.intensity,
         speed: params.speed,
-        scale: params.scale * dpiRatio,
+        scale: params.scale,
         turbulence: params.turbulence,
-        colorShift: params.colorShift * dpiRatio,
+        colorShift: params.colorShift,
         timeSeed: params.timeSeed,
       });
 

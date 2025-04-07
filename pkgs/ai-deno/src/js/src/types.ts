@@ -61,18 +61,17 @@ type SchemaArrayNode<T extends Omit<SchemaNodes, "default">> = {
 };
 
 type SchemaNodeToType<T extends SchemaNodes | Omit<SchemaNodes, "default">> =
-  T extends { type: "real" } | { type: "int" }
-    ? number
-    : T extends { type: "bool" }
-    ? boolean
-    : T extends { type: "string" }
-    ? string
-    : T extends { type: "color" }
-    ? ColorRGBA
-    : T extends { type: "object"; properties: infer P }
-    ? ObjectScemaToState<P>
-    : T extends { type: "array"; items: infer I }
-    ? SchemaNodeToType<I>[]
+  // prettier-ignore
+  T extends { type: "real" } | { type: "int" } ? number
+  : T extends { type: "bool" } ? boolean
+    : T extends { type: "string" } ? string
+    : T extends { type: "color" } ? ColorRGBA
+    : T extends { type: "object"; properties: infer P } ?
+      P extends { [k: string]: Omit<SchemaNodes, "default"> } ? ObjectScemaToState<P>
+      : never
+    : T extends { type: "array"; items: infer I } ?
+      I extends Omit<SchemaNodes, "default"> ? SchemaNodeToType<I>[]
+      : never
     : never;
 
 export type ParameterSchemaToState<
@@ -231,6 +230,12 @@ export type AIEffectPlugin<T extends ParameterSchema, TInit> = Ensure<
 >;
 
 type Ensure<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
+
+export type PluginParameters<T extends AIPlugin<any, any>> =
+  // prettier-ignore
+  T extends AIPlugin<infer P, any>
+    ? ParameterSchemaToState<P>
+    : never;
 
 export function definePlugin<T extends ParameterSchema, IT>(
   plugin: AIPlugin<T, IT>

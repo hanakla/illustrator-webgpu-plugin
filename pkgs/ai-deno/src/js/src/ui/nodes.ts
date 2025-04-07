@@ -3,19 +3,19 @@ export const ui = {
     { direction = "row" }: Omit<UINodeGroup, "type" | "children">,
     children: UINode[]
   ): UINode =>
-    fillNull({
+    fillByNull({
       type: "group" as const,
       direction,
-      children,
+      children: children.filter((child) => !!child),
     }),
   button: (props: Omit<UINodeButton, "type">): UINodeButton =>
-    fillNull({
+    fillByNull({
       text: props.text,
       onClick: props.onClick,
       type: "button" as const,
     }),
   slider: (props: Omit<UINodeSlider, "type">): UINodeSlider =>
-    fillNull({
+    fillByNull({
       key: props.key,
       dataType: props.dataType,
       min: props.min,
@@ -25,7 +25,7 @@ export const ui = {
       type: "slider" as const,
     }),
   checkbox: (props: Omit<UINodeCheckbox, "type">): UINodeCheckbox =>
-    fillNull({
+    fillByNull({
       key: props.key,
       label: props.label,
       value: props.value,
@@ -33,14 +33,14 @@ export const ui = {
       type: "checkbox" as const,
     }),
   textInput: (props: Omit<UINodeTextInput, "type">): UINodeTextInput =>
-    fillNull({
+    fillByNull({
       key: props.key,
       value: props.value,
       onChange: props.onChange,
       type: "textInput" as const,
     }),
   numberInput: (props: Omit<UINodeNumberInput, "type">): UINodeNumberInput =>
-    fillNull({
+    fillByNull({
       key: props.key,
       dataType: props.dataType,
       min: props.min,
@@ -51,20 +51,20 @@ export const ui = {
       type: "numberInput" as const,
     }),
   colorInput: (props: Omit<UINodeColorInput, "type">): UINodeColorInput =>
-    fillNull({
+    fillByNull({
       key: props.key,
       value: props.value,
       onChange: props.onChange,
       type: "colorInput" as const,
     }),
   text: (props: MakeOptional<Omit<UINodeText, "type">, "size">): UINodeText =>
-    fillNull({
+    fillByNull({
       text: props.text,
       size: props.size || "normal",
       type: "text" as const,
     }),
   select: (props: Omit<UISelect, "type" | "selectedIndex">): UISelect =>
-    fillNull({
+    fillByNull({
       key: props.key,
       options: props.options,
       value: props.value,
@@ -75,13 +75,13 @@ export const ui = {
       type: "select" as const,
     }),
   separator: (): UISeparator =>
-    fillNull({
+    fillByNull({
       type: "separator" as const,
     }),
 };
 
-/** For improve debuggability in ImGup */
-function fillNull<T extends object>(obj: T): T {
+/** For improve debuggability in ImGui */
+function fillByNull<T extends object>(obj: T): T {
   Object.keys(obj).forEach((key) => {
     const _k = key as keyof T;
     if (obj[_k] === null) {

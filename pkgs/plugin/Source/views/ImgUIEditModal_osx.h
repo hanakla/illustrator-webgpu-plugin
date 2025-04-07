@@ -42,12 +42,13 @@ using json = nlohmann::json;
 - (void)setOnChange:(ImGuiModal::OnChangeCallback)onChange;
 - (void)setOnFireEventCallback:(ImGuiModal::OnFireEventCallback)onFireEvent;
 - (ModalStatusCode)getStatusCode;
-- (void)updateAndDrawView;
+- (std::optional<std::tuple<int, int>>)updateAndDrawView;
 @end
 
 @interface WindowController : NSWindowController {
   id<MTLDevice> device;
   MyImGuiView*  imGuiView;
+  bool          isPositionRestored;
 }
 - (instancetype)initWithWindow:(NSWindow*)window;
 - (void)setTitle:(std::string)title;
@@ -148,6 +149,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
 
   MyImGuiView* imGuiView = [[MyImGuiView alloc] initWithFrame:window.frame device:device];
   self->imGuiView        = imGuiView;
+  self->isPositionRestored = NO;
 
   [window setContentView:imGuiView];
 
@@ -233,7 +235,6 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   NSModalSession session =
       [[NSApplication sharedApplication] beginModalSessionForWindow:self.window];
 
-  [self restoreWindowPosition:lastPosition];
   [self->imGuiView setRenderTree:renderNodes];
 
   NSTimeInterval lastFrameTime   = [NSDate timeIntervalSinceReferenceDate];
@@ -247,8 +248,13 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
       NSTimeInterval elapsedTime = currentTime - lastFrameTime;
 
       if (elapsedTime >= targetFrameTime) {
-        [self.window.contentView updateAndDrawView];
+        auto viewSize = [self.window.contentView updateAndDrawView];
         lastFrameTime = currentTime;
+
+        if (!self->isPositionRestored && viewSize.has_value()) {
+          [self restoreWindowPosition:lastPosition contentSize:viewSize.value()];
+          self->isPositionRestored = true;
+        }
       } else {
         [NSThread sleepForTimeInterval:0.001];
       }
@@ -271,23 +277,29 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   return result;
 }
 
-- (void)restoreWindowPosition:(std::tuple<int, int>*)pos {
+- (void)restoreWindowPosition:(std::tuple<int, int>*)pos
+                  contentSize:(std::tuple<int, int>)contentSize {
   NSScreen* screen      = [self.window screen] ?: [NSScreen mainScreen];
   NSRect    screenFrame = [screen visibleFrame];
 
-  NSSize windowSize = [self.window frame].size;
+  auto [width, height]    = contentSize;
+  NSSize contentSizeValue = NSMakeSize(width, height);
+
+  NSRect contentRect = NSMakeRect(0, 0, contentSizeValue.width, contentSizeValue.height);
+  NSRect windowRect  = [self.window frameRectForContentRect:contentRect];
+  NSSize windowSize  = windowRect.size;
 
   std::tuple<int, int> position =
       pos == nullptr ? std::make_tuple(
-                           (int)(NSMidX(screenFrame) - windowSize.width * .5),
-                           (int)(NSMidY(screenFrame) - windowSize.height * .5)
+                           (int)(NSMidX(screenFrame) - windowSize.width * 2),
+                           (int)(NSMidY(screenFrame) - windowSize.height * 2)
                        )
                      : *pos;
 
-  auto [x, y] = position;
-
+  auto [x, y]         = position;
   NSPoint targetPoint = NSMakePoint(x, y);
 
+  // Keep window in display rect
   if (targetPoint.x + windowSize.width > NSMaxX(screenFrame)) {
     targetPoint.x = NSMaxX(screenFrame) - windowSize.width;
   }
@@ -298,7 +310,13 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   }
   if (targetPoint.y < NSMinY(screenFrame)) { targetPoint.y = NSMinY(screenFrame); }
 
-  [self.window setFrameOrigin:targetPoint];
+  NSRect newFrame =
+      NSMakeRect(targetPoint.x, targetPoint.y, windowSize.width, windowSize.height);
+
+  std::cout << "restoreWindowPosition: lastPosition: " << std::get<0>(position) << ", "
+            << std::get<1>(position) << std::endl;
+
+  [self.window setFrame:newFrame display:YES];
 }
 
 - (void)releaseDialog {
@@ -347,7 +365,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   return resultStatus;
 }
 
-- (void)updateAndDrawView {
+- (std::optional<std::tuple<int, int>>)updateAndDrawView {
   ImGuiIO& io      = ImGui::GetIO();
   io.DisplaySize.x = self.bounds.size.width;
   io.DisplaySize.y = self.bounds.size.height;
@@ -400,23 +418,30 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   // std::cout << "Window size: " << windowSize.x << ", " << windowSize.y << std::endl;
 
   // Update window size based on ImGui content
+  std::optional<std::tuple<int, int>> returnedSize = std::nullopt;
   if (!self->isFirstSized && ImGui::GetFrameCount() > 1) {
     self->isFirstSized = true;
 
-    NSRect frame = NSMakeRect(
-        self.frame.origin.x, self.frame.origin.y, windowSize.x * 1.5, windowSize.y * 2
-    );
-    [self setFrame:frame];
+    returnedSize =
+        std::make_tuple(static_cast<int>(windowSize.x), static_cast<int>(windowSize.y));
 
-    NSRect winFrame = NSMakeRect(
-        self.window.frame.origin.x, self.window.frame.origin.y,
-        MAX(windowSize.x, kMyDialogWidth), MAX(windowSize.y * 2, kMyDialogWidth)
-    );
+    // NSRect frame = NSMakeRect(
+    //     self.frame.origin.x, self.frame.origin.y, windowSize.x * 1.5, windowSize.y * 2
+    // );
+    // [self setFrame:frame];
 
-    std::cout << "Window sized: " << windowSize.x << ", " << windowSize.y << std::endl;
+    // NSRect winFrame = NSMakeRect(
+    //     self.window.frame.origin.x, self.window.frame.origin.y,
+    //     MAX(windowSize.x, kMyDialogWidth), MAX(windowSize.y * 2, kMyDialogWidth)
+    // );
 
-    [[self window] setFrame:[[self window] frameRectForContentRect:winFrame] display:YES];
+    // std::cout << "Window sized: " << windowSize.x << ", " << windowSize.y << std::endl;
+
+    // [[self window] setFrame:[[self window] frameRectForContentRect:winFrame]
+    // display:YES];
   }
+
+  return returnedSize;
 }
 
 - (void)drawRect:(NSRect)bounds {

@@ -1,5 +1,8 @@
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
+import {
+  makeShaderDataDefinitions,
+  makeStructuredView,
+} from "npm:webgpu-utils";
+import { StyleFilterFlag, definePlugin, ColorRGBA } from "../types.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -10,24 +13,28 @@ import {
   parseColorCode,
   toColorCode,
 } from "./_utils.ts";
+import { createGPUDevice } from "./_shared.ts";
 
-const BASE_DPI = 72;
-
+// Translation texts for the plugin interfaces
 const t = createTranslator({
   en: {
     title: "Halftone Effect",
     dotSize: "Dot Size",
-    dotInterval: "Dot Interval",
     dotAngle: "Dot Angle",
     dotColor: "Dot Color",
+    placementPattern: "Dot Placement",
+    gridPattern: "Grid",
+    staggeredPattern: "Staggered",
     color: "Color",
   },
   ja: {
     title: "ハーフトーンエフェクト",
     dotSize: "ドットサイズ",
-    dotInterval: "ドット間隔",
     dotAngle: "ドットの角度",
     dotColor: "ドットの色",
+    placementPattern: "ドット配置",
+    gridPattern: "グリッド",
+    staggeredPattern: "交差",
     color: "色",
   },
 });
@@ -45,23 +52,18 @@ export const halftone = definePlugin({
       size: {
         type: "real",
         default: 4.0,
-        min: 0.5,
-        max: 100.0,
-        description: "Dot size in pixels",
-      },
-      interval: {
-        type: "real",
-        default: 8.0,
-        min: 4.0,
-        max: 100.0,
-        description: "Dot interval in pixels",
+        // description: "Dot size in pixels",
       },
       angle: {
         type: "real",
         default: 0.0,
-        min: 0.0,
-        max: 360.0,
-        description: "Dot array angle in degrees",
+        // description: "Dot array angle in degrees",
+      },
+      placementPattern: {
+        type: "string",
+        default: "grid",
+        enum: ["grid", "staggered"],
+        description: "Dot placement pattern",
       },
       color: {
         type: "color",
@@ -81,15 +83,16 @@ export const halftone = definePlugin({
       return {
         ...params,
         size: params.size * scaleFactor,
-        interval: params.interval * scaleFactor,
         angle: params.angle, // Angle doesn't need scaling
+        placementPattern: params.placementPattern, // Pattern doesn't need scaling
       };
     },
     onInterpolate: (paramsA, paramsB, t) => {
       return {
         size: lerp(paramsA.size, paramsB.size, t),
-        interval: lerp(paramsA.interval, paramsB.interval, t),
         angle: lerp(paramsA.angle, paramsB.angle, t),
+        placementPattern:
+          t < 0.5 ? paramsA.placementPattern : paramsB.placementPattern, // Enum values don't interpolate
         color: {
           r: lerp(paramsA.color.r, paramsB.color.r, t),
           g: lerp(paramsA.color.g, paramsB.color.g, t),
@@ -119,18 +122,14 @@ export const halftone = definePlugin({
           }),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t("dotInterval") }),
-          ui.slider({
-            key: "interval",
-            dataType: "float",
-            min: 4,
-            max: 100,
-            value: params.interval,
-          }),
-          ui.numberInput({
-            key: "interval",
-            dataType: "float",
-            value: params.interval,
+          ui.text({ text: t("placementPattern") }),
+          ui.select({
+            key: "placementPattern",
+            options: [
+              { value: "grid", label: t("gridPattern") },
+              // { value: "staggered", label: t("staggeredPattern") },
+            ],
+            value: params.placementPattern || "grid",
           }),
         ]),
         ui.group({ direction: "col" }, [
@@ -153,14 +152,13 @@ export const halftone = definePlugin({
           ui.group({ direction: "row" }, [
             ui.colorInput({
               key: "color",
-              label: t("color"),
               value: params.color,
             }),
             ui.textInput({
               key: "colorInput",
               value: colorStr,
               onChange: (e) => {
-                setParam({ color: parseColorCode(e.value) });
+                setParam({ color: parseColorCode(e.value)! });
               },
             }),
           ]),
@@ -168,196 +166,214 @@ export const halftone = definePlugin({
       ]);
     },
     initLiveEffect: async () => {
-      const device = await navigator.gpu.requestAdapter().then((adapter) =>
-        adapter!.requestDevice({
-          label: "WebGPU(Halftone Effect)",
-        })
-      );
-
-      if (!device) {
-        throw new Error("Failed to create WebGPU device");
-      }
-
-      // Single-pass shader for halftone effect with built-in anti-aliasing
-      const shader = device.createShaderModule({
-        label: "Halftone Effect Shader",
-        code: `
-          struct Params {
-            inputDpi: i32,
-            baseDpi: i32,
-            size: f32,
-            interval: f32,
-            angle: f32,
-            color: vec4f,
-          }
-
-          @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-          @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-          @group(0) @binding(2) var textureSampler: sampler;
-          @group(0) @binding(3) var<uniform> params: Params;
-
-          // Convert RGB to grayscale with alpha consideration
-          fn rgbToGray(color: vec3f, alpha: f32) -> f32 {
-            return dot(color.rgb, vec3f(0.299, 0.587, 0.114)) * alpha;
-          }
-
-          @compute @workgroup_size(16, 16)
-          fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-            let dims = vec2f(textureDimensions(inputTexture));
-            let texCoord = vec2f(id.xy) / dims;
-
-            // Calculate DPI scaling factor
-            let dpiScale = f32(params.inputDpi) / f32(params.baseDpi);
-
-            // Calculate cell size in pixels
-            let cellSize = params.interval * dpiScale;
-
-            // Convert angle from degrees to radians
-            let angleRad = params.angle * 3.14159265359 / 180.0;
-
-            // Create rotation matrix
-            let cosAngle = cos(angleRad);
-            let sinAngle = sin(angleRad);
-
-            // Rotate the texture coordinates
-            let centered = texCoord - 0.5;
-            let rotated = vec2f(
-              centered.x * cosAngle - centered.y * sinAngle,
-              centered.x * sinAngle + centered.y * cosAngle
-            );
-            let rotatedTexCoord = rotated + 0.5;
-
-            // Calculate cell coordinates and position within cell
-            let cellCoord = vec2f(
-              floor(rotatedTexCoord.x * dims.x / cellSize),
-              floor(rotatedTexCoord.y * dims.y / cellSize)
-            );
-
-            let posInCell = vec2f(
-              fract(rotatedTexCoord.x * dims.x / cellSize),
-              fract(rotatedTexCoord.y * dims.y / cellSize)
-            );
-
-            // Calculate distance from center of cell
-            let cellCenter = vec2f(0.5, 0.5);
-            let dist = distance(posInCell, cellCenter);
-
-            // Sample the image at the center of each cell
-            let cellCenterInRotated = vec2f(
-              (cellCoord.x + 0.5) * cellSize / dims.x,
-              (cellCoord.y + 0.5) * cellSize / dims.y
-            );
-
-            // Rotate back to sample from the original image
-            let cellCenterCentered = cellCenterInRotated - 0.5;
-            let cellCenterUnrotated = vec2f(
-              cellCenterCentered.x * cosAngle + cellCenterCentered.y * sinAngle,
-              -cellCenterCentered.x * sinAngle + cellCenterCentered.y * cosAngle
-            );
-            let cellCenterCoord = cellCenterUnrotated + 0.5;
-
-            // Clamp to valid texture coordinates
-            let clampedCellCenterCoord = clamp(cellCenterCoord, vec2f(0.0), vec2f(1.0));
-            let centerColor = textureSampleLevel(inputTexture, textureSampler, clampedCellCenterCoord, 0.0);
-            let centerGray = rgbToGray(centerColor.rgb, centerColor.a);
-
-            // Calculate dot size based on brightness
-            let dotSizeFactor = centerGray;
-
-            // Apply non-linear mapping for better contrast
-            let adjustedFactor = pow(dotSizeFactor, 0.8);
-
-            // Calculate dot radius in normalized cell space
-            let sizeInPixels = params.size * dpiScale;
-            let normalizedSize = sizeInPixels / cellSize;
-            let dotRadius = (1.0 - adjustedFactor) * normalizedSize * 0.5;
-
-            // Limit maximum dot size
-            let scaledDotSize = min(dotRadius, 0.4);
-
-            // Apply anti-aliasing at dot edges
-            let edgeWidth = 0.01;
-            let alpha = 1.0 - smoothstep(scaledDotSize - edgeWidth, scaledDotSize + edgeWidth, dist);
-
-            // Create final color with transparency
-            let finalColor = vec4f(params.color.rgb, params.color.a * alpha);
-
-            // Only set color if we're inside or near the dot
-            if (alpha > 0.001) {
-              textureStore(resultTexture, id.xy, finalColor);
-            } else {
-              // Completely transparent outside dots
-              textureStore(resultTexture, id.xy, vec4f(0.0, 0.0, 0.0, 0.0));
-            }
-          }
-        `,
-      });
-
-      device.addEventListener("lost", (e) => {
-        console.error(e);
-      });
-
-      device.addEventListener("uncapturederror", (e) => {
-        console.error(e.error);
-      });
-
-      const pipeline = device.createComputePipeline({
-        label: "Halftone Effect Pipeline",
-        layout: "auto",
-        compute: {
-          module: shader,
-          entryPoint: "computeMain",
+      return await createGPUDevice(
+        {
+          device: { label: "WebGPU(Halftone Effect)" },
         },
-      });
+        (device) => {
+          const code = `
+struct Params {
+  outputSize: vec2i,
+  dpiScale: f32,
+  size: f32,
+  angle: f32,
+  color: vec4f,
+  placementPattern: i32,
+}
 
-      return { device, pipeline };
+@group(0) @binding(0) var inputTexture: texture_2d<f32>;
+@group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var textureSampler: sampler;
+@group(0) @binding(3) var<uniform> params: Params;
+
+fn rgbToGray(color: vec3f, alpha: f32) -> f32 {
+  return dot(color.rgb, vec3f(0.299, 0.587, 0.114)) * alpha;
+}
+
+@compute @workgroup_size(16, 16)
+fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+  // Basic setup
+  let outputSize = vec2f(params.outputSize);
+  let currentPixel = vec2f(id.xy);
+
+  // Skip padding pixels
+  if (currentPixel.x >= outputSize.x || currentPixel.y >= outputSize.y) {
+    return;
+  }
+
+  // Calculate rotation matrices
+  let radians = params.angle * 3.14159265359 / 180.0;
+  let cosTheta = cos(radians);
+  let sinTheta = sin(radians);
+
+  // Create rotation and inverse rotation matrices
+  let rotMatrix = mat2x2(
+    cosTheta, sinTheta,
+    -sinTheta, cosTheta
+  );
+
+  let invRotMatrix = mat2x2(
+    cosTheta, -sinTheta,
+    sinTheta, cosTheta
+  );
+
+  // Center and rotate current pixel
+  let center = outputSize * 0.5;
+  let centered = currentPixel - center;
+  let rotated = rotMatrix * centered;
+  let rotatedPixel = rotated + center;
+
+  // Calculate cell size in pixels (consistent scaling)
+  let dotSizeScaled = params.size * params.dpiScale;
+  let cellSize = vec2f(dotSizeScaled, dotSizeScaled);
+
+  // Calculate cell coordinates
+  let baseCell = rotatedPixel / cellSize;
+  var cellX = floor(baseCell.x);
+  let cellY = floor(baseCell.y);
+
+  // Apply staggered pattern offset for odd rows if needed
+  if (params.placementPattern == 1) {
+    let isOddRow = (cellY % 2.0) == 1.0;
+    if (isOddRow) {
+      cellX = floor(baseCell.x + 0.5);
+    }
+  }
+
+  // Calculate cell origin and position within cell
+  let cellOrigin = vec2f(cellX, cellY) * cellSize;
+  let posInCell = (rotatedPixel - cellOrigin) / cellSize;
+
+  // Calculate cell center
+  let cellCenter = cellOrigin + cellSize * 0.5;
+
+  // Transform cell center back to original space for sampling
+  let centeredCellCenter = cellCenter - center;
+  let originalCellCenter = invRotMatrix * centeredCellCenter;
+  let samplePoint = originalCellCenter + center;
+
+  // Get padding-corrected coordinates
+  let texCoord = samplePoint / outputSize;
+  let paddedTextureSize = vec2f(textureDimensions(inputTexture));
+  let paddingCorrection = outputSize / paddedTextureSize;
+  let sampleCoord = texCoord * paddingCorrection;
+
+  // Sample original image
+  let origColor = textureSampleLevel(inputTexture, textureSampler, sampleCoord, 0.0);
+  let grayscale = rgbToGray(origColor.rgb, origColor.a);
+
+  // Adjust brightness and calculate dot size
+  let brightness = clamp(pow(grayscale, 0.7), 0.0, 0.95);
+  let dotScale = 0.4;
+  let dotRadius = (1.0 - brightness) * dotScale;
+  let minDotRadius = 0.05;
+  let finalDotRadius = max(dotRadius, minDotRadius);
+
+  // Calculate distance from center of cell
+  let distToCenter = length(posInCell - vec2f(0.5, 0.5));
+
+  // Create circular dot with anti-aliased edge
+  let edgeWidth = 0.01;
+  let alpha = 1.0 - smoothstep(finalDotRadius - edgeWidth, finalDotRadius + edgeWidth, distToCenter);
+
+  // Apply final color
+  var finalAlpha = 0.02;
+  if (alpha > 0.01) {
+    finalAlpha = alpha * params.color.a;
+  }
+
+  textureStore(resultTexture, id.xy, vec4f(params.color.rgb, finalAlpha));
+}
+`;
+
+          const shader = device.createShaderModule({
+            label: "Halftone Effect Shader",
+            code,
+          });
+
+          const pipelineDef = makeShaderDataDefinitions(code);
+
+          const pipeline = device.createComputePipeline({
+            label: "Halftone Effect Pipeline",
+            layout: "auto",
+            compute: {
+              module: shader,
+              entryPoint: "computeMain",
+            },
+          });
+
+          return { device, pipeline, pipelineDef };
+        }
+      );
     },
-    goLiveEffect: async ({ device, pipeline }, params, imgData, env) => {
+    goLiveEffect: async (
+      { device, pipeline, pipelineDef },
+      params,
+      imgData,
+      { dpi, baseDpi }
+    ) => {
       console.log("Halftone Effect", params);
 
       const outputWidth = imgData.width,
         outputHeight = imgData.height;
 
+      // Don't change it
       imgData = await addWebGPUAlignmentPadding(imgData);
 
-      const inputWidth = imgData.width,
-        inputHeight = imgData.height;
+      const bufferInputWidth = imgData.width,
+        bufferInputHeight = imgData.height;
 
       // Create textures
-      const inputTexture = device.createTexture({
-        label: "Input Texture",
-        size: [inputWidth, inputHeight],
+      const texture = device.createTexture({
+        label: "Halftone Input Texture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.STORAGE_BINDING,
       });
 
       const resultTexture = device.createTexture({
-        label: "Result Texture",
-        size: [inputWidth, inputHeight],
+        label: "Halftone Result Texture",
+        size: [bufferInputWidth, bufferInputHeight],
         format: "rgba8unorm",
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
       const sampler = device.createSampler({
-        label: "Texture Sampler",
+        label: "Halftone Texture Sampler",
         magFilter: "linear",
         minFilter: "linear",
       });
 
-      // Create uniform buffer with proper alignment (48 bytes)
+      // Create uniform buffer
+      const uniformValues = makeStructuredView(pipelineDef.uniforms.params);
       const uniformBuffer = device.createBuffer({
-        label: "Params Buffer",
-        size: 48,
+        label: "Halftone Params Buffer",
+        size: uniformValues.arrayBuffer.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
+      // Set uniform values
+      uniformValues.set({
+        outputSize: [outputWidth, outputHeight],
+        dpiScale: dpi / baseDpi,
+        size: params.size,
+        angle: params.angle,
+        placementPattern: params.placementPattern === "staggered" ? 1 : 0,
+        color: [params.color.r, params.color.g, params.color.b, params.color.a],
+      });
+
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
+
       const bindGroup = device.createBindGroup({
-        label: "Main Bind Group",
+        label: "Halftone Main Bind Group",
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
-            resource: inputTexture.createView(),
+            resource: texture.createView(),
           },
           {
             binding: 1,
@@ -376,38 +392,16 @@ export const halftone = definePlugin({
 
       const stagingBuffer = device.createBuffer({
         label: "Staging Buffer",
-        size: inputWidth * inputHeight * 4,
+        size: bufferInputWidth * bufferInputHeight * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
 
-      // Update uniform buffer with parameters
-      const uniformData = new ArrayBuffer(48);
-      const view = new DataView(uniformData);
-
-      // inputDpi, baseDpi (i32)
-      view.setInt32(0, env.dpi, true);
-      view.setInt32(4, env.baseDpi, true);
-
-      // size, interval, angle (f32)
-      view.setFloat32(8, params.size, true);
-      view.setFloat32(12, params.interval, true);
-      view.setFloat32(16, params.angle, true);
-      view.setFloat32(20, 0.0, true); // padding
-
-      // color (vec4f) starts at offset 32 for proper alignment
-      view.setFloat32(32, params.color.r, true);
-      view.setFloat32(36, params.color.g, true);
-      view.setFloat32(40, params.color.b, true);
-      view.setFloat32(44, params.color.a, true);
-
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-
       // Update source texture
       device.queue.writeTexture(
-        { texture: inputTexture },
+        { texture },
         imgData.data,
-        { bytesPerRow: inputWidth * 4, rowsPerImage: inputHeight },
-        [inputWidth, inputHeight]
+        { bytesPerRow: bufferInputWidth * 4, rowsPerImage: bufferInputHeight },
+        [bufferInputWidth, bufferInputHeight]
       );
 
       // Execute compute shader
@@ -421,20 +415,20 @@ export const halftone = definePlugin({
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
       computePass.dispatchWorkgroups(
-        Math.ceil(inputWidth / 16),
-        Math.ceil(inputHeight / 16)
+        Math.ceil(bufferInputWidth / 16),
+        Math.ceil(bufferInputHeight / 16)
       );
       computePass.end();
 
       commandEncoder.copyTextureToBuffer(
         { texture: resultTexture },
-        { buffer: stagingBuffer, bytesPerRow: inputWidth * 4 },
-        [inputWidth, inputHeight]
+        { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
+        [bufferInputWidth, bufferInputHeight]
       );
 
       device.queue.submit([commandEncoder.finish()]);
 
-      // Read back the result
+      // Read back and display the result
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -442,8 +436,8 @@ export const halftone = definePlugin({
 
       const resultImageData = new ImageData(
         new Uint8ClampedArray(resultData),
-        inputWidth,
-        inputHeight
+        bufferInputWidth,
+        bufferInputHeight
       );
 
       return await removeWebGPUAlignmentPadding(
