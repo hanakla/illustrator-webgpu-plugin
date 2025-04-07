@@ -12,6 +12,7 @@ use deno_npm::registry::{NpmPackageInfo, NpmPackageVersionInfo};
 use deno_npm_cache::{NpmCache, NpmCacheSetting, RegistryInfoProvider};
 use deno_package_json::{NodeModuleKind, PackageJson};
 use deno_runtime::deno_core::serde_json;
+use deno_runtime::deno_tls::rustls::crypto::hash::Hash;
 use deno_semver::package::PackageNv;
 use deno_semver::{StackString, Version, VersionReq};
 use flate2::read::GzDecoder;
@@ -76,8 +77,8 @@ fn create_npm_cache(cache_dir: PathBuf) -> NpmCache<RealSys> {
     )
 }
 
-fn create_default_npmrc() -> deno_npm::npm_rc::ResolvedNpmRc {
-    deno_npm::npm_rc::ResolvedNpmRc {
+fn create_default_npmrc() -> ResolvedNpmRc {
+    ResolvedNpmRc {
         default_config: RegistryConfigWithUrl {
             registry_url: Url::from_str("https://registry.npmjs.org").unwrap(),
             config: Arc::new(RegistryConfig::default()),
@@ -249,10 +250,14 @@ impl NpmPackageManager {
             .into());
         };
 
-        let Ok(version_info) = pkg_info.version_info(&PackageNv {
-            name: StackString::from_str(name),
-            version: Version::parse_from_npm(&resolved_version).unwrap(),
-        }) else {
+        let patch_packages = HashMap::new();
+        let Ok(version_info) = pkg_info.version_info(
+            &PackageNv {
+                name: StackString::from_str(name),
+                version: Version::parse_from_npm(&resolved_version).unwrap(),
+            },
+            &patch_packages,
+        ) else {
             return Err(NpmPackageError::ResolutionFailed(format!(
                 "version info not found: {}@{}",
                 name, resolved_version
@@ -260,7 +265,8 @@ impl NpmPackageManager {
             .into());
         };
 
-        let tarball_url = version_info.dist.tarball.clone();
+        let dist = (version_info.dist.as_ref()).unwrap();
+        let tarball_url = dist.tarball.clone();
 
         let install_key = format!("{}@{}", name, resolved_version);
 
