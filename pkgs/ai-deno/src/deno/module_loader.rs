@@ -1,6 +1,7 @@
 use cjs_code_analyzer::AiDenoCjsCodeAnalyzer;
 use deno_ast::MediaType;
 use deno_error::JsErrorBox;
+use deno_graph::ModuleSpecifier;
 use deno_resolver::{
     cjs::CjsTracker,
     npm::{ByonmNpmResolver, ByonmNpmResolverCreateOptions},
@@ -8,8 +9,8 @@ use deno_resolver::{
 use deno_runtime::{
     deno_core::{
         error::ModuleLoaderError, url::Url, FastString, ModuleCodeString, ModuleLoadResponse,
-        ModuleLoader, ModuleName, ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType,
-        RequestedModuleType, ResolutionKind, SourceMapData,
+        ModuleLoader, ModuleName, ModuleSource, ModuleSourceCode, ModuleType, RequestedModuleType,
+        ResolutionKind, SourceMapData,
     },
     deno_fs::{sync::MaybeArc, RealFs},
     deno_node::{NodeExtInitServices, NodeResolver, NodeResolverRc},
@@ -17,7 +18,7 @@ use deno_runtime::{
 use futures::TryFutureExt;
 use jsr_package_manager::{parse_jsr_specifier, JsrPackageManager};
 use node_resolver::{
-    analyze::{CjsModuleExportAnalyzer, NodeCodeTranslator},
+    analyze::NodeCodeTranslator,
     cache::{NodeResolutionSys, NodeResolutionThreadLocalCache},
     DenoIsBuiltInNodeModuleChecker, NodeResolutionKind, PackageJsonResolver, ResolutionMode,
     UrlOrPathRef,
@@ -126,7 +127,7 @@ impl AiDenoModuleLoader {
             pkg_manager.clone(),
             pkg_json_resolver.clone(),
             node_resolution_sys,
-            node_resolver::NodeResolverOptions::default(),
+            node_resolver::ConditionsFromResolutionMode::default(),
         ));
 
         let cjs_tracker = CjsTracker::new(
@@ -135,14 +136,14 @@ impl AiDenoModuleLoader {
             deno_resolver::cjs::IsCjsResolutionMode::ImplicitTypeCommonJs,
         );
 
-        let cjs_translator = NodeCodeTranslator::new(MaybeArc::new(CjsModuleExportAnalyzer::new(
+        let cjs_translator = NodeCodeTranslator::new(
             AiDenoCjsCodeAnalyzer::new(MaybeArc::new(RealFs::default()), cjs_tracker),
             pkg_manager.clone(),
             node_resolver.clone(),
             pkg_manager.clone(),
             pkg_json_resolver.clone(),
             real_sys.clone(),
-        )));
+        );
 
         // let module_graph = ModuleGraph::new(deno_graph::GraphKind::All);
 
