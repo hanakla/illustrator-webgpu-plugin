@@ -1,13 +1,15 @@
-[macos]
 build:
     cargo clean -p ai-deno
     yarn tsup src/js/src/main.ts --outDir src/js/dist --format esm
     cargo build --release
 
-[macos]
 watch:
     cargo clean -p ai-deno -p deno_core
     just watch-js & cargo watch --clear  -x "build --release"
+
+watch-debug:
+    cargo clean -p ai-deno -p deno_core
+    just watch-js & cargo watch --clear  -x "build"
 
 [macos]
 watch-example:
