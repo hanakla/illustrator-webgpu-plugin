@@ -16,6 +16,11 @@ watch:
     just watch-js & cargo watch --clear  -x "build --release"
 
 [unix]
+watch-debug:
+    cargo clean -p ai-deno -p deno_core
+    just watch-js & cargo watch --clear  -x "build"
+
+[macos]
 watch-example:
     cargo watch --clear  -x "run example"
 

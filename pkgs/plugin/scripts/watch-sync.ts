@@ -2,10 +2,12 @@ import { fromFileUrl } from "jsr:@std/path";
 import { debounce } from "jsr:@es-toolkit/es-toolkit";
 import { copy } from "jsr:@std/fs";
 
+const MODE_DIR = Deno.args[0] === "debug" ? "debug" : "release";
+
 const AI_BIN =
   "/Applications/Adobe Illustrator 2025/Adobe Illustrator.app/Contents/MacOS/Adobe Illustrator";
 const BUILT_AIP = new URL(
-  "../output/mac/release/AiWebGPUPlugin.aip",
+  `../output/mac/${MODE_DIR}/AiWebGPUPlugin.aip`,
   import.meta.url
 );
 const AIP_DIST = new URL(

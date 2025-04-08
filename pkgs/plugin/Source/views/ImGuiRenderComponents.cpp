@@ -39,7 +39,9 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   // std::cout << "renderTree: " << renderTree.dump() << std::endl;
 
   std::function<void(json)> renderNode = [&](json node) -> void {
-    if (node.is_null() || !node.contains("type")) return;
+    if (node.is_null() || !node.is_object() || !node.contains("type") ||
+        !node.contains("nodeId"))
+      return;
 
     std::string type   = node["type"];
     std::string nodeId = node["nodeId"];
@@ -49,6 +51,8 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     std::optional<std::string> key = getOptional<std::string>(node["key"]);
 
     if (type == "group") {
+      if (!node.contains("children")) return;
+
       std::string         direction = node["direction"];
       std::optional<bool> disabled  = getOptional<bool>(node["disabled"]);
 
@@ -310,7 +314,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     // ImVec2 size = ImGui::GetWindowSize();
 
     *currentSize = size;
-    std::cout << "WindowSize: " << size.x << ", " << size.y << std::endl;
+    // std::cout << "WindowSize: " << size.x << ", " << size.y << std::endl;
   }
 
   ui::keyStack.reset();

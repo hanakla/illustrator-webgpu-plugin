@@ -25,6 +25,8 @@ import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
 import { selectiveColorCorrection } from "~ext/live-effects/selective-color-correction.ts";
 import { husky } from "~ext/live-effects/husky.ts";
 import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
+import { paperTexture } from "~ext/live-effects/paper-texture.ts";
+
 import { brushStroke } from "~ext/live-effects/blush-stroke.ts";
 import { comicTone } from "~ext/live-effects/comic-tone.ts";
 
@@ -34,6 +36,10 @@ import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
 
 const plugins = [
+  paperTexture,
+  gaussianBlur,
+  fluidDistortion,
+  halftone,
   comicTone,
   brushStroke,
   chromaticAberration,
@@ -41,16 +47,13 @@ const plugins = [
   directionalBlur,
   husky,
   exprTube,
-  gaussianBlur,
   dithering,
   selectiveColorCorrection,
   vhsInterlace,
   waveDistortion,
   dataMosh,
   downsampler,
-  halftone,
   kaleidoscope,
-  fluidDistortion,
   coastic,
   compressor,
   imageReverbGPU,

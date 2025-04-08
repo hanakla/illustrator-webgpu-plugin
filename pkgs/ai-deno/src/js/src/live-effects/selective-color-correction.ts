@@ -13,7 +13,7 @@ import {
   parseColorCode,
   toColorCode,
 } from "./_utils.ts";
-import { createGPUDevice } from "./_shared.ts";
+import { createGPUDevice, includeOklchMix } from "./_shared.ts";
 
 // 翻訳テキスト
 const t = createTranslator({
@@ -35,6 +35,7 @@ const t = createTranslator({
     saturationScale: "Saturation",
     brightnessScale: "Brightness",
     contrast: "Contrast",
+    mix: "Mix",
     blendMode: "Blend Mode",
     normal: "Normal",
     add: "Add",
@@ -61,6 +62,7 @@ const t = createTranslator({
     saturationScale: "彩度",
     brightnessScale: "明度",
     contrast: "コントラスト",
+    mix: "ミックス",
     blendMode: "ブレンドモード",
     normal: "通常",
     add: "加算",
@@ -95,6 +97,12 @@ export const selectiveColorCorrection = definePlugin({
         type: "string",
         enum: ["normal", "multiply"],
         default: "normal",
+      },
+
+      // ミックス (色調補正の適用度合い)
+      mix: {
+        type: "real",
+        default: 1.0,
       },
 
       // エッジぼかし
@@ -213,6 +221,9 @@ export const selectiveColorCorrection = definePlugin({
         Math.min(1, normalizedParams.contrast)
       );
 
+      // ミックスを0-1の範囲に制限
+      normalizedParams.mix = Math.max(0, Math.min(1, normalizedParams.mix));
+
       // エッジぼかし
       normalizedParams.featherEdges = Math.max(
         0,
@@ -232,6 +243,7 @@ export const selectiveColorCorrection = definePlugin({
         useCondition: t < 0.5 ? paramsA.useCondition : paramsB.useCondition,
 
         // 数値パラメータの線形補間
+        mix: lerp(paramsA.mix, paramsB.mix, t),
         featherEdges: lerp(paramsA.featherEdges, paramsB.featherEdges, t),
 
         // 色選択パラメータの補間
@@ -357,6 +369,31 @@ export const selectiveColorCorrection = definePlugin({
               text: "Reset",
               onClick: () => {
                 setParam({ contrast: 0 });
+              },
+            }),
+          ]),
+        ]),
+
+        // ミックス
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("mix") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "mix",
+              dataType: "float",
+              min: 0,
+              max: 1,
+              value: params.mix,
+            }),
+            ui.numberInput({
+              key: "mix",
+              dataType: "float",
+              value: params.mix,
+            }),
+            ui.button({
+              text: "Reset",
+              onClick: () => {
+                setParam({ mix: 1.0 });
               },
             }),
           ]),
@@ -496,20 +533,6 @@ export const selectiveColorCorrection = definePlugin({
           key: "useCondition",
           value: params.useCondition,
           label: t("conditionTitle"),
-          // onChange: (e) => {
-          //   if (!e.value) {
-          //     // チェックが外れたとき、選択条件をデフォルト値（すべての色）にリセット
-          //     setParam({
-          //       targetHue: 0.0,
-          //       hueRange: 180.0,   // 180以上で「すべての色相」を意味する
-          //       saturationMin: 0.0,
-          //       saturationMax: 1.0,
-          //       brightnessMin: 0.0,
-          //       brightnessMax: 1.0,
-          //       useCondition: false
-          //     });
-          //   }
-          // }
         }),
 
         // 条件セクション（チェックボックスがオンの場合のみ表示）
@@ -534,18 +557,15 @@ export const selectiveColorCorrection = definePlugin({
               saturationScale: f32,
               brightnessScale: f32,
               contrast: f32,
-              // パディングを追加して16バイト境界に合わせる
-              _padding1: f32,
-              _padding2: f32,
             }
 
             struct Params {
               outputSize: vec2i,
               dpiScale: f32,
-              blendMode: i32,  // 0: add, 1: multiply
+              blendMode: i32,  // 0: normal, 1: multiply
               featherEdges: f32,
               previewMask: i32,
-              // 配列が16バイト境界にアラインされるようにする
+              mix: f32,
               @align(16) condition: ColorCondition,
             }
 
@@ -663,37 +683,32 @@ export const selectiveColorCorrection = definePlugin({
               return hueMatch * satMatch * brightMatch;
             }
 
-            // 色を調整する関数
             fn adjustColor(hsv: vec3f, condition: ColorCondition) -> vec3f {
               var adjustedHsv = hsv;
 
-              // 色相調整
+              // Shift hue
               adjustedHsv.x = fract(adjustedHsv.x + condition.hueShift / 360.0);
 
-              // 彩度調整（1.0がニュートラル）
+              // Saturation (Neutral at 1.0)
               if (condition.saturationScale < 1.0) {
-                // 0〜1の範囲：彩度を下げる
+                // 0-1 range: Decrease saturation
                 adjustedHsv.y = adjustedHsv.y * condition.saturationScale;
               } else if (condition.saturationScale > 1.0) {
-                // 1〜2の範囲：彩度を上げる
+                // 1-2 range: Increase saturation
                 let saturationIncrease = (condition.saturationScale - 1.0);
                 adjustedHsv.y = adjustedHsv.y + (1.0 - adjustedHsv.y) * saturationIncrease;
               }
 
-              // 明度調整（1.0がニュートラル）
+              // Brightness (Neutral at 1.0)
               if (condition.brightnessScale < 1.0) {
-                // 0〜1の範囲：明度を下げる
                 adjustedHsv.z = adjustedHsv.z * condition.brightnessScale;
               } else if (condition.brightnessScale > 1.0) {
-                // 1〜2の範囲：明度を上げる
                 let brightnessIncrease = (condition.brightnessScale - 1.0);
                 adjustedHsv.z = adjustedHsv.z + (1.0 - adjustedHsv.z) * brightnessIncrease;
               }
 
-              // HSVからRGBに変換
               var rgb = hsv2rgb(adjustedHsv);
 
-              // コントラスト調整（1.0がニュートラル）
               if (condition.contrast != 1.0) {
                 let mid = vec3f(0.5);
                 rgb = mix(mid, rgb, condition.contrast);
@@ -709,34 +724,25 @@ export const selectiveColorCorrection = definePlugin({
               let texCoord = vec2f(id.xy) / dims;
               let toInputTexCoord = dims / adjustedDims;
 
-              // 256パディングピクセルを無視
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // 元の色を取得
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
-              // HSVに変換
               let originalHsv = rgb2hsv(originalColor.rgb);
 
-              // マッチング係数と調整結果を計算
               var finalColor = originalColor.rgb;
               var matchFactor = calculateMatchFactor(originalHsv, params.condition, params.featherEdges);
               var maskColor = vec3f(0.0);
 
               if (matchFactor > 0.0) {
-                // 調整結果を計算
                 let adjustedRgb = adjustColor(originalHsv, params.condition);
 
-                if (params.blendMode == 0) {
-                  // 通常モード - 調整結果をマッチング係数に基づいて直接適用
+                if (params.blendMode == 0) { // Normal
                   finalColor = mix(originalColor.rgb, adjustedRgb, matchFactor);
-                } else {
-                  // 乗算ブレンド - 調整を連続的に適用
+                } else { // Multiply
                   var currentColor = originalColor.rgb;
-                  // オリジナルの調整を適用
                   currentColor = mix(currentColor, adjustedRgb, matchFactor * 0.5);
 
-                  // 2回目の調整（より強い効果のため）
                   let secondHsv = rgb2hsv(currentColor);
                   let secondAdjusted = adjustColor(secondHsv, params.condition);
                   finalColor = mix(currentColor, secondAdjusted, matchFactor * 0.5);
@@ -745,15 +751,18 @@ export const selectiveColorCorrection = definePlugin({
                 maskColor = vec3f(matchFactor);
               }
 
-              // マスクプレビューモードの場合
               if (params.previewMask != 0) {
-                // マスクをグレースケールで表示
                 textureStore(resultTexture, id.xy, vec4f(maskColor, originalColor.a));
               } else {
-                // 最終的な色を適用
-                textureStore(resultTexture, id.xy, vec4f(finalColor, originalColor.a));
+                let mixedColor = mixOklch(originalColor.rgb, finalColor, params.mix);
+                textureStore(resultTexture, id.xy, vec4f(mixedColor, originalColor.a));
               }
             }
+
+            // This is includes below 2 functions
+            // fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklchMix()}
           `;
 
           const shader = device.createShaderModule({
@@ -835,6 +844,7 @@ export const selectiveColorCorrection = definePlugin({
         blendMode: blendModeInt,
         featherEdges: params.featherEdges,
         previewMask: params.previewMask ? 1 : 0,
+        mix: params.mix,
         condition: {
           ...(params.useCondition ? params : defaultCondition),
 

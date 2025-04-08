@@ -20,12 +20,12 @@ const t = createTranslator({
   en: {
     title: "Gaussian Blur",
     radius: "Blur Radius (px)",
-    strength: "Blur Strength",
+    sigma: "Strength",
   },
   ja: {
     title: "ガウスブラー",
     radius: "ぼかし半径 (px)",
-    strength: "ぼかし強度",
+    sigma: "強度",
   },
 });
 
@@ -40,35 +40,27 @@ export const gaussianBlur = definePlugin({
     },
     paramSchema: {
       radius: {
-        type: "int",
+        type: "real",
         default: 10,
       },
-      strength: {
+      sigma: {
         type: "real",
-        default: 1.0,
+        default: 0.33,
       },
     },
     onEditParameters: (params) => {
-      return {
-        ...params,
-        radius: Math.max(0, Math.min(200, params.radius)),
-        strength: Math.max(0, Math.min(2, params.strength)),
-      };
+      return params;
     },
     onAdjustColors: (params, adjustColor) => {
       return params;
     },
     onScaleParams(params, scaleFactor) {
-      return {
-        ...params,
-        radius: Math.round(params.radius * scaleFactor),
-        strength: params.strength,
-      };
+      return params;
     },
     onInterpolate: (paramsA, paramsB, t) => {
       return {
-        radius: Math.round(lerp(paramsA.radius, paramsB.radius, t)),
-        strength: lerp(paramsA.strength, paramsB.strength, t),
+        radius: lerp(paramsA.radius, paramsB.radius, t),
+        sigma: lerp(paramsA.sigma, paramsB.sigma, t),
       };
     },
     renderUI: (params, setParam) => {
@@ -77,15 +69,15 @@ export const gaussianBlur = definePlugin({
         ui.group({ direction: "col" }, [
           ui.text({ text: t("radius") }),
           ui.group({ direction: "row" }, [
-            ui.slider({ key: "radius", dataType: 'int', min: 1, max: 200, value: params.radius }),
-            ui.numberInput({ key: "radius", dataType: 'int', value: params.radius }),
+            ui.slider({ key: "radius", dataType: 'float', min: 1, max: 200, value: params.radius }),
+            ui.numberInput({ key: "radius", dataType: 'float', value: params.radius }),
           ]),
         ]),
         ui.group({ direction: "col" }, [
-          ui.text({ text: t("strength") }),
+          ui.text({ text: t("sigma") }),
           ui.group({ direction: "row" }, [
-            ui.slider({ key: "strength", dataType: 'float', min: 0, max: 2, value: params.strength }),
-            ui.numberInput({ key: "strength", dataType: 'float', value: params.strength }),
+            ui.slider({ key: "sigma", dataType: 'float', min: 0, max: 1, value: params.sigma }),
+            ui.numberInput({ key: "sigma", dataType: 'float', value: params.sigma }),
           ]),
         ]),
       ])
@@ -96,13 +88,13 @@ export const gaussianBlur = definePlugin({
           device: { label: "WebGPU(Gaussian Blur)" },
         },
         (device) => {
-          // 縦方向ブラーのシェーダー
-          const verticalBlurCode = `
+          const blurShaderCode = `
             struct Params {
               outputSize: vec2i,
               dpiScale: f32,
-              radius: i32,
-              strength: f32,
+              radius: f32,
+              sigma: f32,
+              direction: i32,  // 0: vertical, 1: horizontal
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -121,13 +113,15 @@ export const gaussianBlur = definePlugin({
               let dims = vec2f(params.outputSize);
               let texCoord = vec2f(id.xy) / dims;
               let toInputTexCoord = dims / adjustedDims;
+              let toScaledNomalizedAmountByPixels = 1.0 / (dims * params.dpiScale);
 
+              // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // DPIスケールを考慮したブラー半径とシグマの計算
               let radiusScaled = f32(params.radius) * params.dpiScale;
-              let sigma = radiusScaled * 0.33 * params.strength;
+              let sigma = radiusScaled * params.sigma;
 
+              // Return original color if no blur is applied
               if (sigma <= 0.0) {
                 let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
                 textureStore(resultTexture, id.xy, originalColor);
@@ -135,178 +129,75 @@ export const gaussianBlur = definePlugin({
               }
 
               let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-
-              // アルファとRGBを分けて計算するために変数を分ける
               let centerWeight = gaussianWeight(0.0, sigma);
 
-              // アルファ計算用
               var totalWeightAlpha = centerWeight;
               var resultAlpha = originalColor.a * centerWeight;
 
-              // RGB計算用（アルファで重み付け）
-              var totalWeightRGB = centerWeight * originalColor.a;
-              // アルファが0の場合でもRGB値を保持する（プリマルチプライドから戻す）
-              var resultRGB: vec3f;
+              var totalWeightColor = centerWeight;
+              var resultRGB = originalColor.rgb * centerWeight;
+
+              var weightedColorSum = vec3f(0.0);
+              var weightedColorWeight = 0.0;
+
               if (originalColor.a > 0.0) {
-                resultRGB = originalColor.rgb * centerWeight * originalColor.a;
-              } else {
-                // アルファが0の場合は周囲から色を推測するため初期値は0
-                resultRGB = vec3f(0.0);
+                weightedColorSum = originalColor.rgb * originalColor.a * centerWeight;
+                weightedColorWeight = originalColor.a * centerWeight;
               }
 
-              let pixelStep = 1.0 / dims.y;
-              let radiusScaledInt = i32(ceil(radiusScaled));
+              var pixelStep: f32;
+              if (params.direction == 0) {
+                pixelStep = 1.0 / dims.y;
+              } else {
+                pixelStep = 1.0 / dims.x;
+              }
 
-              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
+              for (var i = 0.1; i <= radiusScaled; i = i + 0.1) {
                 let offset = f32(i);
                 let weight = gaussianWeight(offset, sigma);
 
-                let offsetUp = vec2f(0.0, pixelStep * offset);
-                let offsetDown = vec2f(0.0, -pixelStep * offset);
+                var offsetPos: vec2f;
+                var offsetNeg: vec2f;
 
-                let upCoord = texCoord * toInputTexCoord + offsetUp;
-                let downCoord = texCoord * toInputTexCoord + offsetDown;
+                if (params.direction == 0) { // vertical
+                  offsetPos = vec2f(0.0, pixelStep * offset);
+                  offsetNeg = vec2f(0.0, -pixelStep * offset);
+                } else { // horizontal
+                  offsetPos = vec2f(pixelStep * offset, 0.0);
+                  offsetNeg = vec2f(-pixelStep * offset, 0.0);
+                }
 
-                let sampleUp = textureSampleLevel(inputTexture, textureSampler, upCoord, 0.0);
-                let sampleDown = textureSampleLevel(inputTexture, textureSampler, downCoord, 0.0);
+                let posCoord = texCoord * toInputTexCoord + offsetPos;
+                let negCoord = texCoord * toInputTexCoord + offsetNeg;
 
-                // アルファ値の計算
-                resultAlpha += (sampleUp.a + sampleDown.a) * weight;
+                let samplePos = textureSampleLevel(inputTexture, textureSampler, posCoord, 0.0);
+                let sampleNeg = textureSampleLevel(inputTexture, textureSampler, negCoord, 0.0);
+
+                resultAlpha += (samplePos.a + sampleNeg.a) * weight;
                 totalWeightAlpha += weight * 2.0;
 
-                // RGB値の計算（アルファで重み付け）
-                // アルファが0でなければRGBを考慮
-                if (sampleUp.a > 0.0) {
-                  resultRGB += sampleUp.rgb * weight * sampleUp.a;
-                  totalWeightRGB += weight * sampleUp.a;
+                resultRGB += (samplePos.rgb + sampleNeg.rgb) * weight;
+                totalWeightColor += weight * 2.0;
+
+                if (samplePos.a > 0.0) {
+                  weightedColorSum += samplePos.rgb * samplePos.a * weight;
+                  weightedColorWeight += samplePos.a * weight;
                 }
 
-                if (sampleDown.a > 0.0) {
-                  resultRGB += sampleDown.rgb * weight * sampleDown.a;
-                  totalWeightRGB += weight * sampleDown.a;
+                if (sampleNeg.a > 0.0) {
+                  weightedColorSum += sampleNeg.rgb * sampleNeg.a * weight;
+                  weightedColorWeight += sampleNeg.a * weight;
                 }
               }
 
-              // 最終的なアルファ値を計算
               resultAlpha = resultAlpha / totalWeightAlpha;
 
-              // RGB値の計算（アルファ重みで正規化）
               var finalRGB: vec3f;
-              if (totalWeightRGB > 0.0) {
-                finalRGB = resultRGB / totalWeightRGB;
+
+              if (weightedColorWeight > 0.0) {
+                finalRGB = weightedColorSum / weightedColorWeight;
               } else {
-                // アルファがすべて0なら、元の色を使用
-                finalRGB = originalColor.rgb;
-              }
-
-              let finalColor = vec4f(finalRGB, resultAlpha);
-
-              textureStore(resultTexture, id.xy, finalColor);
-            }
-          `;
-
-          // 横方向ブラーのシェーダー
-          const horizontalBlurCode = `
-            struct Params {
-              outputSize: vec2i,
-              dpiScale: f32,
-              radius: i32,
-              strength: f32,
-              alphaOnly: i32,
-            }
-
-            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-            @group(0) @binding(2) var textureSampler: sampler;
-            @group(0) @binding(3) var<uniform> params: Params;
-
-            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
-              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
-              return exp(gaussianExp) / (2.5066282746 * sigma);
-            }
-
-            @compute @workgroup_size(16, 16)
-            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let adjustedDims = vec2f(textureDimensions(inputTexture));
-              let dims = vec2f(params.outputSize);
-              let texCoord = vec2f(id.xy) / dims;
-              let toInputTexCoord = dims / adjustedDims;
-
-              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
-
-              // DPIスケールを考慮したブラー半径とシグマの計算
-              let radiusScaled = f32(params.radius) * params.dpiScale;
-              let sigma = radiusScaled * 0.33 * params.strength;
-
-              if (sigma <= 0.0) {
-                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-                textureStore(resultTexture, id.xy, originalColor);
-                return;
-              }
-
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-
-              // アルファとRGBを分けて計算するために変数を分ける
-              let centerWeight = gaussianWeight(0.0, sigma);
-
-              // アルファ計算用
-              var totalWeightAlpha = centerWeight;
-              var resultAlpha = originalColor.a * centerWeight;
-
-              // RGB計算用（アルファで重み付け）
-              var totalWeightRGB = centerWeight * originalColor.a;
-              // アルファが0の場合でもRGB値を保持する（プリマルチプライドから戻す）
-              var resultRGB: vec3f;
-              if (originalColor.a > 0.0) {
-                resultRGB = originalColor.rgb * centerWeight * originalColor.a;
-              } else {
-                // アルファが0の場合は周囲から色を推測するため初期値は0
-                resultRGB = vec3f(0.0);
-              }
-
-              let pixelStep = 1.0 / dims.x;
-              let radiusScaledInt = i32(ceil(radiusScaled));
-
-              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
-                let offset = f32(i);
-                let weight = gaussianWeight(offset, sigma);
-
-                let offsetRight = vec2f(pixelStep * offset, 0.0);
-                let offsetLeft = vec2f(-pixelStep * offset, 0.0);
-
-                let rightCoord = texCoord * toInputTexCoord + offsetRight;
-                let leftCoord = texCoord * toInputTexCoord + offsetLeft;
-
-                let sampleRight = textureSampleLevel(inputTexture, textureSampler, rightCoord, 0.0);
-                let sampleLeft = textureSampleLevel(inputTexture, textureSampler, leftCoord, 0.0);
-
-                // アルファ値の計算
-                resultAlpha += (sampleRight.a + sampleLeft.a) * weight;
-                totalWeightAlpha += weight * 2.0;
-
-                // RGB値の計算（アルファで重み付け）
-                // アルファが0でなければRGBを考慮
-                if (sampleRight.a > 0.0) {
-                  resultRGB += sampleRight.rgb * weight * sampleRight.a;
-                  totalWeightRGB += weight * sampleRight.a;
-                }
-
-                if (sampleLeft.a > 0.0) {
-                  resultRGB += sampleLeft.rgb * weight * sampleLeft.a;
-                  totalWeightRGB += weight * sampleLeft.a;
-                }
-              }
-
-              // 最終的なアルファ値を計算
-              resultAlpha = resultAlpha / totalWeightAlpha;
-
-              // RGB値の計算（アルファ重みで正規化）
-              var finalRGB: vec3f;
-              if (totalWeightRGB > 0.0) {
-                finalRGB = resultRGB / totalWeightRGB;
-              } else {
-                // アルファがすべて0なら、元の色を使用
-                finalRGB = originalColor.rgb;
+                finalRGB = resultRGB / totalWeightColor;
               }
 
               let finalColor = vec4f(finalRGB, resultAlpha);
@@ -314,78 +205,50 @@ export const gaussianBlur = definePlugin({
             }
           `;
 
-          const verticalShader = device.createShaderModule({
-            label: "Gaussian Blur Vertical Shader",
-            code: verticalBlurCode,
+          const blurShader = device.createShaderModule({
+            label: "Gaussian Blur Shader",
+            code: blurShaderCode,
           });
 
-          const horizontalShader = device.createShaderModule({
-            label: "Gaussian Blur Horizontal Shader",
-            code: horizontalBlurCode,
-          });
+          const blurPipelineDef = makeShaderDataDefinitions(blurShaderCode);
 
-          const verticalPipelineDef =
-            makeShaderDataDefinitions(verticalBlurCode);
-          const horizontalPipelineDef =
-            makeShaderDataDefinitions(horizontalBlurCode);
-
-          const verticalPipeline = device.createComputePipeline({
-            label: "Gaussian Blur Vertical Pipeline",
+          const blurPipeline = device.createComputePipeline({
+            label: "Gaussian Blur Pipeline",
             layout: "auto",
             compute: {
-              module: verticalShader,
-              entryPoint: "computeMain",
-            },
-          });
-
-          const horizontalPipeline = device.createComputePipeline({
-            label: "Gaussian Blur Horizontal Pipeline",
-            layout: "auto",
-            compute: {
-              module: horizontalShader,
+              module: blurShader,
               entryPoint: "computeMain",
             },
           });
 
           return {
             device,
-            verticalPipeline,
-            horizontalPipeline,
-            verticalPipelineDef,
-            horizontalPipelineDef,
+            blurPipeline,
+            blurPipelineDef,
           };
         }
       );
     },
     goLiveEffect: async (
-      {
-        device,
-        verticalPipeline,
-        horizontalPipeline,
-        verticalPipelineDef,
-        horizontalPipelineDef,
-      },
+      { device, blurPipeline, blurPipelineDef },
       params,
       imgData,
       { dpi, baseDpi }
     ) => {
       console.log("Gaussian Blur V1", params);
 
-      // DPIを考慮したパディングサイズの計算
       const dpiRatio = dpi / baseDpi;
-      const paddingSize = Math.ceil(params.radius * dpiRatio);
-      imgData = await paddingImageData(imgData, paddingSize);
+      const paddingSize = Math.ceil(params.radius);
+      imgData = await paddingImageData(imgData, paddingSize * dpiRatio);
 
       const outputWidth = imgData.width;
       const outputHeight = imgData.height;
 
-      // WebGPU向けのアライメントパディングを追加
       imgData = await addWebGPUAlignmentPadding(imgData);
 
       const bufferInputWidth = imgData.width,
         bufferInputHeight = imgData.height;
 
-      // 入力テクスチャ
       const inputTexture = device.createTexture({
         label: "Gaussian Blur Input Texture",
         size: [bufferInputWidth, bufferInputHeight],
@@ -396,7 +259,6 @@ export const gaussianBlur = definePlugin({
           GPUTextureUsage.STORAGE_BINDING,
       });
 
-      // 中間テクスチャ（縦方向ブラーの結果を保存）
       const intermediateTexture = device.createTexture({
         label: "Gaussian Blur Intermediate Texture",
         size: [bufferInputWidth, bufferInputHeight],
@@ -405,7 +267,6 @@ export const gaussianBlur = definePlugin({
           GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
       });
 
-      // 結果テクスチャ
       const resultTexture = device.createTexture({
         label: "Gaussian Blur Result Texture",
         size: [bufferInputWidth, bufferInputHeight],
@@ -413,16 +274,14 @@ export const gaussianBlur = definePlugin({
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
-      // サンプラー
       const sampler = device.createSampler({
         label: "Gaussian Blur Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
-      // 縦方向パスのユニフォームバッファ
       const verticalUniformValues = makeStructuredView(
-        verticalPipelineDef.uniforms.params
+        blurPipelineDef.uniforms.params
       );
       const verticalUniformBuffer = device.createBuffer({
         label: "Gaussian Blur Vertical Params Buffer",
@@ -430,9 +289,8 @@ export const gaussianBlur = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      // 横方向パスのユニフォームバッファ
       const horizontalUniformValues = makeStructuredView(
-        horizontalPipelineDef.uniforms.params
+        blurPipelineDef.uniforms.params
       );
       const horizontalUniformBuffer = device.createBuffer({
         label: "Gaussian Blur Horizontal Params Buffer",
@@ -440,19 +298,20 @@ export const gaussianBlur = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      // ユニフォーム値を設定
       verticalUniformValues.set({
         outputSize: [outputWidth, outputHeight],
         dpiScale: dpi / baseDpi,
         radius: params.radius,
-        strength: params.strength,
+        sigma: params.sigma,
+        direction: 0, // vertical
       });
 
       horizontalUniformValues.set({
         outputSize: [outputWidth, outputHeight],
         dpiScale: dpi / baseDpi,
         radius: params.radius,
-        strength: params.strength,
+        sigma: params.sigma,
+        direction: 1, // horizontal
       });
 
       device.queue.writeBuffer(
@@ -466,10 +325,9 @@ export const gaussianBlur = definePlugin({
         horizontalUniformValues.arrayBuffer
       );
 
-      // 縦方向パスのバインドグループ
       const verticalBindGroup = device.createBindGroup({
         label: "Gaussian Blur Vertical Bind Group",
-        layout: verticalPipeline.getBindGroupLayout(0),
+        layout: blurPipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
@@ -490,10 +348,9 @@ export const gaussianBlur = definePlugin({
         ],
       });
 
-      // 横方向パスのバインドグループ
       const horizontalBindGroup = device.createBindGroup({
         label: "Gaussian Blur Horizontal Bind Group",
-        layout: horizontalPipeline.getBindGroupLayout(0),
+        layout: blurPipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
@@ -520,7 +377,6 @@ export const gaussianBlur = definePlugin({
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       });
 
-      // 入力テクスチャにデータを書き込み
       device.queue.writeTexture(
         { texture: inputTexture },
         imgData.data,
@@ -528,16 +384,14 @@ export const gaussianBlur = definePlugin({
         [bufferInputWidth, bufferInputHeight]
       );
 
-      // コマンドエンコーダを作成
       const commandEncoder = device.createCommandEncoder({
         label: "Gaussian Blur Command Encoder",
       });
 
-      // 縦方向パスを実行
       const verticalPass = commandEncoder.beginComputePass({
         label: "Gaussian Blur Vertical Pass",
       });
-      verticalPass.setPipeline(verticalPipeline);
+      verticalPass.setPipeline(blurPipeline);
       verticalPass.setBindGroup(0, verticalBindGroup);
       verticalPass.dispatchWorkgroups(
         Math.ceil(bufferInputWidth / 16),
@@ -545,11 +399,10 @@ export const gaussianBlur = definePlugin({
       );
       verticalPass.end();
 
-      // 横方向パスを実行
       const horizontalPass = commandEncoder.beginComputePass({
         label: "Gaussian Blur Horizontal Pass",
       });
-      horizontalPass.setPipeline(horizontalPipeline);
+      horizontalPass.setPipeline(blurPipeline);
       horizontalPass.setBindGroup(0, horizontalBindGroup);
       horizontalPass.dispatchWorkgroups(
         Math.ceil(bufferInputWidth / 16),
@@ -557,17 +410,14 @@ export const gaussianBlur = definePlugin({
       );
       horizontalPass.end();
 
-      // 結果をステージングバッファにコピー
       commandEncoder.copyTextureToBuffer(
         { texture: resultTexture },
         { buffer: stagingBuffer, bytesPerRow: bufferInputWidth * 4 },
         [bufferInputWidth, bufferInputHeight]
       );
 
-      // コマンドをキューに送信して実行
       device.queue.submit([commandEncoder.finish()]);
 
-      // 結果を読み取り
       await stagingBuffer.mapAsync(GPUMapMode.READ);
       const copyArrayBuffer = stagingBuffer.getMappedRange();
       const resultData = new Uint8Array(copyArrayBuffer.slice(0));
@@ -579,7 +429,6 @@ export const gaussianBlur = definePlugin({
         bufferInputHeight
       );
 
-      // パディングを取り除いて最終的な結果を返す
       return await removeWebGPUAlignmentPadding(
         resultImageData,
         outputWidth,

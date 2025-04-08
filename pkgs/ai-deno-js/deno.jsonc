@@ -1,5 +1,5 @@
 {
-  "name": "@hanakla/dinostrator",
+  "name": "@hanakla/ai-deno",
   "version": "0.0.1-pre.1",
   "description": "Plugin creater for @hanakla/ai-deno",
   "exports": {

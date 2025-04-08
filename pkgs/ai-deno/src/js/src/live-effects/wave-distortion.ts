@@ -289,8 +289,8 @@ export const waveDistortion = definePlugin({
 
       const sampler = device.createSampler({
         label: "Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // Create uniform buffer

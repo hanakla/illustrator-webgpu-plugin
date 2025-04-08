@@ -566,6 +566,7 @@ export const brushStroke = definePlugin({
           });
 
           const pipelineDef = makeShaderDataDefinitions(code);
+          console.log({ shader });
 
           const pipeline = device.createComputePipeline({
             label: "Brush Stroke Pipeline",

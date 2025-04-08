@@ -82,7 +82,6 @@ export const kirakiraBlur = definePlugin({
         ...params,
         radius: Math.max(0, Math.min(200, params.radius)),
         strength: Math.max(0, Math.min(2, params.strength)),
-        sparkle: Math.max(0, Math.min(1, params.sparkle)),
       };
     },
     onAdjustColors: (params, adjustColor) => {
@@ -154,7 +153,7 @@ export const kirakiraBlur = definePlugin({
             ui.text({ text: t("customColor") }),
             ui.colorInput({ key: "customColor", value: params.customColor }),
             ui.textInput({ key: "customColorText", value: customColorStr, onChange: (e) => {
-              setParam({ customColor: parseColorCode(e.value) })
+              setParam({ customColor: parseColorCode(e.value)! })
             }}),
           ]),
         ]),

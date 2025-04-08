@@ -27,6 +27,8 @@ import { selectiveColorCorrection } from "./live-effects/selective-color-correct
 import { dataMosh } from "./live-effects/data-mosh.ts";
 import { gaussianBlur } from "./live-effects/gaussian-blur.ts";
 import { brushStroke } from "./live-effects/blush-stroke.ts";
+import { paperTexture } from "./live-effects/paper-texture.ts";
+import { comicTone } from "./live-effects/comic-tone.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
@@ -34,6 +36,7 @@ const allPlugins: AIPlugin<any, any>[] = [
   brushStroke,
   chromaticAberration,
   coastic,
+  comicTone,
   dataMosh,
   directionalBlur,
   dithering,
@@ -46,6 +49,7 @@ const allPlugins: AIPlugin<any, any>[] = [
   kaleidoscope,
   kirakiraBlur,
   outline,
+  paperTexture,
   // pixelSort,
   // randomNoiseEffect,
   selectiveColorCorrection,
@@ -142,11 +146,11 @@ type NodeState = {
 // Holding latest editor tree and state
 let nodeState: NodeState | null = null;
 
-export function getEffectViewNode(id: string, params: any): UINode {
-  const effect = findEffect(id);
+export function getEffectViewNode(effectId: string, params: any): UINode {
+  const effect = findEffect(effectId);
   if (!effect) return null;
 
-  params = getParams(id, params);
+  params = getParams(effectId, params);
   params = effect.liveEffect.onEditParameters?.(params) ?? params;
 
   let localNodeState: NodeState | null = null;
@@ -164,7 +168,7 @@ export function getEffectViewNode(id: string, params: any): UINode {
     const next = Object.assign({}, localNodeState.latestParams, update);
 
     // Normalize parameters
-    localNodeState.latestParams = editLiveEffectParameters(id, next);
+    localNodeState.latestParams = editLiveEffectParameters(effectId, next);
   };
 
   try {
@@ -354,25 +358,6 @@ export const goLiveEffect = async (
   logger.log("goLiveEffect", { id, input: { width, height }, env, params });
   logger.log("--- LiveEffect Logs ---");
   try {
-    const dpiScale = env.dpi / env.baseDpi;
-    // const input = await resizeImageData(
-    //   {
-    //     data,
-    //     width,
-    //     height,
-    //   },
-    //   width * dpiScale,
-    //   height * dpiScale
-    // );
-
-    // await cropImageData(
-    //   ,
-    //   0,
-    //   0,
-    //   width,
-    //   height
-    // );
-
     const input = {
       data,
       width,

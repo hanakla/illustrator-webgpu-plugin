@@ -764,8 +764,8 @@ export const comicTone = definePlugin({
 
       const sampler = device.createSampler({
         label: "Comic Tone Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // Create uniform buffer

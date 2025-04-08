@@ -4,6 +4,5 @@
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/pkgs/ai-deno" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/pkgs/plugin/deps/imgui" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/pkgs/rustyscript" vcs="Git" />
   </component>
 </project>

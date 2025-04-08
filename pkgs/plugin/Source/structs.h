@@ -12,7 +12,7 @@ struct PluginParams {
 };
 
 struct PluginPreferences {
-  AIPoint* windowPosition = nullptr;
+  std::optional<AIPoint> windowPosition = std::nullopt;
 };
 
 enum ModalStatusCode { None = 0, Cancel = 1, OK = 2 };

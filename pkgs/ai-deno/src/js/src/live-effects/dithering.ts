@@ -226,60 +226,6 @@ export const dithering = definePlugin({
               return dot(color, vec3f(0.299, 0.587, 0.114));
             }
 
-            // Apply Gaussian-like blur to the pixel at given coordinates
-            // Handles straight (non-premultiplied) alpha correctly
-            fn applyBlur(tex: texture_2d<f32>, samp: sampler, coords: vec2f, blurSize: f32, dims: vec2f) -> vec4f {
-              // When blur amount is 0, just return the original color
-              if (blurSize <= 0.0) {
-                return textureSampleLevel(tex, samp, coords, 0.0);
-              }
-
-              let step = 1.0 / dims;
-              let offset = step * blurSize;
-
-              // 3x3 blur kernel with weighted samples
-              let c00 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, -offset.y), 0.0);
-              let c10 = textureSampleLevel(tex, samp, coords + vec2f(0.0, -offset.y), 0.0);
-              let c20 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, -offset.y), 0.0);
-
-              let c01 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, 0.0), 0.0);
-              let c11 = textureSampleLevel(tex, samp, coords, 0.0);
-              let c21 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, 0.0), 0.0);
-
-              let c02 = textureSampleLevel(tex, samp, coords + vec2f(-offset.x, offset.y), 0.0);
-              let c12 = textureSampleLevel(tex, samp, coords + vec2f(0.0, offset.y), 0.0);
-              let c22 = textureSampleLevel(tex, samp, coords + vec2f(offset.x, offset.y), 0.0);
-
-              // First handle alpha channel separately with weighted sum
-              let alphaSum = c00.a * 0.0625 + c10.a * 0.125 + c20.a * 0.0625 +
-                             c01.a * 0.125  + c11.a * 0.25  + c21.a * 0.125 +
-                             c02.a * 0.0625 + c12.a * 0.125 + c22.a * 0.0625;
-
-              // Premultiply alpha before summing
-              let pc00 = vec4f(c00.rgb * c00.a, c00.a) * 0.0625;
-              let pc10 = vec4f(c10.rgb * c10.a, c10.a) * 0.125;
-              let pc20 = vec4f(c20.rgb * c20.a, c20.a) * 0.0625;
-
-              let pc01 = vec4f(c01.rgb * c01.a, c01.a) * 0.125;
-              let pc11 = vec4f(c11.rgb * c11.a, c11.a) * 0.25;
-              let pc21 = vec4f(c21.rgb * c21.a, c21.a) * 0.125;
-
-              let pc02 = vec4f(c02.rgb * c02.a, c02.a) * 0.0625;
-              let pc12 = vec4f(c12.rgb * c12.a, c12.a) * 0.125;
-              let pc22 = vec4f(c22.rgb * c22.a, c22.a) * 0.0625;
-
-              // Sum the premultiplied values
-              let premultResult = pc00 + pc10 + pc20 + pc01 + pc11 + pc21 + pc02 + pc12 + pc22;
-
-              // Convert back to straight alpha (unpremultiply)
-              var result = premultResult;
-              if (alphaSum > 0.0) {
-                result = vec4f(premultResult.rgb / alphaSum, alphaSum);
-              }
-
-              return result;
-            }
-
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
               let dimsWithGPUPadding = vec2f(textureDimensions(inputTexture));
@@ -290,8 +236,8 @@ export const dithering = definePlugin({
               // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // Apply blur for anti-moiré if needed
-              let originalColor = applyBlur(inputTexture, inputTextureSampler, texCoord * toInputTexCoord, params.blurAmount, dimsWithGPUPadding);
+              // Get original color
+              let originalColor = textureSampleLevel(inputTexture, inputTextureSampler, texCoord * toInputTexCoord, 0.0);
 
               let patternDims = vec2f(textureDimensions(ditherPatternTexture));
               // Apply pattern scale to coordinates
@@ -306,13 +252,21 @@ export const dithering = definePlugin({
               if (params.colorMode == 0u) {
                 // Monochrome mode
                 let gray = rgbToGrayscale(originalColor.rgb);
-                let dithered = step(bayerValue, gray + (params.threshold - 0.5));
+                let thresholdValue = params.threshold;
+
+                // If gray value is above threshold, no dots (white)
+                // Otherwise apply dithering pattern
+                let dithered = select(step(bayerValue, gray), 1.0, gray >= thresholdValue);
                 finalColor = vec4f(vec3f(dithered), originalColor.a);
               } else {
                 // Color mode
-                let ditheredR = step(bayerValue, originalColor.r + (params.threshold - 0.5));
-                let ditheredG = step(bayerValue, originalColor.g + (params.threshold - 0.5));
-                let ditheredB = step(bayerValue, originalColor.b + (params.threshold - 0.5));
+                let thresholdValue = params.threshold;
+
+                // For each color channel, if value is above threshold, no dots
+                // Otherwise apply dithering pattern
+                let ditheredR = select(step(bayerValue, originalColor.r), 1.0, originalColor.r >= thresholdValue);
+                let ditheredG = select(step(bayerValue, originalColor.g), 1.0, originalColor.g >= thresholdValue);
+                let ditheredB = select(step(bayerValue, originalColor.b), 1.0, originalColor.b >= thresholdValue);
                 finalColor = vec4f(ditheredR, ditheredG, ditheredB, originalColor.a);
               }
 
@@ -429,7 +383,6 @@ export const dithering = definePlugin({
             : params.patternType === "bayer8x8"? 2
             : 0,
         colorMode: params.colorMode === "monochrome" ? 0 : 1,
-        blurAmount: params.blurAmount,
         patternScale: params.patternScale,
       });
 

@@ -149,11 +149,11 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
   csl("**");
   csl("** GO LIVE!! EFFECT!!!");
   csl("**");
-    
-  suai::LiveEffect* effect = new suai::LiveEffect(message->effect);
-  std::string effectName  = effect->getName();
 
-  AIArtHandle art     = message->art;
+  suai::LiveEffect* effect     = new suai::LiveEffect(message->effect);
+  std::string       effectName = effect->getName();
+
+  AIArtHandle art = message->art;
 
   // It is must be 72, if it changed, illustrator will be crash
   int baseDpi = 72;
@@ -624,30 +624,32 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     PluginPreferences pref = this->getPreferences(&error);
     CHKERR();
 
-    std::tuple<int, int>* lastPosition;
-    if (pref.windowPosition != nullptr) {
-      std::tuple<int, int> pos =
-          std::make_tuple(pref.windowPosition->h, pref.windowPosition->v);
-      lastPosition = &pos;
+    std::tuple<int, int> lastPosition;
+    if (pref.windowPosition) {
+      auto pos     = std::make_tuple(pref.windowPosition->h, pref.windowPosition->v);
+      lastPosition = pos;
+    } else {
+      auto pos     = std::make_tuple(0, 0);
+      lastPosition = pos;
     }
 
     isModalOpened         = true;
     this->editingEffectId = normalizeEffectId;
-    csl("Opening modal: %s", nodeTree.dump().c_str());
+
+    csl("Opening modal: pos (%d, %d); %s", std::get<0>(lastPosition),
+        std::get<1>(lastPosition), nodeTree.dump().c_str());
     ModalStatusCode dialogResult = modal->runModal(
-        nodeTree, effectTitle, lastPosition, modalOnChangeCallback,
+        nodeTree, effectTitle, &lastPosition, modalOnChangeCallback,
         modalOnFireEventCallback
     );
 
-    if (lastPosition != nullptr) {
-      pref.windowPosition    = new AIPoint();
-      pref.windowPosition->h = std::get<0>(*lastPosition);
-      pref.windowPosition->v = std::get<1>(*lastPosition);
-      this->putPreferences(pref, &error);
-      csl("Saving window position: %d, %d", pref.windowPosition->h,
-          pref.windowPosition->v);
-      CHKERR();
-    }
+    pref.windowPosition    = AIPoint{};
+    pref.windowPosition->h = std::get<0>(lastPosition);
+    pref.windowPosition->v = std::get<1>(lastPosition);
+    this->putPreferences(pref, &error);
+    csl("Saving window position: %d, %d(%d, %d)", pref.windowPosition->h,
+        pref.windowPosition->v, std::get<0>(lastPosition), std::get<1>(lastPosition));
+    CHKERR();
 
     if (dialogResult == ModalStatusCode::OK) {
       csl("Put params to dictionary");
@@ -888,9 +890,13 @@ PluginPreferences HelloWorldPlugin::getPreferences(ASErr* err = nullptr) {
       AI_DENO_PREF_PREFIX, AI_DENO_PREF_WINDOW_POSITION, std::nullopt, &error
   );
   CHKERR();
-  pref.windowPosition = pos ? new AIPoint(*pos) : nullptr;
+  pref.windowPosition = pos;
 
-  csl("Get preferences: %s", pref.windowPosition == nullptr ? "null" : "not null");
+  if (pref.windowPosition) {
+    csl("Get preferences: %d, %d", pref.windowPosition->h, pref.windowPosition->v);
+  } else {
+    csl("Get preferences: null");
+  }
 
   return pref;
 }
@@ -899,10 +905,13 @@ void HelloWorldPlugin::putPreferences(PluginPreferences& pref, ASErr* err = null
   AIErr error = kNoErr;
   if (err == nullptr) err = &error;
 
-  suai::pref::putPoint(
-      AI_DENO_PREF_PREFIX, AI_DENO_PREF_WINDOW_POSITION, pref.windowPosition, &error
-  );
-  CHKERR();
+  if (pref.windowPosition.has_value()) {
+    AIPoint* point = &pref.windowPosition.value();
+    suai::pref::putPoint(
+        AI_DENO_PREF_PREFIX, AI_DENO_PREF_WINDOW_POSITION, point, &error
+    );
+    CHKERR();
+  }
 }
 
 void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult* request

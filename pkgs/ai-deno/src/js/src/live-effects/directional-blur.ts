@@ -12,7 +12,7 @@ import {
   addWebGPUAlignmentPadding,
   removeWebGPUAlignmentPadding,
 } from "./_utils.ts";
-import { createGPUDevice } from "./_shared.ts";
+import { createGPUDevice, includeOklchMix } from "./_shared.ts";
 
 const t = createTranslator({
   en: {
@@ -375,17 +375,22 @@ export const directionalBlur = definePlugin({
 
                 let blurredColor = vec4f(unpremultipliedRGB, normalizedAlpha);
 
-                finalColor = mix(originalColor, blurredColor, normalizedOpacity);
+                finalColor = mixOklchVec4(originalColor, blurredColor, normalizedOpacity);
 
                 let emphasisFactor = params.originalEmphasis * originalColor.a;
-                let blendedRGB = mix(finalColor.rgb, originalColor.rgb, emphasisFactor);
+                let blendedRGB = mixOklch(finalColor.rgb, originalColor.rgb, emphasisFactor);
                 finalColor = vec4f(blendedRGB, finalColor.a);
               } else {
                 finalColor = originalColor;
               }
 
+              // This is includes below 2 functions
+              // fn mixOklch(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+              // fn mixOklchVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
               textureStore(resultTexture, id.xy, finalColor);
             }
+
+            ${includeOklchMix()}
           `;
 
           const shader = device.createShaderModule({
