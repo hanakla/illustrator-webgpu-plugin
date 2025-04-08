@@ -1438,7 +1438,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "python3 ../../sdk/tools/pipl/create_pipl.py -input '[{\"name\":\"HelloWorld\"}, {\"entry_point\" : \"PluginMain\"}]' \n";
+			shellScript = "python3 ../../sdk/tools/pipl/create_pipl.py -input '[{\"name\":\"AiWebGPUPlugin\"}, {\"entry_point\" : \"PluginMain\"}]' \n";
 		};
 		FDD9160B21AC09BC0018B958 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;

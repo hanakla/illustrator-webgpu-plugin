@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include "AIGradient.h"
 #include "AIRasterize.h"
 #include "IllustratorSDK.h"

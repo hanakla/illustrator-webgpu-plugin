@@ -2,7 +2,7 @@
 
 #include <IllustratorSDK.h>
 #include <string>
-#include "json.hpp"
+#include <json.hpp>
 
 using json = nlohmann::json;
 

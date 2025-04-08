@@ -3,6 +3,11 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <chrono>
+#include <optional>
+#include <stack>
+#include <algorithm>
+
 #include "./libs/format.h"
 #include "./super-illustrator.h"
 #include "IllustratorSDK.h"
@@ -332,7 +337,7 @@ void dbg_printPixels(
 ) {
   std::cout << "Current Pixel Values (first 200 pixels):" << std::endl;
   for (ai::uint32 i = 0;
-       i < std::min(static_cast<ai::uint32>(200), totalPixels) * pixelStride;
+       i < (std::min)(static_cast<ai::uint32>(200), totalPixels) * pixelStride;
        i += pixelStride) {
     if (i + 3 >= totalPixels * pixelStride) break;
 

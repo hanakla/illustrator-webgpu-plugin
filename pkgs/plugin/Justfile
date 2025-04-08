@@ -1,3 +1,9 @@
+set windows-shell := ["powershell", "-c"]
+
+SDK_DIR := "../../sdk"
+OUTPUT_DIR := "./output"
+PROJECT_NAME := "AiWebGPUPlugin"
+
 [macos]
 run-ai:
     echo '' > illustrator.log
@@ -19,3 +25,65 @@ cpp-sandbox:
     clang++ -std=c++23 ./Sandbox/main.cpp -o /tmp/sandbox_bin
     /tmp/sandbox_bin
     rm /tmp/sandbox_bin
+
+[windows]
+build-debug:
+    @echo "Building Debug with Clang..."
+    @if (-not (Test-Path "{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Debug")) { New-Item -ItemType Directory -Path "{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Debug" -Force }
+    @if (-not (Test-Path "{{OUTPUT_DIR}}\win\x64\Debug")) { New-Item -ItemType Directory -Path "{{OUTPUT_DIR}}\win\x64\Debug" -Force }
+       @python {{SDK_DIR}}/tools/pipl/create_pipl.py -input '[{\"name\":\"AiWebGPUPlugin\"}, {\"entry_point\" : \"PluginMain\"}]'
+    @clang-cl -std:c++23 -fno-ms-compatibility -stdlib=libc++ \
+        -D_DEBUG -D_WINDOWS -DWIN_ENV \
+        -I.\Source -I.\Resources \
+        -I{{SDK_DIR}}/samplecode/common/includes \
+        -I{{SDK_DIR}}/illustratorapi/ate \
+        -I{{SDK_DIR}}/illustratorapi/illustrator \
+        -I{{SDK_DIR}}/illustratorapi/illustrator/actions \
+        -I{{SDK_DIR}}/illustratorapi/pica_sp \
+        -I{{SDK_DIR}}/illustratorapi/illustrator/legacy \
+        -I../ai-deno/target/release/includes \
+        -I./deps/json -I./deps/format -I./deps/imgui \
+        -FI{{SDK_DIR}}/samplecode/common/win/pragma.h \
+        -Zi -Od -MDd -W4 -wd4100 -Fo"{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Debug\\" \
+        -Fd"{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Debug\\" \
+        .\Source\*.cpp \
+        {{SDK_DIR}}/samplecode/common/source/AppContext.cpp \
+        {{SDK_DIR}}/samplecode/common/source/IllustratorSDK.cpp \
+        {{SDK_DIR}}/samplecode/common/source/Main.cpp \
+        {{SDK_DIR}}/samplecode/common/source/Plugin.cpp \
+        {{SDK_DIR}}/samplecode/common/source/Suites.cpp \
+        {{SDK_DIR}}/illustratorapi/illustrator/IAIUnicodeString.cpp \
+        -link -DLL -OUT:"{{OUTPUT_DIR}}\win\x64\Debug\{{PROJECT_NAME}}.aip" \
+        -LIBPATH:"C:\Program Files\LLVM\lib" -lc++ \
+        -DEF:{{SDK_DIR}}/samplecode/common/win/PluginMain.def
+
+[windows]
+build-release:
+    @echo "Building Release with Clang..."
+    @if (-not (Test-Path "{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Release")) { New-Item -ItemType Directory -Path "{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Release" -Force }
+    @if (-not (Test-Path "{{OUTPUT_DIR}}\win\x64\Release")) { New-Item -ItemType Directory -Path "{{OUTPUT_DIR}}\win\x64\Release" -Force }
+    @python {{SDK_DIR}}/tools/pipl/create_pipl.py -input '[{\"name\":\"AiWebGPUPlugin\"}, {\"entry_point\" : \"PluginMain\"}]'
+    @clang-cl -std:c++23 -fno-ms-compatibility -stdlib=libc++ \
+        -DNDEBUG -D_WINDOWS -DWIN_ENV \
+        -I.\Source -I.\Resources \
+        -I{{SDK_DIR}}/samplecode/common/includes \
+        -I{{SDK_DIR}}/illustratorapi/ate \
+        -I{{SDK_DIR}}/illustratorapi/illustrator \
+        -I{{SDK_DIR}}/illustratorapi/illustrator/actions \
+        -I{{SDK_DIR}}/illustratorapi/pica_sp \
+        -I{{SDK_DIR}}/illustratorapi/illustrator/legacy \
+        -I../ai-deno/target/release/includes \
+        -I./deps/json -I./deps/format -I./deps/imgui \
+        -FI{{SDK_DIR}}/samplecode/common/win/pragma.h \
+        -O2 -MD -W4 -wd4100 -Fo"{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Release\\" \
+        -Fd"{{OUTPUT_DIR}}\objects\x64\{{PROJECT_NAME}}\Release\\" \
+        .\Source\*.cpp \
+        {{SDK_DIR}}/samplecode/common/source/AppContext.cpp \
+        {{SDK_DIR}}/samplecode/common/source/IllustratorSDK.cpp \
+        {{SDK_DIR}}/samplecode/common/source/Main.cpp \
+        {{SDK_DIR}}/samplecode/common/source/Plugin.cpp \
+        {{SDK_DIR}}/samplecode/common/source/Suites.cpp \
+        {{SDK_DIR}}/illustratorapi/illustrator/IAIUnicodeString.cpp \
+        -link -DLL -OUT:"{{OUTPUT_DIR}}\win\x64\Release\{{PROJECT_NAME}}.aip" \
+        -LIBPATH:"C:\Program Files\LLVM\lib" -lc++ \
+        -DEF:{{SDK_DIR}}/samplecode/common/win/PluginMain.def

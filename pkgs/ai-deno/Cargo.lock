@@ -119,6 +119,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "cargo-clean",
  "cbindgen",
  "dashmap 6.1.0",
  "deno_ast",
@@ -793,6 +794,15 @@ checksum = "3b4a6cae9efc04cc6cbb8faf338d2c497c165c83e74509cf4dbedea948bbf6e5"
 dependencies = [
  "quote",
  "syn 2.0.98",
+]
+
+[[package]]
+name = "cargo-clean"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15580e145362c6248b5bf276793ce52b498a9bbca8d6d53885f971b424625ccd"
+dependencies = [
+ "anyhow",
 ]
 
 [[package]]

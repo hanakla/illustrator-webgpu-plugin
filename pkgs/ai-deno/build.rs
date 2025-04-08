@@ -26,12 +26,19 @@ use std::path::PathBuf;
 // );
 
 fn main() {
-    // macOS用の設定
     #[cfg(target_os = "macos")]
     {
         println!("cargo:rustc-cdylib-link-arg=-undefined");
         println!("cargo:rustc-cdylib-link-arg=dynamic_lookup");
         // println!("cargo:rustc-link-arg=-Wl,-force_load,./target/release/gn_out/obj/libai_deno.a");
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("cargo:rustc-link-lib=ws2_32");
+        println!("cargo:rustc-link-lib=iphlpapi");
+        println!("cargo:rustc-link-lib=static=ai_deno");
+        println!("cargo:rustc-link-lib=dylib=ai_deno");
     }
 
     // Make snapshot for avoid to confliction native symbols in future versions of v8

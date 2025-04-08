@@ -268,8 +268,8 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
     AITile workTile   = {0};
     workTile.colBytes = bytes;
 
-    uint32 sourceWidth  = artSlice.right - artSlice.left;
-    uint32 sourceHeight = artSlice.bottom - artSlice.top;
+    ai::uint32 sourceWidth  = artSlice.right - artSlice.left;
+    ai::uint32 sourceHeight = artSlice.bottom - artSlice.top;
 
     size_t dataSize   = sourceWidth * sourceHeight * bytes;
     workTile.data     = new unsigned char[dataSize];
@@ -518,7 +518,8 @@ ASErr HelloWorldPlugin::EditLiveEffectParameters(AILiveEffectEditParamMessage* m
     AIWindowRef hwndParent;
     error = sAIAppContext->GetPlatformAppWindow(&hwndParent);
     CHKERR();
-    int dialogResult = myImGuiDialog::runModal((HWND)hwndParent);
+    //int dialogResult = myImGuiDialog::runModal((HWND)hwndParent);
+    modal = ImGuiModal::createModal((HWND)hwndParent);
 #endif
 
     bool isModalOpened = true;
