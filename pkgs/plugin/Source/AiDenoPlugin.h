@@ -3,15 +3,17 @@
 #ifndef __HelloWorldPlugin_h__
 #define __HelloWorldPlugin_h__
 
+#include <optional>
+
 #include <AIDictionary.h>
 #include <AIRasterize.h>
 #include <IllustratorSDK.h>
 #include "./consts.h"
 #include "./libs/format.h"
-#include "Plugin.hpp"
-#include "SDKErrors.h"
-#include "json.hpp"
-#include "libai_deno.h"
+#include <Plugin.hpp>
+#include <SDKErrors.h>
+#include <json.hpp>
+#include <libai_deno.h>
 
 #include "./bridging.h"
 #include "./views/ImgUIEditModal.h"

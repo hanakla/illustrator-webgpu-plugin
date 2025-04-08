@@ -4,7 +4,7 @@
 
 #include <functional>
 #include <iostream>
-#include "ImgUiConfig.h"
+#include <optional>
 
 #ifndef __APPLE__
 #include "Windows.h"
@@ -15,6 +15,7 @@
 #include <Foundation/Foundation.h>
 #endif
 
+#include "ImgUiConfig.h"
 #include "../consts.h"
 #include "json.hpp"
 

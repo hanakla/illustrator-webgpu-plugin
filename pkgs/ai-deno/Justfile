@@ -1,12 +1,21 @@
+set windows-shell := ["powershell", "-c"]
+
 build:
     cargo clean -p ai-deno
     yarn tsup src/js/src/main.ts --outDir src/js/dist --format esm
     cargo build --release
 
+[windows]
+watch:
+    cargo clean -p ai-deno -p deno_core
+    powershell -Command "Start-Process -NoNewWindow just -ArgumentList 'watch-js'; cargo watch --clear -x 'build --release'"
+
+[unix]
 watch:
     cargo clean -p ai-deno -p deno_core
     just watch-js & cargo watch --clear  -x "build --release"
 
+[unix]
 watch-debug:
     cargo clean -p ai-deno -p deno_core
     just watch-js & cargo watch --clear  -x "build"
@@ -15,7 +24,7 @@ watch-debug:
 watch-example:
     cargo watch --clear  -x "run example"
 
-[macos]
+[unix]
 show-externs:
     nm -m target/release/libai_deno.a
 

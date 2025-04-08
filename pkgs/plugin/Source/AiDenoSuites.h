@@ -4,7 +4,7 @@
 #include <AIBlock.h>
 #include <AIGradient.h>
 #include <AIRasterize.h>
-#include "IllustratorSDK.h"
+#include <IllustratorSDK.h>
 #include "Suites.hpp"
 
 // Suite externs

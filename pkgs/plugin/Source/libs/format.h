@@ -28,7 +28,12 @@ std::string string_format(const char* format, Args... args) {
 template <typename... Args>
 char* string_format_to_char(const char* format, Args... args) {
   std::string result = string_format(std::string(format), args...);
-  char*       cstr   = new char[result.length() + 1];
-  strcpy(cstr, result.c_str());
+  size_t length = result.length();
+  char* cstr = new char[length + 1];
+  
+  // 安全なコピー処理
+  std::copy(result.begin(), result.end(), cstr);
+  cstr[length] = '\0';  // 終端のNULL文字を追加
+  
   return cstr;
 }

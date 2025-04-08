@@ -16,30 +16,31 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\common\source\IllustratorSDK.cpp">
+    <ClCompile Include="..\..\sdk\samplecode\common\source\IllustratorSDK.cpp">
       <Filter>Source Files\Shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\common\source\Suites.cpp">
+    <ClCompile Include="..\..\sdk\samplecode\common\source\Suites.cpp">
       <Filter>Source Files\Shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\common\source\Plugin.cpp">
+    <ClCompile Include="..\..\sdk\samplecode\common\source\Plugin.cpp">
       <Filter>Source Files\Shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\common\source\Main.cpp">
+    <ClCompile Include="..\..\sdk\samplecode\common\source\Main.cpp">
       <Filter>Source Files\Shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\common\source\AppContext.cpp">
+    <ClCompile Include="..\..\sdk\samplecode\common\source\AppContext.cpp">
       <Filter>Source Files\Shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\illustratorapi\illustrator\IAIUnicodeString.cpp">
+    <ClCompile Include="..\..\sdk\illustratorapi\illustrator\IAIUnicodeString.cpp">
       <Filter>Source Files\Shared</Filter>
     </ClCompile>
-    <ClCompile Include="Source\HelloWorldPlugin.cpp">
+    <ClCompile Include="Source\AiDenoPlugin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\HelloWorldSuites.cpp">
+    <ClCompile Include="Source\AiDenoSuites.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\views\ImGuiRenderComponents.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\AiDenoPlugin.h">
@@ -54,14 +55,15 @@
     <ClInclude Include="Resources\resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\libs\format.h" />
+    <ClInclude Include="Source\libs\regex.h" />
+    <ClInclude Include="Source\views\ImgUiConfig.h" />
+    <ClInclude Include="Source\views\ImgUiEditModal.h" />
+    <ClInclude Include="Source\views\ImgUIEditModal_osx.h" />
+    <ClInclude Include="Source\views\ImGuiRenderComponents.h" />
+    <ClInclude Include="Source\views\ImGuiTheme.h" />
   </ItemGroup>
   <ItemGroup>
-
-    <ResourceCompile Include="Resources\HelloWorld.rc">
-
-      <Filter>Resource Files</Filter>
-
-    </ResourceCompile>
-
+    <ResourceCompile Include="Resources\Win\AiWebGPUPlugin.rc" />
   </ItemGroup>
 </Project>

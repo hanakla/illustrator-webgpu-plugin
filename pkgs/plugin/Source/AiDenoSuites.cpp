@@ -42,5 +42,5 @@ ImportSuite gImportSuites[] = {
     {kAIPreferenceSuite, kAIPreferenceSuiteVersion, &sAIPref},
     {kAIMaskSuite, kAIMaskSuiteVersion, &sAIMask},
     {kAIGradientSuite, kAIGradientSuiteVersion, &sAIGradient},
-    {nil, 0, nil}
+    {NULL, 0, NULL}
 };
