@@ -1,5 +1,5 @@
 import { decodeBase64 } from "jsr:@std/encoding@1.0.7";
-import { ColorRGBA } from "../types.ts";
+import { ColorRGBA } from "../plugin.ts";
 
 const createCanvasImpl: (
   width: number,

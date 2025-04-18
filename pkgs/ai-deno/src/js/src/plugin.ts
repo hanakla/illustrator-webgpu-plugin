@@ -145,6 +145,7 @@ export type LiveEffectEnv = {
 export type AIPlugin<
   T extends ParameterSchema,
   TInit,
+  S,
   Params = ParameterSchemaToState<T>
 > = {
   id: string;
@@ -217,28 +218,33 @@ export type AIPlugin<
 
     renderUI: (
       params: Params,
-      setParam: (
-        update: Partial<Params> | ((prev: Params) => Partial<Params>)
-      ) => void
+      api: {
+        setParam: (
+          update: Partial<Params> | ((prev: Params) => Partial<Params>)
+        ) => void;
+        useStateObject: <T>(
+          initialValue: T
+        ) => readonly [T, (value: T) => void];
+      }
     ) => UINode;
   };
 };
 
-export type AIEffectPlugin<T extends ParameterSchema, TInit> = Ensure<
-  AIPlugin<T, TInit>,
+export type AIEffectPlugin<T extends ParameterSchema, S, TInit> = Ensure<
+  AIPlugin<T, S, TInit>,
   "liveEffect"
 >;
 
 type Ensure<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
 
-export type PluginParameters<T extends AIPlugin<any, any>> =
+export type PluginParameters<T extends AIPlugin<any, any, any>> =
   // prettier-ignore
-  T extends AIPlugin<infer P, any>
+  T extends AIPlugin<infer P, any, any>
     ? ParameterSchemaToState<P>
     : never;
 
-export function definePlugin<T extends ParameterSchema, IT>(
-  plugin: AIPlugin<T, IT>
+export function definePlugin<T extends ParameterSchema, S, TInit>(
+  plugin: AIPlugin<T, S, TInit>
 ) {
   return plugin;
 }

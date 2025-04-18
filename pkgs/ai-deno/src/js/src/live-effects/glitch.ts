@@ -2,8 +2,8 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin } from "../plugin.ts";
 import { ui } from "../ui/nodes.ts";
 import {
   lerp,
@@ -96,7 +96,7 @@ export const glitch = definePlugin({
       };
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       // prettier-ignore
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
@@ -260,8 +260,8 @@ export const glitch = definePlugin({
       });
 
       const sampler = device.createSampler({
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge",
       });

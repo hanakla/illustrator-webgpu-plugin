@@ -264,6 +264,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
     }
   } catch (...) {
     [self.window.contentView releaseDialog];
+    [NSApp endModalSession:session];
     throw;
   }
 

@@ -2,8 +2,8 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -120,7 +120,7 @@ export const kirakiraBlur = definePlugin({
         },
       };
     },
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       const customColorStr = toColorCode(params.customColor);
 
       // prettier-ignore
@@ -574,8 +574,8 @@ export const kirakiraBlur = definePlugin({
       // サンプラー
       const sampler = device.createSampler({
         label: "Kirakira Blur Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // 縦方向パスのユニフォームバッファ

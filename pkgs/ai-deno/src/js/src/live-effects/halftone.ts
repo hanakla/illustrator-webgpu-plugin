@@ -2,7 +2,7 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag, definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag, definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -102,7 +102,7 @@ export const halftone = definePlugin({
       };
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       const colorStr = toColorCode(params.color);
 
       return ui.group({ direction: "col" }, [
@@ -343,8 +343,8 @@ fn computeMain(@builtin(global_invocation_id) id: vec3u) {
 
       const sampler = device.createSampler({
         label: "Halftone Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // Create uniform buffer

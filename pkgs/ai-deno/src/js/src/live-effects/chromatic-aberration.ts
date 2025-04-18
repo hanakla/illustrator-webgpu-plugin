@@ -2,8 +2,8 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin } from "../plugin.ts";
 import { ui } from "../ui/nodes.ts";
 import { texts, createTranslator } from "../ui/locale.ts";
 import {

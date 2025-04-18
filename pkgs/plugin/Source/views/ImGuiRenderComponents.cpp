@@ -48,21 +48,29 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     std::string idStr  = "##" + nodeId;
     const char* id     = idStr.c_str();
 
-    std::optional<std::string> key = getOptional<std::string>(node["key"]);
+    std::optional<std::string> key      = getOptional<std::string>(node["key"]);
+    std::optional<bool>        disabled = getOptional<bool>(node["disabled"]);
+
+    auto disableIfNeeded = [&]() {
+      if (disabled.value_or(false)) { ImGui::BeginDisabled(); }
+    };
+
+    auto undisableIfNeeded = [&]() {
+      if (disabled.value_or(false)) { ImGui::EndDisabled(); }
+    };
 
     if (type == "group") {
       if (!node.contains("children")) return;
 
-      std::string         direction = node["direction"];
-      std::optional<bool> disabled  = getOptional<bool>(node["disabled"]);
+      std::string direction = node["direction"];
 
       ImGui::BeginGroup();
-      if (disabled.value_or(false)) { ui::styleStack.beginDisabled(); }
+      disableIfNeeded();
       for (json& child : node["children"]) {
         renderNode(child);
         if (direction == "row") ImGui::SameLine();
       }
-      if (disabled.value_or(false)) { ui::styleStack.endDisabled(); }
+      undisableIfNeeded();
       ImGui::EndGroup();
 
     } else if (type == "text") {
@@ -73,32 +81,40 @@ ModalStatusCode AiDenoImGuiRenderComponents(
     } else if (type == "button") {
       std::string label = node["text"].get<std::string>() + idStr;
 
+      disableIfNeeded();
       ui::styleStack.pushVar(ImGuiStyleVar_FrameRounding, 16.0f);
       ui::styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
       if (ui::Button(
               label.c_str(),
               ButtonProps{.kind = ButtonKind::Default, .size = ButtonSize::Sm}
           )) {
-        onFireEventCallback(ImGuiModal::EventCallbackPayload{
-            .type   = "click",
-            .nodeId = nodeId,
-        });
+        onFireEventCallback(
+            ImGuiModal::EventCallbackPayload{
+                .type   = "click",
+                .nodeId = nodeId,
+            }
+        );
       }
       ui::styleStack.clear();
+      undisableIfNeeded();
 
     } else if (type == "textInput") {
       std::string value = node["value"].get<std::string>();
 
+      disableIfNeeded();
       if (ImGui::InputText(id, &value, ImGuiInputTextFlags_None)) {
         std::cout << "value: " << value << std::endl;
         if (key) { onChangeCallback(json::object({{key, value}})); }
 
-        onFireEventCallback(ImGuiModal::EventCallbackPayload{
-            .type   = "change",
-            .nodeId = nodeId,
-            .value  = value,
-        });
+        onFireEventCallback(
+            ImGuiModal::EventCallbackPayload{
+                .type   = "change",
+                .nodeId = nodeId,
+                .value  = value,
+            }
+        );
       }
+      undisableIfNeeded();
 
     } else if (type == "numberInput") {
       std::string          dataType    = node["dataType"];
@@ -109,6 +125,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       float                original    = valueCommon;
       bool                 onChanged   = false;
 
+      disableIfNeeded();
       if (dataType == "int") {
         int value = (int)valueCommon;
 
@@ -120,11 +137,13 @@ ModalStatusCode AiDenoImGuiRenderComponents(
           );
 
           if (key) { onChangeCallback(json::object({{key, static_cast<int>(value)}})); }
-          onFireEventCallback(ImGuiModal::EventCallbackPayload{
-              .type   = "change",
-              .nodeId = nodeId,
-              .value  = value,
-          });
+          onFireEventCallback(
+              ImGuiModal::EventCallbackPayload{
+                  .type   = "change",
+                  .nodeId = nodeId,
+                  .value  = value,
+              }
+          );
         }
       } else if (dataType == "float") {
         float value = valueCommon;
@@ -134,13 +153,16 @@ ModalStatusCode AiDenoImGuiRenderComponents(
           valueCommon = std::clamp(value, min.value_or(INT_MIN), max.value_or(INT_MAX));
 
           if (key) { onChangeCallback(json::object({{key, value}})); }
-          onFireEventCallback(ImGuiModal::EventCallbackPayload{
-              .type   = "change",
-              .nodeId = nodeId,
-              .value  = value,
-          });
+          onFireEventCallback(
+              ImGuiModal::EventCallbackPayload{
+                  .type   = "change",
+                  .nodeId = nodeId,
+                  .value  = value,
+              }
+          );
         }
       }
+      undisableIfNeeded();
 
       if (!onChanged && ImGui::IsItemActive() && ImGui::IsItemFocused()) {
         ImGui::SetItemKeyOwner(ImGuiKey_UpArrow);
@@ -166,11 +188,13 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
         if (isUpArrow || isDownArrow) {
           if (key) { onChangeCallback(json::object({{key, valueCommon}})); }
-          onFireEventCallback(ImGuiModal::EventCallbackPayload{
-              .type   = "change",
-              .nodeId = nodeId,
-              .value  = valueCommon,
-          });
+          onFireEventCallback(
+              ImGuiModal::EventCallbackPayload{
+                  .type   = "change",
+                  .nodeId = nodeId,
+                  .value  = valueCommon,
+              }
+          );
         }
       }
 
@@ -185,6 +209,7 @@ ModalStatusCode AiDenoImGuiRenderComponents(
 
       ImVec4 colorVec = ImVec4(channels[0], channels[1], channels[2], channels[3]);
 
+      disableIfNeeded();
       if (ImGui::ColorButton(id, colorVec)) { ImGui::OpenPopup(popupId.c_str()); }
 
       // ポップアップカラーピッカー
@@ -208,76 +233,93 @@ ModalStatusCode AiDenoImGuiRenderComponents(
             }));
           }
 
-          onFireEventCallback(ImGuiModal::EventCallbackPayload{
-              .type   = "change",
-              .nodeId = nodeId,
-              .value  = jsonValue,
-          });
+          onFireEventCallback(
+              ImGuiModal::EventCallbackPayload{
+                  .type   = "change",
+                  .nodeId = nodeId,
+                  .value  = jsonValue,
+              }
+          );
         }
 
         ImGui::EndPopup();
       }
+      undisableIfNeeded();
 
     } else if (type == "checkbox") {
       std::string label = node["label"].get<std::string>() + idStr;
       bool        value = node["value"].get<bool>();
 
+      disableIfNeeded();
       if (ImGui::Checkbox(label.c_str(), &value)) {
         if (key) { onChangeCallback(json({{key, value}})); }
 
-        onFireEventCallback(ImGuiModal::EventCallbackPayload{
-            .type   = "change",
-            .nodeId = nodeId,
-            .value  = value,
-        });
+        onFireEventCallback(
+            ImGuiModal::EventCallbackPayload{
+                .type   = "change",
+                .nodeId = nodeId,
+                .value  = value,
+            }
+        );
       }
+      undisableIfNeeded();
 
     } else if (type == "slider") {
       std::string dataType = node["dataType"].get<std::string>();
       float       min      = node["min"].get<float>();
       float       max      = node["max"].get<float>();
 
+      disableIfNeeded();
       if (dataType == "int") {
         int value = node["value"];
 
         if (ImGui::SliderInt(id, &value, (int)min, (int)max)) {
           if (key) { onChangeCallback(json({{key, value}})); }
-          onFireEventCallback(ImGuiModal::EventCallbackPayload{
-              .type   = "change",
-              .nodeId = nodeId,
-              .value  = value,
-          });
+          onFireEventCallback(
+              ImGuiModal::EventCallbackPayload{
+                  .type   = "change",
+                  .nodeId = nodeId,
+                  .value  = value,
+              }
+          );
         }
       } else if (dataType == "float") {
         float value = node["value"];
 
         if (ImGui::SliderFloat(id, &value, min, max)) {
           if (key) { onChangeCallback(json({{key, value}})); }
-          onFireEventCallback(ImGuiModal::EventCallbackPayload{
-              .type   = "change",
-              .nodeId = nodeId,
-              .value  = value,
-          });
+          onFireEventCallback(
+              ImGuiModal::EventCallbackPayload{
+                  .type   = "change",
+                  .nodeId = nodeId,
+                  .value  = value,
+              }
+          );
         }
       }
+      undisableIfNeeded();
 
     } else if (type == "select") {
       int selectedIndex            = node["selectedIndex"].get<int>();
       auto [labels, values, count] = parseSelectOptions(node["options"]);
 
+      disableIfNeeded();
       ui::styleStack.pushColor(ImGuiCol_FrameBg, currentTheme.gray50);
       ui::styleStack.pushColor(ImGuiCol_FrameBgHovered, currentTheme.gray200);
       ui::styleStack.pushColor(ImGuiCol_FrameBgActive, currentTheme.gray100);
       if (ImGui::Combo(id, &selectedIndex, labels, count, -1)) {
         if (key) { onChangeCallback(json({{key, values[selectedIndex]}})); }
 
-        onFireEventCallback(ImGuiModal::EventCallbackPayload{
-            .type   = "change",
-            .nodeId = nodeId,
-            .value  = values[selectedIndex],
-        });
+        onFireEventCallback(
+            ImGuiModal::EventCallbackPayload{
+                .type   = "change",
+                .nodeId = nodeId,
+                .value  = values[selectedIndex],
+            }
+        );
       }
       ui::styleStack.clear();
+      undisableIfNeeded();
 
       freeSelectOptions(labels, count);
 

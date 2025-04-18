@@ -1,5 +1,5 @@
 import { CanvasRenderingContext2D } from "jsr:@gfx/canvas";
-import { StyleFilterFlag, definePlugin } from "../types.ts";
+import { StyleFilterFlag, definePlugin } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -156,7 +156,7 @@ export const paperTexture = definePlugin({
         ),
       };
     },
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
           ui.text({ text: t("paperType") }),
@@ -645,8 +645,8 @@ async function processWithWebGPU(
 
   // サンプラーの作成
   const sampler = device.createSampler({
-    magFilter: "linear",
-    minFilter: "linear",
+    magFilter: "nearest",
+    minFilter: "nearest",
   });
 
   // ユニフォームバッファの作成

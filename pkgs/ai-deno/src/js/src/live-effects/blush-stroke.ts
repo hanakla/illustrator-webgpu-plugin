@@ -2,7 +2,7 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag, definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag, definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -112,7 +112,7 @@ export const brushStroke = definePlugin({
       };
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
           ui.text({ text: t("angle") }),

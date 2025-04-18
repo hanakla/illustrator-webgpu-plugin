@@ -29,7 +29,7 @@ namespace ImGuiModal {
     std::string         nodeId;
     std::optional<json> value = std::nullopt;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(EventCallbackPayload, type, nodeId)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(EventCallbackPayload, type, nodeId, value)
   };
 
   class IModalImpl {

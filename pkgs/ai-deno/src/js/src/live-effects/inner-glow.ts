@@ -1,6 +1,6 @@
 import { logger } from "../logger.ts";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -53,6 +53,10 @@ export const innerGlow = definePlugin({
         default: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
       },
     },
+    onAdjustColors: (params) => {
+      // TODO
+      return params;
+    },
     onEditParameters: (params) => {
       return params;
     },
@@ -75,7 +79,7 @@ export const innerGlow = definePlugin({
       };
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       const glowColorString = `#${Math.round(params.glowColor.r * 255)
         .toString(16)
         .padStart(2, "0")}${Math.round(params.glowColor.g * 255)
@@ -266,8 +270,8 @@ export const innerGlow = definePlugin({
 
       const sampler = device.createSampler({
         label: "Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // Create uniform buffer for parameters

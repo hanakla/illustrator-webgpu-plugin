@@ -1,8 +1,10 @@
 // import { } from 'react'
 import "./mocks.ts";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useReducer } from "react";
 import { createRoot } from "react-dom/client";
 import { useEventCallback, useStableEvent, useThroughRef } from "./hooks.ts";
+
+import { UI_NODE_SCHEMA } from "~ext/ui/nodes.ts";
 
 import { gaussianBlur } from "~ext/live-effects/gaussian-blur.ts";
 import { pixelSort } from "~ext/live-effects/pixel-sort.ts";
@@ -26,6 +28,7 @@ import { selectiveColorCorrection } from "~ext/live-effects/selective-color-corr
 import { husky } from "~ext/live-effects/husky.ts";
 import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
 import { paperTexture } from "~ext/live-effects/paper-texture.ts";
+import { gradientMap } from "~ext/live-effects/gradient-map.ts";
 
 import { brushStroke } from "~ext/live-effects/blush-stroke.ts";
 import { comicTone } from "~ext/live-effects/comic-tone.ts";
@@ -34,8 +37,11 @@ import { compressor } from "~ext/live-effects/wips/compressor.ts";
 import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
 import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
+import { brotliDecompress } from "node:zlib";
 
 const plugins = [
+  kirakiraBlur,
+  gradientMap,
   paperTexture,
   gaussianBlur,
   fluidDistortion,
@@ -57,7 +63,6 @@ const plugins = [
   coastic,
   compressor,
   imageReverbGPU,
-  kirakiraBlur,
   glitch,
   pixelSort,
   outline,
@@ -98,9 +103,11 @@ function Controls({
   onParamsChange: (params: any) => void;
   onDpiChange: (dpi: number) => void;
 }) {
+  const [, rerender] = useReducer((x) => x + 1, 0);
   const [pluginId, setPluginId] = useState(plugins[0].id);
   const [currentPlugin, setCurrentPlugin] = useState(plugins[0]);
   const [params, setParams] = useState<any>(getInitialParams(currentPlugin));
+  const pluginStateRef = useRef<any>(undefined);
   const [dpi, setDpi] = useState(72);
   const [paused, setPaused] = useState(false);
   const [isPreviewMode, setPreviewMode] = useState(false);
@@ -333,12 +340,27 @@ function Controls({
     );
   }
 
+  function useStateObject<T>(initialValue: T) {
+    pluginStateRef.current ??= initialValue;
+
+    return [
+      pluginStateRef.current,
+      (newState: T) => {
+        pluginStateRef.current = newState;
+        rerender();
+      },
+    ];
+  }
+
   const renderUI = (params: any) => {
     const setParamFn = (patch: object | ((params: any) => any)) => {
       const nextParams = typeof patch === "function" ? patch(params) : patch;
       setParams((prev) => ({ ...prev, ...nextParams }));
     };
-    return currentPlugin.liveEffect.renderUI(params, setParamFn);
+    return currentPlugin.liveEffect.renderUI(params, {
+      setParam: setParamFn,
+      useStateObject,
+    });
   };
 
   const renderComponents = (node: any, idPrefix = ".") => {
@@ -359,6 +381,7 @@ function Controls({
       case "group":
         return (
           <div
+            key={nodeId}
             style={{
               display: "flex",
               flexDirection: node.direction === "col" ? "column" : "row",
@@ -371,12 +394,21 @@ function Controls({
           </div>
         );
       case "button":
-        return <button onClick={onClickHandler}>{node.text}</button>;
+        return (
+          <button
+            key={nodeId}
+            disabled={node.disabled}
+            onClick={onClickHandler}
+          >
+            {node.text}
+          </button>
+        );
       case "text":
-        return <div>{node.text}</div>;
+        return <div key={nodeId}>{node.text}</div>;
       case "textInput":
         return (
           <input
+            key={nodeId}
             type="text"
             value={node.value}
             onChange={(e) => {
@@ -388,8 +420,9 @@ function Controls({
       case "numberInput":
         return (
           <input
+            key={nodeId}
             type="number"
-            value={params[node.key]}
+            value={node.value}
             min={node.min}
             max={node.max}
             step={node.step ?? (node.dataType === "int" ? 1 : 0.01)}
@@ -407,14 +440,14 @@ function Controls({
           />
         );
       case "colorInput": {
-        const iC = params[node.key];
+        const iC = node.value;
         const r = ((iC.r * 255) | 0).toString(16).padStart(2, "0");
         const g = ((iC.g * 255) | 0).toString(16).padStart(2, "0");
         const b = ((iC.b * 255) | 0).toString(16).padStart(2, "0");
         const a = ((iC.a * 255) | 0).toString(16).padStart(2, "0");
 
         return (
-          <div>
+          <div key={nodeId}>
             <input
               type="color"
               value={`#${r}${g}${b}`}
@@ -447,10 +480,10 @@ function Controls({
       }
       case "checkbox":
         return (
-          <label style={{ display: "flex", alignItems: "center" }}>
+          <label key={nodeId} style={{ display: "flex", alignItems: "center" }}>
             <input
               type="checkbox"
-              checked={params[node.key]}
+              checked={node.value}
               onChange={(e) => {
                 if (node.key) onParamChanged(node.key, e.currentTarget.checked);
                 onChangeHandler(node, e.currentTarget.checked);
@@ -461,13 +494,13 @@ function Controls({
         );
       case "slider": {
         return (
-          <label style={{ display: "flex", alignItems: "center" }}>
+          <label key={nodeId} style={{ display: "flex", alignItems: "center" }}>
             {/* {node.label} */}
             <input
               type="range"
               min={node.min}
               max={node.max}
-              value={params[node.key]}
+              value={node.value}
               step={node.dataType === "int" ? 1 : 0.01}
               onChange={(e) => {
                 const target = e.currentTarget as HTMLInputElement;
@@ -485,7 +518,7 @@ function Controls({
       }
       case "select":
         return (
-          <label style={{ display: "flex", alignItems: "center" }}>
+          <label key={nodeId} style={{ display: "flex", alignItems: "center" }}>
             {/* {node.label} */}
             <select
               value={node.options[node.selectedIndex].value}
@@ -505,14 +538,20 @@ function Controls({
         );
       case "separator":
         return (
-          <hr style={{ flex: 1, borderTop: "1px solid #ddd", width: "100%" }} />
+          <hr
+            key={nodeId}
+            style={{ flex: 1, borderTop: "1px solid #ddd", width: "100%" }}
+          />
         );
       default:
         return null;
     }
   };
 
-  const tree = renderUI(params, nodeMap);
+  const tree = renderUI(params);
+
+  const parseResult = UI_NODE_SCHEMA.safeParse(tree);
+  console.info(parseResult);
 
   return (
     <div

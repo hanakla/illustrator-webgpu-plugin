@@ -1,3 +1,5 @@
+import { z } from "npm:zod@3.24.2";
+
 export const ui = {
   group: (
     { direction = "row" }: Omit<UINodeGroup, "type" | "children">,
@@ -12,6 +14,7 @@ export const ui = {
     fillByNull({
       text: props.text,
       onClick: props.onClick,
+      disabled: props.disabled,
       type: "button" as const,
     }),
   slider: (props: Omit<UINodeSlider, "type">): UINodeSlider =>
@@ -91,109 +94,172 @@ function fillByNull<T extends object>(obj: T): T {
   return obj;
 }
 
+type MakeOptional<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]?: T[P];
+};
+
+const ChangeEventSchema = z.object({
+  type: z.literal("change"),
+  value: z.any(),
+});
+
 type ChangeEvent<T = any> = {
   type: "change";
   value: T;
 };
 
-type ClickEvent = {
-  type: "click";
-};
+const ChangeEventHandlerSchema = z
+  .function()
+  .args(ChangeEventSchema)
+  .returns(z.union([z.void(), z.promise(z.void())]));
 
-type MakeOptional<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]?: T[P];
+const ChangeEventHandlerSchemaWith = <T extends z.ZodType>(type: T) => {
+  return z
+    .function()
+    .args(
+      ChangeEventSchema.extend({
+        value: type,
+      })
+    )
+    .returns(z.union([z.void(), z.promise(z.void())]));
 };
 
 export type ChangeEventHandler<T = any> = (
   event: ChangeEvent<T>
 ) => void | Promise<void>;
 
-export type ClickEventHandler = (event: ClickEvent) => void | Promise<void>;
+const ClickEventSchema = z.object({
+  type: z.literal("click"),
+});
+
+const ClickEventHandlerSchema = z
+  .function()
+  .args(ClickEventSchema)
+  .returns(z.union([z.void(), z.promise(z.void())]));
+export type ClickEventHandler = z.infer<typeof ClickEventHandlerSchema>;
+
+const UiNodeSliderSchema = z.object({
+  type: z.literal("slider"),
+  key: z.string().optional(),
+  disabled: z.boolean().optional(),
+  dataType: z.enum(["int", "float"]),
+  min: z.number(),
+  max: z.number(),
+  value: z.number(),
+  onChange: ChangeEventHandlerSchemaWith(z.number()).optional(),
+});
+
+export type UINodeSlider = z.infer<typeof UiNodeSliderSchema>;
+
+const UiNodeCheckboxSchema = z.object({
+  type: z.literal("checkbox"),
+  key: z.string().optional(),
+  disabled: z.boolean().optional(),
+  label: z.string(),
+  value: z.boolean(),
+  onChange: ChangeEventHandlerSchemaWith(z.boolean()).optional(),
+});
+
+export type UINodeCheckbox = z.infer<typeof UiNodeCheckboxSchema>;
+
+const UiNodeTextInputSchema = z.object({
+  type: z.literal("textInput"),
+  key: z.string().optional(),
+  disabled: z.boolean().optional(),
+  value: z.string(),
+  onChange: ChangeEventHandlerSchemaWith(z.string()).optional(),
+});
+
+export type UINodeTextInput = z.infer<typeof UiNodeTextInputSchema>;
+
+const UiNodeNumberInputSchema = z.object({
+  type: z.literal("numberInput"),
+  key: z.string().optional(),
+  disabled: z.boolean().optional(),
+  dataType: z.enum(["int", "float"]),
+  value: z.number(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
+  onChange: ChangeEventHandlerSchemaWith(z.number()).optional(),
+});
+
+export type UINodeNumberInput = z.infer<typeof UiNodeNumberInputSchema>;
+
+const UiNodeColorInput = z.object({
+  type: z.literal("colorInput"),
+  key: z.string().optional(),
+  disabled: z.boolean().optional(),
+  value: z.object({
+    r: z.number().min(0).max(1),
+    g: z.number().min(0).max(1),
+    b: z.number().min(0).max(1),
+    a: z.number().min(0).max(1),
+  }),
+  onChange: ChangeEventHandlerSchemaWith(
+    z.object({
+      r: z.number().min(0).max(1),
+      g: z.number().min(0).max(1),
+      b: z.number().min(0).max(1),
+      a: z.number().min(0).max(1),
+    })
+  ).optional(),
+});
+
+export type UINodeColorInput = z.infer<typeof UiNodeColorInput>;
+
+const UiNodeTextSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+  size: z.enum(["sm", "normal"]).optional(),
+});
+
+export type UINodeText = z.infer<typeof UiNodeTextSchema>;
+
+const UiNodeButtonSchema = z.object({
+  type: z.literal("button"),
+  text: z.string(),
+  disabled: z.boolean().optional(),
+  onClick: ClickEventHandlerSchema.optional(),
+});
+export type UINodeButton = z.infer<typeof UiNodeButtonSchema>;
+
+const UiSelectSchema = z.object({
+  type: z.literal("select"),
+  key: z.string().optional(),
+  disabled: z.boolean().optional(),
+  options: z.array(
+    z.object({
+      value: z.string(),
+      label: z.string(),
+    })
+  ),
+  value: z.string(),
+  selectedIndex: z.number(),
+  onChange: ChangeEventHandlerSchemaWith(z.string()).optional(),
+});
+
+export type UISelect = z.infer<typeof UiSelectSchema>;
+
+const UiSeparatorSchema = z.object({
+  type: z.literal("separator"),
+});
+export type UISeparator = z.infer<typeof UiSeparatorSchema>;
+
+const UiNodeGroupSchema: z.ZodType<UINodeGroup> = z.lazy(() =>
+  z.object({
+    type: z.literal("group"),
+    direction: z.enum(["col", "row"]),
+    disabled: z.boolean().optional(),
+    children: z.array(UI_NODE_SCHEMA),
+  })
+);
 
 export type UINodeGroup = {
   type: "group";
   direction: "col" | "row";
   disabled?: boolean;
   children: UINode[];
-};
-
-export type UINodeSlider = {
-  type: "slider";
-  key?: string;
-  dataType: "int" | "float";
-  min: number;
-  max: number;
-  value: number;
-  onChange?: ChangeEventHandler<number>;
-};
-
-export type UINodeCheckbox = {
-  type: "checkbox";
-  key?: string;
-  label: string;
-  value: boolean;
-  onChange?: ChangeEventHandler<boolean>;
-};
-
-export type UINodeTextInput = {
-  type: "textInput";
-  key?: string;
-  value: string;
-  onChange?: ChangeEventHandler<string>;
-};
-
-export type UINodeNumberInput = {
-  type: "numberInput";
-  dataType: "int" | "float";
-  key?: string;
-  value: number;
-  max?: number;
-  min?: number;
-  step?: number;
-  onChange?: ChangeEventHandler<number>;
-};
-
-export type UINodeColorInput = {
-  type: "colorInput";
-  key?: string;
-  // dataType: "rgb" | "rgba";
-  value: {
-    r: number;
-    g: number;
-    b: number;
-    a: number;
-  };
-  onChange?: ChangeEventHandler<{
-    r: number;
-    g: number;
-    b: number;
-    a: number;
-  }>;
-};
-
-export type UINodeText = {
-  type: "text";
-  text: string;
-  size: "sm" | "normal";
-};
-
-export type UINodeButton = {
-  type: "button";
-  text: string;
-  onClick?: ClickEventHandler;
-};
-
-export type UISelect = {
-  type: "select";
-  key: string;
-  options: { value: string; label: string }[];
-  value: string;
-  selectedIndex: number;
-  onChange?: ChangeEventHandler<string>;
-};
-
-export type UISeparator = {
-  type: "separator";
 };
 
 export type UINode =
@@ -208,3 +274,16 @@ export type UINode =
   | UISelect
   | UISeparator
   | null;
+
+export const UI_NODE_SCHEMA = z.union([
+  UiNodeGroupSchema,
+  UiNodeSliderSchema,
+  UiNodeCheckboxSchema,
+  UiNodeTextInputSchema,
+  UiNodeNumberInputSchema,
+  UiNodeColorInput,
+  UiNodeTextSchema,
+  UiNodeButtonSchema,
+  UiSelectSchema,
+  UiSeparatorSchema,
+]);

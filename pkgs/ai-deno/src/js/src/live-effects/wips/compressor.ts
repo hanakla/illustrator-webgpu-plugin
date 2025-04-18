@@ -1,5 +1,4 @@
-import { StyleFilterFlag } from "../../types.ts";
-import { definePlugin } from "../../types.ts";
+import { StyleFilterFlag, definePlugin } from "../../plugin.ts";
 import { createTranslator } from "../../ui/locale.ts";
 import { ui } from "../../ui/nodes.ts";
 import { createGPUDevice } from "../_shared.ts";

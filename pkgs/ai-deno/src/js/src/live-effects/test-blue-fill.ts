@@ -1,5 +1,5 @@
 import { toFileUrl, join } from "jsr:@std/path@1.0.8";
-import { definePlugin, StyleFilterFlag } from "../types.ts";
+import { definePlugin, StyleFilterFlag } from "../plugin.ts";
 import { ui } from "../ui/nodes.ts";
 import { toPng } from "./_utils.ts";
 import { paddingImageData } from "./_utils.ts";
@@ -151,7 +151,7 @@ export const testBlueFill = definePlugin({
         height,
       };
     },
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       const onClickSaveInputAsPng = async () => {
         if (!global.lastInput) {
           _AI_DENO_.op_ai_alert("No input data");

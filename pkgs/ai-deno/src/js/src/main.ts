@@ -1,5 +1,10 @@
 /// <reference path="../../ext/js/ai_extension.mjs.d.ts" />
-import { AIEffectPlugin, AIPlugin, LiveEffectEnv, ColorRGBA } from "./types.ts";
+import {
+  AIEffectPlugin,
+  AIPlugin,
+  LiveEffectEnv,
+  ColorRGBA,
+} from "./plugin.ts";
 import { expandGlobSync, ensureDirSync } from "jsr:@std/fs@1.0.14";
 import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
@@ -7,7 +12,7 @@ import { homedir } from "node:os";
 
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
-import { ChangeEventHandler, ui, UINode } from "./ui/nodes.ts";
+import { ChangeEventHandler, ui, UINode, UI_NODE_SCHEMA } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/directional-blur.ts";
 import { kirakiraBlur } from "./live-effects/kirakira-blur.ts";
 import { dithering } from "./live-effects/dithering.ts";
@@ -29,10 +34,12 @@ import { gaussianBlur } from "./live-effects/gaussian-blur.ts";
 import { brushStroke } from "./live-effects/blush-stroke.ts";
 import { paperTexture } from "./live-effects/paper-texture.ts";
 import { comicTone } from "./live-effects/comic-tone.ts";
+import { gradientMap } from "./live-effects/gradient-map.ts";
+import { husky } from "./live-effects/husky.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
-const allPlugins: AIPlugin<any, any>[] = [
+const allPlugins: AIPlugin<any, any, any>[] = [
   brushStroke,
   chromaticAberration,
   coastic,
@@ -44,27 +51,28 @@ const allPlugins: AIPlugin<any, any>[] = [
   fluidDistortion,
   gaussianBlur,
   glitch,
+  gradientMap,
   halftone,
+  husky,
   // innerGlow,
   kaleidoscope,
   kirakiraBlur,
   outline,
   paperTexture,
   // pixelSort,
-  // randomNoiseEffect,
   selectiveColorCorrection,
   testBlueFill,
   vhsInterlace,
   waveDistortion,
 ];
-const effectInits = new Map<AIPlugin<any, any>, any>();
+const effectInits = new Map<AIPlugin<any, any, any>, any>();
 
 const allEffectPlugins: Record<
   string,
-  AIEffectPlugin<any, any>
+  AIEffectPlugin<any, any, any>
 > = Object.fromEntries(
   allPlugins
-    .filter((p): p is AIEffectPlugin<any, any> => !!p.liveEffect)
+    .filter((p): p is AIEffectPlugin<any, any, any> => !!p.liveEffect)
     .map((p) => [p.id, p])
 );
 
@@ -72,7 +80,7 @@ const allEffectPlugins: Record<
 try {
   await Promise.all(
     Object.values(allEffectPlugins).map(
-      async (effect: AIEffectPlugin<any, any>) => {
+      async (effect: AIEffectPlugin<any, any, any>) => {
         return retry(6, async () => {
           try {
             effectInits.set(
@@ -80,7 +88,7 @@ try {
               (await effect.liveEffect.initLiveEffect?.()) ?? {}
             );
           } catch (e) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             throw new Error(
               `[effect: ${effect.id}] Failed to initialize effect`,
               {
@@ -141,6 +149,7 @@ type NodeState = {
   effectId: string;
   nodeMap: Map<string, UINode>;
   latestParams: any;
+  state: any;
 };
 
 // Holding latest editor tree and state
@@ -157,22 +166,55 @@ export function getEffectViewNode(effectId: string, params: any): UINode {
 
   const setParam = (update: Partial<any> | ((prev: any) => any)) => {
     if (!localNodeState) {
-      throw new Error("Unextected null localNodeState");
+      throw new Error("Unpextected null localNodeState");
     }
 
     const clone = structuredClone(localNodeState.latestParams);
+    let patch: Partial<any> | null = null;
     if (typeof update === "function") {
-      update = update(Object.freeze(clone));
+      patch = update(Object.freeze(clone));
+    } else {
+      patch = update;
     }
 
-    const next = Object.assign({}, localNodeState.latestParams, update);
+    const next = Object.assign({}, localNodeState.latestParams, patch);
+    console.log({ clone, patch });
 
     // Normalize parameters
     localNodeState.latestParams = editLiveEffectParameters(effectId, next);
   };
 
+  const useStateObject = <T>(initialState: T) => {
+    if (!localNodeState) {
+      throw new Error("Unpextected null localNodeState");
+    }
+
+    localNodeState.state ??= initialState;
+
+    const setState = (update: Partial<T> | ((prev: T) => T)) => {
+      if (!localNodeState) {
+        throw new Error("Unpextected null localNodeState");
+      }
+
+      if (typeof update === "function") {
+        update = update(Object.freeze(localNodeState.state));
+      }
+
+      localNodeState.state = Object.assign({}, localNodeState.state, update);
+    };
+
+    return [localNodeState.state, setState] as const;
+  };
+
   try {
-    let tree = effect.liveEffect.renderUI(params, setParam);
+    nodeState = localNodeState = {
+      effectId: effect.id,
+      nodeMap: null as any,
+      latestParams: params,
+      state: undefined,
+    };
+
+    let tree = effect.liveEffect.renderUI(params, { setParam, useStateObject });
 
     tree = ui.group({ direction: "col" }, [
       tree,
@@ -188,11 +230,17 @@ export function getEffectViewNode(effectId: string, params: any): UINode {
     ]);
 
     const nodeMap = attachNodeIds(tree);
-    nodeState = localNodeState = {
-      effectId: effect.id,
-      nodeMap,
-      latestParams: params,
-    };
+    localNodeState.nodeMap = nodeMap;
+
+    // const parseResult = UI_NODE_SCHEMA.safeParse(tree);
+    // if (!parseResult.success) {
+    //   logger.error(
+    //     "Invalid UI tree",
+    //     parseResult.error.message,
+    //     parseResult.error.errors
+    //   );
+    // }
+
     return tree;
   } catch (e) {
     logger.error(e);
@@ -226,6 +274,8 @@ export async function editLiveEffectFireCallback(
       updated: false,
     };
   }
+
+  logger.log("Fire event callback", { effectId, event, params });
 
   nodeState.latestParams = structuredClone(params);
   const current = params;
@@ -283,6 +333,9 @@ function attachNodeIds(node: UINode) {
   return nodeMap;
 }
 
+/**
+ * Handler of `LiveEffectAdjustColors`
+ */
 export function liveEffectAdjustColors(
   id: string,
   params: any,

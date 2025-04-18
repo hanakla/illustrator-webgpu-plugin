@@ -2,10 +2,10 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
-import { ui } from "../ui/nodes.ts";
+import { ChangeEventHandler, ui } from "../ui/nodes.ts";
 import {
   lerp,
   paddingImageData,
@@ -148,7 +148,13 @@ export const downsampler = definePlugin({
       };
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
+      const onChangeBlocksX: ChangeEventHandler = ({ value }) => {
+        console.log({ value });
+        setParam({ blocksX: value });
+        if (params.linkAxes) setParam({ blocksY: value });
+      };
+
       // prettier-ignore
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
@@ -171,22 +177,18 @@ export const downsampler = definePlugin({
               min: 1.0,
               max: MAX_BLOCKS,
               value: params.blocksX,
-              onChange: (e) => {
-                // 縦横連動が有効なら、Y軸の値も更新
-                if (params.linkAxes) {
-                  setParam({ blocksY: e.value });
-                }
-              }
+              onChange: onChangeBlocksX,
             }),
             ui.numberInput({ key: "blocksX", dataType: 'float', value: params.blocksX }),
           ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("blocksY") }),
-          ui.group({ direction: "row" }, [
+          ui.group({ direction: "row", }, [
             ui.slider({
               key: "blocksY",
               dataType: 'float',
+              disabled: params.linkAxes,
               min: 1.0,
               max: MAX_BLOCKS,
               value: params.blocksY,
@@ -194,6 +196,7 @@ export const downsampler = definePlugin({
             ui.numberInput({
               key: "blocksY",
               dataType: 'float',
+              disabled: params.linkAxes,
               value: params.blocksY,
             }),
           ]),
@@ -587,8 +590,8 @@ export const downsampler = definePlugin({
         label: "Texture Sampler",
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // Create uniform buffer

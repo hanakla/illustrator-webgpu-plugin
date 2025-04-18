@@ -2,8 +2,8 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -272,7 +272,7 @@ export const selectiveColorCorrection = definePlugin({
       return result;
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       const adjustmentsComponent = ui.group({ direction: "col" }, [
         // 色相シフト
         ui.group({ direction: "col" }, [
@@ -822,8 +822,8 @@ export const selectiveColorCorrection = definePlugin({
 
       const sampler = device.createSampler({
         label: "Selective Color Texture Sampler",
-        magFilter: "linear",
-        minFilter: "linear",
+        magFilter: "nearest",
+        minFilter: "nearest",
       });
 
       // ユニフォームバッファの作成

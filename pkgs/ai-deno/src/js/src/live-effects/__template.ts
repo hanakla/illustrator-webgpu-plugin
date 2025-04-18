@@ -9,7 +9,7 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag, definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag, definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -116,7 +116,7 @@ export const pluginTemplate = definePlugin({
       };
     },
 
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam, useStateObject }) => {
       // RMIT: You can convert color to string if neeeded
       // const colorStr = toColorCode(params.color);
 

@@ -1,4 +1,4 @@
-import { definePlugin, StyleFilterFlag } from "../../types.ts";
+import { definePlugin, StyleFilterFlag } from "../../plugin.ts";
 import { ui } from "../../ui/nodes.ts";
 import {
   imageToFFT,

@@ -2,8 +2,8 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import { StyleFilterFlag } from "../types.ts";
-import { definePlugin, ColorRGBA } from "../types.ts";
+import { StyleFilterFlag } from "../plugin.ts";
+import { definePlugin, ColorRGBA } from "../plugin.ts";
 import { createTranslator } from "../ui/locale.ts";
 import { ui } from "../ui/nodes.ts";
 import {
@@ -63,7 +63,7 @@ export const gaussianBlur = definePlugin({
         sigma: lerp(paramsA.sigma, paramsB.sigma, t),
       };
     },
-    renderUI: (params, setParam) => {
+    renderUI: (params, { setParam }) => {
       // prettier-ignore
       return ui.group({ direction: "col" }, [
         ui.group({ direction: "col" }, [
@@ -118,19 +118,18 @@ export const gaussianBlur = definePlugin({
               // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
+              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+
               let radiusScaled = f32(params.radius) * params.dpiScale;
               let sigma = radiusScaled * params.sigma;
 
               // Return original color if no blur is applied
               if (sigma <= 0.0) {
-                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
                 textureStore(resultTexture, id.xy, originalColor);
                 return;
               }
 
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
               let centerWeight = gaussianWeight(0.0, sigma);
-
               var totalWeightAlpha = centerWeight;
               var resultAlpha = originalColor.a * centerWeight;
 

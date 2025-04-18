@@ -2,7 +2,8 @@
   "name": "ai-deno",
   "packageManager": "yarn@4.6.0",
   "dependencies": {
-    "webgpu-utils": "^1.10.0"
+    "webgpu-utils": "^1.10.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.67",
