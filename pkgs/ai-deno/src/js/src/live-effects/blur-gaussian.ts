@@ -118,30 +118,30 @@ export const gaussianBlur = definePlugin({
               // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              let inputColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
               let radiusScaled = f32(params.radius) * params.dpiScale;
               let sigma = radiusScaled * params.sigma;
 
               // Return original color if no blur is applied
               if (sigma <= 0.0) {
-                textureStore(resultTexture, id.xy, originalColor);
+                textureStore(resultTexture, id.xy, inputColor);
                 return;
               }
 
               let centerWeight = gaussianWeight(0.0, sigma);
               var totalWeightAlpha = centerWeight;
-              var resultAlpha = originalColor.a * centerWeight;
+              var resultAlpha = inputColor.a * centerWeight;
 
               var totalWeightColor = centerWeight;
-              var resultRGB = originalColor.rgb * centerWeight;
+              var resultRGB = inputColor.rgb * centerWeight;
 
               var weightedColorSum = vec3f(0.0);
               var weightedColorWeight = 0.0;
 
-              if (originalColor.a > 0.0) {
-                weightedColorSum = originalColor.rgb * originalColor.a * centerWeight;
-                weightedColorWeight = originalColor.a * centerWeight;
+              if (inputColor.a > 0.0) {
+                weightedColorSum = inputColor.rgb * inputColor.a * centerWeight;
+                weightedColorWeight = inputColor.a * centerWeight;
               }
 
               var pixelStep: f32;

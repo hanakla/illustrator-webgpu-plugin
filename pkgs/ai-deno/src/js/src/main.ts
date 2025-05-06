@@ -1,4 +1,5 @@
-/// <reference path="../../ext/js/ai_extension.mjs.d.ts" />
+/// <reference path="../../ext/js/ai_extension.js.d.ts" />
+
 import {
   AIEffectPlugin,
   AIPlugin,
@@ -13,8 +14,8 @@ import { homedir } from "node:os";
 import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
 import { ChangeEventHandler, ui, UINode, UI_NODE_SCHEMA } from "./ui/nodes.ts";
-import { directionalBlur } from "./live-effects/directional-blur.ts";
-import { kirakiraBlur } from "./live-effects/kirakira-blur.ts";
+import { directionalBlur } from "./live-effects/blur-directional.ts";
+import { kirakiraBlur } from "./live-effects/blur-kirakira.ts";
 import { dithering } from "./live-effects/dithering.ts";
 import { pixelSort } from "./live-effects/pixel-sort.ts";
 import { glitch } from "./live-effects/glitch.ts";
@@ -23,21 +24,25 @@ import { outline } from "./live-effects/outline.ts";
 import { innerGlow } from "./live-effects/inner-glow.ts";
 import { coastic } from "./live-effects/coastic.ts";
 import { halftone } from "./live-effects/halftone.ts";
-import { fluidDistortion } from "./live-effects/fluid-distortion.ts";
+import { fluidDistortion } from "./live-effects/distortion-fluid.ts";
 import { kaleidoscope } from "./live-effects/kaleidoscope.ts";
-import { vhsInterlace } from "./live-effects/vhs-interlace.ts";
+import { vhsInterlace } from "./live-effects/filter-vhs-interlace.ts";
 import { downsampler } from "./live-effects/downsampler.ts";
 import { waveDistortion } from "./live-effects/wave-distortion.ts";
-import { selectiveColorCorrection } from "./live-effects/selective-color-correction.ts";
+import { selectiveColorCorrection } from "./live-effects/color-selective-correction.ts";
 import { dataMosh } from "./live-effects/data-mosh.ts";
-import { gaussianBlur } from "./live-effects/gaussian-blur.ts";
+import { gaussianBlur } from "./live-effects/blur-gaussian.ts";
 import { brushStroke } from "./live-effects/blush-stroke.ts";
-import { paperTexture } from "./live-effects/paper-texture.ts";
+import { paperTexture } from "./live-effects/texture-paper.ts";
 import { comicTone } from "./live-effects/comic-tone.ts";
 import { gradientMap } from "./live-effects/gradient-map.ts";
 import { husky } from "./live-effects/husky.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
+
+const collator = new Intl.Collator(
+  _AI_DENO_.op_ai_deno_get_user_locale().replace(/_/g, "-")
+);
 
 const allPlugins: AIPlugin<any, any, any>[] = [
   brushStroke,
@@ -64,7 +69,10 @@ const allPlugins: AIPlugin<any, any, any>[] = [
   testBlueFill,
   vhsInterlace,
   waveDistortion,
-];
+].sort((a, b) => {
+  return collator.compare(a.title, b.title);
+});
+
 const effectInits = new Map<AIPlugin<any, any, any>, any>();
 
 const allEffectPlugins: Record<
@@ -90,7 +98,7 @@ try {
           } catch (e) {
             await new Promise((resolve) => setTimeout(resolve, 500));
             throw new Error(
-              `[effect: ${effect.id}] Failed to initialize effect`,
+              `[effect: ${effect.id}] Failed to initialize effect: ${e.message}\n`,
               {
                 cause: e,
               }

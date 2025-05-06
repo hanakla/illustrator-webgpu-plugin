@@ -22,7 +22,11 @@ import {
   // RMIT: Import createCanvas if needed
   createCanvas, // RMIT: createCanvas(width, height): Promise<HTMLCanvasElement>
 } from "./_utils.ts";
-import { createGPUDevice, includeOklchMix } from "./_shared.ts";
+import {
+  createGPUDevice,
+  includeOklabMix,
+  includeOklchMix,
+} from "./_shared.ts";
 
 // RMIT:
 // type ColorRGBA = {
@@ -203,9 +207,9 @@ export const pluginTemplate = definePlugin({
             }
 
             // This is includes below 2 functions
-            // fn mixOklch(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
-            // fn mixOklchVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
-            ${includeOklchMix()}
+            // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklabMix()}
           `;
 
           const shader = device.createShaderModule({

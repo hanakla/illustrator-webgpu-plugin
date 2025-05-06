@@ -22,6 +22,7 @@ const t = createTranslator({
     radius: "Blur Radius (px)",
     strength: "Blur Strength",
     sparkle: "Sparkle Intensity",
+    blendOpacity: "Blur Opacity",
     makeOriginalTransparent: "Make Original Transparent",
     useCustomColor: "Use Custom Blur Color",
     customColor: "Custom Blur Color",
@@ -31,6 +32,7 @@ const t = createTranslator({
     radius: "ぼかし半径 (px)",
     strength: "ぼかし強度",
     sparkle: "きらめき強度",
+    blendOpacity: "ブラー不透明度",
     makeOriginalTransparent: "元画像を透明にする",
     useCustomColor: "カスタムブラー色を使用",
     customColor: "カスタムブラー色",
@@ -59,6 +61,10 @@ export const kirakiraBlur = definePlugin({
         type: "real",
         default: 0.5,
       },
+      blendOpacity: {
+        type: "real",
+        default: 1.0,
+      },
       makeOriginalTransparent: {
         type: "bool",
         default: false,
@@ -82,6 +88,7 @@ export const kirakiraBlur = definePlugin({
         ...params,
         radius: Math.max(0, Math.min(200, params.radius)),
         strength: Math.max(0, Math.min(2, params.strength)),
+        blendOpacity: Math.max(0, Math.min(1, params.blendOpacity)),
       };
     },
     onAdjustColors: (params, adjustColor) => {
@@ -96,6 +103,7 @@ export const kirakiraBlur = definePlugin({
         radius: Math.round(params.radius * scaleFactor),
         strength: params.strength,
         sparkle: params.sparkle,
+        blendOpacity: params.blendOpacity,
         makeOriginalTransparent: params.makeOriginalTransparent,
         useCustomColor: params.useCustomColor,
         customColor: params.customColor,
@@ -106,6 +114,7 @@ export const kirakiraBlur = definePlugin({
         radius: Math.round(lerp(paramsA.radius, paramsB.radius, t)),
         strength: lerp(paramsA.strength, paramsB.strength, t),
         sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t),
+        blendOpacity: lerp(paramsA.blendOpacity, paramsB.blendOpacity, t),
         makeOriginalTransparent:
           t < 0.5
             ? paramsA.makeOriginalTransparent
@@ -146,6 +155,13 @@ export const kirakiraBlur = definePlugin({
             ui.numberInput({ key: "sparkle", dataType: 'float', value: params.sparkle }),
           ]),
         ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("blendOpacity") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "blendOpacity", dataType: 'float', min: 0, max: 1, value: params.blendOpacity }),
+            ui.numberInput({ key: "blendOpacity", dataType: 'float', value: params.blendOpacity }),
+          ]),
+        ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
           ui.checkbox({ key: "useCustomColor", value: params.useCustomColor, label: t("useCustomColor") }),
@@ -169,155 +185,19 @@ export const kirakiraBlur = definePlugin({
           device: { label: "WebGPU(Kirakira Blur)" },
         },
         (device) => {
-          // 縦方向ブラーのシェーダー
-          const verticalBlurCode = `
+          // 共通ブラーシェーダー
+          const commonBlurCode = `
             struct Params {
               outputSize: vec2i,
               dpiScale: f32,
               radius: i32,
               strength: f32,
               sparkle: f32,
+              blendOpacity: f32,
               makeOriginalTransparent: i32,
               useCustomColor: i32,
               customColor: vec4f,
-            }
-
-            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-            @group(0) @binding(2) var textureSampler: sampler;
-            @group(0) @binding(3) var<uniform> params: Params;
-
-            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
-              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
-              return exp(gaussianExp) / (2.5066282746 * sigma);
-            }
-
-            @compute @workgroup_size(16, 16)
-            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let adjustedDims = vec2f(textureDimensions(inputTexture));
-              let dims = vec2f(params.outputSize);
-              let texCoord = vec2f(id.xy) / dims;
-              let toInputTexCoord = dims / adjustedDims;
-
-              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
-
-              // DPIスケールを考慮したブラー半径とシグマの計算
-              let radiusScaled = f32(params.radius) * params.dpiScale;
-              let sigma = radiusScaled * 0.33 * params.strength;
-
-              if (sigma <= 0.0) {
-                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-                textureStore(resultTexture, id.xy, originalColor);
-                return;
-              }
-
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-
-              // カスタム色を使用するかどうかでサンプリング色を決定
-              var sampledRGB: vec3f;
-              if (params.useCustomColor != 0) {
-                // カスタム色を使用する場合
-                sampledRGB = params.customColor.rgb;
-              } else {
-                // 元画像の色を使用する場合
-                sampledRGB = originalColor.rgb;
-              }
-
-              // アルファ値は常に元画像から取得
-              let sampledAlpha = originalColor.a;
-
-              // アルファとRGBを分けて計算するために変数を分ける
-              let centerWeight = gaussianWeight(0.0, sigma);
-
-              // アルファ計算用
-              var totalWeightAlpha = centerWeight;
-              var resultAlpha = sampledAlpha * centerWeight;
-
-              // RGB計算用（アルファで重み付け）
-              var totalWeightRGB = centerWeight * sampledAlpha;
-              // アルファが0の場合でもRGB値を保持する（プリマルチプライドから戻す）
-              var resultRGB: vec3f;
-              if (sampledAlpha > 0.0) {
-                resultRGB = sampledRGB * centerWeight * sampledAlpha;
-              } else {
-                // アルファが0の場合は周囲から色を推測するため初期値は0
-                resultRGB = vec3f(0.0);
-              }
-
-              let pixelStep = 1.0 / dims.y;
-              let radiusScaledInt = i32(ceil(radiusScaled));
-
-              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
-                let offset = f32(i);
-                let weight = gaussianWeight(offset, sigma);
-
-                let offsetUp = vec2f(0.0, pixelStep * offset);
-                let offsetDown = vec2f(0.0, -pixelStep * offset);
-
-                let upCoord = texCoord * toInputTexCoord + offsetUp;
-                let downCoord = texCoord * toInputTexCoord + offsetDown;
-
-                let sampleUp = textureSampleLevel(inputTexture, textureSampler, upCoord, 0.0);
-                let sampleDown = textureSampleLevel(inputTexture, textureSampler, downCoord, 0.0);
-
-                // カスタム色または元画像の色を使用
-                var sampleUpRGB: vec3f;
-                var sampleDownRGB: vec3f;
-
-                if (params.useCustomColor != 0) {
-                  sampleUpRGB = params.customColor.rgb;
-                  sampleDownRGB = params.customColor.rgb;
-                } else {
-                  sampleUpRGB = sampleUp.rgb;
-                  sampleDownRGB = sampleDown.rgb;
-                }
-
-                // アルファ値の計算
-                resultAlpha += (sampleUp.a + sampleDown.a) * weight;
-                totalWeightAlpha += weight * 2.0;
-
-                // RGB値の計算（アルファで重み付け）
-                // アルファが0でなければRGBを考慮
-                if (sampleUp.a > 0.0) {
-                  resultRGB += sampleUpRGB * weight * sampleUp.a;
-                  totalWeightRGB += weight * sampleUp.a;
-                }
-
-                if (sampleDown.a > 0.0) {
-                  resultRGB += sampleDownRGB * weight * sampleDown.a;
-                  totalWeightRGB += weight * sampleDown.a;
-                }
-              }
-
-              // 最終的なアルファ値を計算
-              resultAlpha = resultAlpha / totalWeightAlpha;
-
-              // RGB値の計算（アルファ重みで正規化）
-              var finalRGB: vec3f;
-              if (totalWeightRGB > 0.0) {
-                finalRGB = resultRGB / totalWeightRGB;
-              } else {
-                // アルファがすべて0なら、元の色を使用
-                finalRGB = originalColor.rgb;
-              }
-
-              let finalColor = vec4f(finalRGB, resultAlpha);
-
-              textureStore(resultTexture, id.xy, finalColor);
-            }
-          `;
-
-          // 横方向ブラーのシェーダー
-          const horizontalBlurCode = `
-            struct Params {
-              outputSize: vec2i,
-              dpiScale: f32,
-              radius: i32,
-              strength: f32,
-              sparkle: f32,
-              makeOriginalTransparent: i32,
-              useCustomColor: i32,
-              customColor: vec4f,
+              direction: i32,  // 0: vertical, 1: horizontal
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -340,189 +220,176 @@ export const kirakiraBlur = definePlugin({
 
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // 元画像を取得
-              let originalColor = textureSampleLevel(originalTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              // Get original texture color (used for horizontal pass)
+              var originalColor = vec4f(0.0);
+              if (params.direction == 1) {
+                originalColor = textureSampleLevel(originalTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              }
 
-              // DPIスケールを考慮したブラー半径とシグマの計算
+              // DPI-scaled blur radius and sigma calculation
               let radiusScaled = f32(params.radius) * params.dpiScale;
               let sigma = radiusScaled * 0.33 * params.strength;
 
               if (sigma <= 0.0) {
-                textureStore(resultTexture, id.xy, originalColor);
+                // If no blur, return original or intermediate color
+                let sourceColor = select(
+                  textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0),
+                  originalColor,
+                  params.direction == 1
+                );
+                textureStore(resultTexture, id.xy, sourceColor);
                 return;
               }
 
               let intermediateColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
-              // カスタム色を使用するかどうかでサンプリング色を決定
+              // Determine color to use based on custom color setting
               var sampledRGB: vec3f;
               if (params.useCustomColor != 0) {
-                // カスタム色を使用する場合
                 sampledRGB = params.customColor.rgb;
               } else {
-                // 元画像の色を使用する場合
                 sampledRGB = intermediateColor.rgb;
               }
 
-              // アルファ値は常に中間テクスチャから取得
+              // Alpha is always from intermediate texture
               let sampledAlpha = intermediateColor.a;
 
-              // アルファとRGBを分けて計算するために変数を分ける
+              // Center weight for Gaussian blur
               let centerWeight = gaussianWeight(0.0, sigma);
 
-              // アルファ計算用
+              // Alpha calculation
               var totalWeightAlpha = centerWeight;
               var resultAlpha = sampledAlpha * centerWeight;
 
-              // RGB計算用（アルファで重み付け）
+              // RGB calculation (weighted by alpha)
               var totalWeightRGB = centerWeight * sampledAlpha;
-              // アルファが0の場合でもRGB値を保持する（プリマルチプライドから戻す）
               var resultRGB: vec3f;
               if (sampledAlpha > 0.0) {
                 resultRGB = sampledRGB * centerWeight * sampledAlpha;
               } else {
-                // アルファが0の場合は周囲から色を推測するため初期値は0
                 resultRGB = vec3f(0.0);
               }
 
-              let pixelStep = 1.0 / dims.x;
+              // Determine step direction based on direction parameter
+              var pixelStep: vec2f;
+              if (params.direction == 1) {
+                pixelStep = vec2f(1.0 / dims.x, 0.0); // Horizontal step
+              } else {
+                pixelStep = vec2f(0.0, 1.0 / dims.y); // Vertical step
+              }
+
               let radiusScaledInt = i32(ceil(radiusScaled));
 
+              // Process blur samples
               for (var i = 1; i <= radiusScaledInt; i = i + 1) {
                 let offset = f32(i);
                 let weight = gaussianWeight(offset, sigma);
 
-                let offsetRight = vec2f(pixelStep * offset, 0.0);
-                let offsetLeft = vec2f(-pixelStep * offset, 0.0);
+                let offsetPos = pixelStep * offset;
+                let offsetNeg = -pixelStep * offset;
 
-                let rightCoord = texCoord * toInputTexCoord + offsetRight;
-                let leftCoord = texCoord * toInputTexCoord + offsetLeft;
+                let posCoord = texCoord * toInputTexCoord + offsetPos;
+                let negCoord = texCoord * toInputTexCoord + offsetNeg;
 
-                let sampleRight = textureSampleLevel(inputTexture, textureSampler, rightCoord, 0.0);
-                let sampleLeft = textureSampleLevel(inputTexture, textureSampler, leftCoord, 0.0);
+                let samplePos = textureSampleLevel(inputTexture, textureSampler, posCoord, 0.0);
+                let sampleNeg = textureSampleLevel(inputTexture, textureSampler, negCoord, 0.0);
 
-                // カスタム色または中間テクスチャの色を使用
-                var sampleRightRGB: vec3f;
-                var sampleLeftRGB: vec3f;
+                // Color sampling based on custom color setting
+                var samplePosRGB: vec3f;
+                var sampleNegRGB: vec3f;
 
                 if (params.useCustomColor != 0) {
-                  sampleRightRGB = params.customColor.rgb;
-                  sampleLeftRGB = params.customColor.rgb;
+                  samplePosRGB = params.customColor.rgb;
+                  sampleNegRGB = params.customColor.rgb;
                 } else {
-                  sampleRightRGB = sampleRight.rgb;
-                  sampleLeftRGB = sampleLeft.rgb;
+                  samplePosRGB = samplePos.rgb;
+                  sampleNegRGB = sampleNeg.rgb;
                 }
 
-                // アルファ値の計算
-                resultAlpha += (sampleRight.a + sampleLeft.a) * weight;
+                // Alpha calculation
+                resultAlpha += (samplePos.a + sampleNeg.a) * weight;
                 totalWeightAlpha += weight * 2.0;
 
-                // RGB値の計算（アルファで重み付け）
-                // アルファが0でなければRGBを考慮
-                if (sampleRight.a > 0.0) {
-                  resultRGB += sampleRightRGB * weight * sampleRight.a;
-                  totalWeightRGB += weight * sampleRight.a;
+                // RGB calculation (weighted by alpha)
+                if (samplePos.a > 0.0) {
+                  resultRGB += samplePosRGB * weight * samplePos.a;
+                  totalWeightRGB += weight * samplePos.a;
                 }
 
-                if (sampleLeft.a > 0.0) {
-                  resultRGB += sampleLeftRGB * weight * sampleLeft.a;
-                  totalWeightRGB += weight * sampleLeft.a;
+                if (sampleNeg.a > 0.0) {
+                  resultRGB += sampleNegRGB * weight * sampleNeg.a;
+                  totalWeightRGB += weight * sampleNeg.a;
                 }
               }
 
-              // 最終的なアルファ値を計算
+              // Calculate final alpha
               resultAlpha = resultAlpha / totalWeightAlpha;
 
-              // RGB値の計算（アルファ重みで正規化）
+              // Calculate final RGB (normalized by alpha weights)
               var finalRGB: vec3f;
               if (totalWeightRGB > 0.0) {
                 finalRGB = resultRGB / totalWeightRGB;
               } else {
-                // アルファがすべて0なら、元の色を使用
                 finalRGB = intermediateColor.rgb;
               }
 
-              // 基本的なブラー結果
-              let blurColor = vec4f(finalRGB, resultAlpha);
+              // Basic blur result
+              var finalColor = vec4f(finalRGB, resultAlpha);
 
-              // きらめき効果を適用（値を最大2倍まで増幅）
-              let sparkleMultiplier = 1.0 + params.sparkle;
-              let sparkledColor = vec4f(blurColor.rgb * sparkleMultiplier, blurColor.a);
+              // Apply additional effects for horizontal pass only
+              if (params.direction == 1) {
+                // Apply sparkle effect (amplify values up to 2x)
+                let sparkleMultiplier = 1.0 + params.sparkle;
+                // Apply blendOpacity to the blur color's alpha
+                let sparkledColor = vec4f(finalColor.rgb * sparkleMultiplier, finalColor.a * params.blendOpacity);
 
-              // 元画像の透明度に基づいて合成
-              // 元画像が不透明な部分ほど元画像の色を使用
-              let blendFactor = originalColor.a;
-              let blendedRGB = mix(sparkledColor.rgb, originalColor.rgb, blendFactor);
+                // Blend with original based on original alpha
+                let blendFactor = originalColor.a;
+                let blendedRGB = mix(sparkledColor.rgb, originalColor.rgb, blendFactor);
 
-                              // 「元画像を透明にする」設定に基づいてアルファを調整
-              var resultColor: vec4f;
-              if (params.makeOriginalTransparent != 0) {
-                // 合成したRGBを使用し、元画像が不透明だった部分のアルファを0に
-                let resultAlpha = select(sparkledColor.a, 0.0, originalColor.a > 0.0);
-                resultColor = vec4f(blendedRGB, resultAlpha);
-              } else {
-                // 通常の合成：元画像の不透明部分は元画像の色、透明部分はブラー+きらめき効果
-                resultColor = vec4f(blendedRGB, max(originalColor.a, sparkledColor.a));
+                // Adjust alpha based on makeOriginalTransparent setting
+                if (params.makeOriginalTransparent != 0) {
+                  // Use blended RGB but set alpha to 0 where original was opaque
+                  let resultAlpha = select(sparkledColor.a, 0.0, originalColor.a > 0.0);
+                  finalColor = vec4f(blendedRGB, resultAlpha);
+                } else {
+                  // Normal blend: use original color for opaque parts, blur+sparkle for transparent parts
+                  // Apply blendOpacity to control how visible the blur effect is
+                  finalColor = vec4f(blendedRGB, max(originalColor.a, sparkledColor.a));
+                }
+
+                // Clamp results to valid range
+                finalColor = clamp(finalColor, vec4f(0.0), vec4f(1.0));
               }
 
-              // 結果は0.0～1.0の範囲に制限
-              resultColor = clamp(resultColor, vec4f(0.0), vec4f(1.0));
-
-              textureStore(resultTexture, id.xy, resultColor);
+              textureStore(resultTexture, id.xy, finalColor);
             }
           `;
 
-          const verticalShader = device.createShaderModule({
-            label: "Kirakira Blur Vertical Shader",
-            code: verticalBlurCode,
+          // 共通シェーダーを作成
+          const shader = device.createShaderModule({
+            label: "Kirakira Blur Common Shader",
+            code: commonBlurCode,
           });
 
-          const horizontalShader = device.createShaderModule({
-            label: "Kirakira Blur Horizontal Shader",
-            code: horizontalBlurCode,
-          });
+          const pipelineDef = makeShaderDataDefinitions(commonBlurCode);
 
-          const verticalPipelineDef =
-            makeShaderDataDefinitions(verticalBlurCode);
-          const horizontalPipelineDef =
-            makeShaderDataDefinitions(horizontalBlurCode);
-
-          const verticalPipeline = device.createComputePipeline({
-            label: "Kirakira Blur Vertical Pipeline",
+          // 単一のパイプラインを作成
+          const pipeline = device.createComputePipeline({
+            label: "Kirakira Blur Pipeline",
             layout: "auto",
             compute: {
-              module: verticalShader,
+              module: shader,
               entryPoint: "computeMain",
             },
           });
 
-          const horizontalPipeline = device.createComputePipeline({
-            label: "Kirakira Blur Horizontal Pipeline",
-            layout: "auto",
-            compute: {
-              module: horizontalShader,
-              entryPoint: "computeMain",
-            },
-          });
-
-          return {
-            device,
-            verticalPipeline,
-            horizontalPipeline,
-            verticalPipelineDef,
-            horizontalPipelineDef,
-          };
+          return { device, pipeline, pipelineDef };
         }
       );
     },
     goLiveEffect: async (
-      {
-        device,
-        verticalPipeline,
-        horizontalPipeline,
-        verticalPipelineDef,
-        horizontalPipelineDef,
-      },
+      { device, pipeline, pipelineDef },
       params,
       imgData,
       { dpi, baseDpi }
@@ -578,9 +445,9 @@ export const kirakiraBlur = definePlugin({
         minFilter: "nearest",
       });
 
-      // 縦方向パスのユニフォームバッファ
+      // 縦方向パス（direction = 0）のユニフォームバッファ
       const verticalUniformValues = makeStructuredView(
-        verticalPipelineDef.uniforms.params
+        pipelineDef.uniforms.params
       );
       const verticalUniformBuffer = device.createBuffer({
         label: "Kirakira Blur Vertical Params Buffer",
@@ -588,9 +455,9 @@ export const kirakiraBlur = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
-      // 横方向パスのユニフォームバッファ
+      // 横方向パス（direction = 1）のユニフォームバッファ
       const horizontalUniformValues = makeStructuredView(
-        horizontalPipelineDef.uniforms.params
+        pipelineDef.uniforms.params
       );
       const horizontalUniformBuffer = device.createBuffer({
         label: "Kirakira Blur Horizontal Params Buffer",
@@ -605,6 +472,7 @@ export const kirakiraBlur = definePlugin({
         radius: params.radius,
         strength: params.strength,
         sparkle: params.sparkle,
+        blendOpacity: params.blendOpacity,
         makeOriginalTransparent: params.makeOriginalTransparent ? 1 : 0,
         useCustomColor: params.useCustomColor ? 1 : 0,
         customColor: [
@@ -613,6 +481,7 @@ export const kirakiraBlur = definePlugin({
           params.customColor.b,
           params.customColor.a,
         ],
+        direction: 0, // 縦方向パス
       });
 
       horizontalUniformValues.set({
@@ -621,6 +490,7 @@ export const kirakiraBlur = definePlugin({
         radius: params.radius,
         strength: params.strength,
         sparkle: params.sparkle,
+        blendOpacity: params.blendOpacity,
         makeOriginalTransparent: params.makeOriginalTransparent ? 1 : 0,
         useCustomColor: params.useCustomColor ? 1 : 0,
         customColor: [
@@ -629,6 +499,7 @@ export const kirakiraBlur = definePlugin({
           params.customColor.b,
           params.customColor.a,
         ],
+        direction: 1, // 横方向パス
       });
 
       device.queue.writeBuffer(
@@ -651,9 +522,10 @@ export const kirakiraBlur = definePlugin({
       );
 
       // 縦方向パスのバインドグループ
+      // 注：縦方向パスでもbinding 4は必要だが、使用はしない
       const verticalBindGroup = device.createBindGroup({
         label: "Kirakira Blur Vertical Bind Group",
-        layout: verticalPipeline.getBindGroupLayout(0),
+        layout: pipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
@@ -671,13 +543,17 @@ export const kirakiraBlur = definePlugin({
             binding: 3,
             resource: { buffer: verticalUniformBuffer },
           },
+          {
+            binding: 4,
+            resource: inputTexture.createView(), // 縦方向パスでは使用しないが、バインドは必要
+          },
         ],
       });
 
       // 横方向パスのバインドグループ
       const horizontalBindGroup = device.createBindGroup({
         label: "Kirakira Blur Horizontal Bind Group",
-        layout: horizontalPipeline.getBindGroupLayout(0),
+        layout: pipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
@@ -697,7 +573,7 @@ export const kirakiraBlur = definePlugin({
           },
           {
             binding: 4,
-            resource: inputTexture.createView(),
+            resource: inputTexture.createView(), // 元画像（横方向パスで使用）
           },
         ],
       });
@@ -717,7 +593,7 @@ export const kirakiraBlur = definePlugin({
       const verticalPass = commandEncoder.beginComputePass({
         label: "Kirakira Blur Vertical Pass",
       });
-      verticalPass.setPipeline(verticalPipeline);
+      verticalPass.setPipeline(pipeline);
       verticalPass.setBindGroup(0, verticalBindGroup);
       verticalPass.dispatchWorkgroups(
         Math.ceil(bufferInputWidth / 16),
@@ -729,7 +605,7 @@ export const kirakiraBlur = definePlugin({
       const horizontalPass = commandEncoder.beginComputePass({
         label: "Kirakira Blur Horizontal Pass",
       });
-      horizontalPass.setPipeline(horizontalPipeline);
+      horizontalPass.setPipeline(pipeline);
       horizontalPass.setBindGroup(0, horizontalBindGroup);
       horizontalPass.dispatchWorkgroups(
         Math.ceil(bufferInputWidth / 16),

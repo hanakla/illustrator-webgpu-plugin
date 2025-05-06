@@ -6,41 +6,41 @@ import { useEventCallback, useStableEvent, useThroughRef } from "./hooks.ts";
 
 import { UI_NODE_SCHEMA } from "~ext/ui/nodes.ts";
 
-import { gaussianBlur } from "~ext/live-effects/gaussian-blur.ts";
+import { gaussianBlur } from "~ext/live-effects/blur-gaussian.ts";
 import { pixelSort } from "~ext/live-effects/pixel-sort.ts";
-import { kirakiraBlur } from "~ext/live-effects/kirakira-blur.ts";
+import { kirakiraBlur } from "~ext/live-effects/blur-kirakira.ts";
 import { glitch } from "~ext/live-effects/glitch.ts";
 import { coastic } from "~ext/live-effects/coastic.ts";
 import { dithering } from "~ext/live-effects/dithering.ts";
 import { chromaticAberration } from "~ext/live-effects/chromatic-aberration.ts";
-import { directionalBlur } from "~ext/live-effects/directional-blur.ts";
+import { directionalBlur } from "~ext/live-effects/blur-directional.ts";
 import { halftone } from "~ext/live-effects/halftone.ts";
 import { testBlueFill } from "~ext/live-effects/test-blue-fill.ts";
 import { innerGlow } from "~ext/live-effects/inner-glow.ts";
 import { outline } from "~ext/live-effects/outline.ts";
-import { fluidDistortion } from "~ext/live-effects/fluid-distortion.ts";
+import { fluidDistortion } from "~ext/live-effects/distortion-fluid.ts";
 import { kaleidoscope } from "~ext/live-effects/kaleidoscope.ts";
 import { downsampler } from "~ext/live-effects/downsampler.ts";
-import { vhsInterlace } from "~ext/live-effects/vhs-interlace.ts";
+import { vhsInterlace } from "~ext/live-effects/filter-vhs-interlace.ts";
 import { dataMosh } from "~ext/live-effects/data-mosh.ts";
 import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
-import { selectiveColorCorrection } from "~ext/live-effects/selective-color-correction.ts";
+import { selectiveColorCorrection } from "~ext/live-effects/color-selective-correction.ts";
 import { husky } from "~ext/live-effects/husky.ts";
 import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
-import { paperTexture } from "~ext/live-effects/paper-texture.ts";
+import { paperTexture } from "~ext/live-effects/texture-paper.ts";
 import { gradientMap } from "~ext/live-effects/gradient-map.ts";
-
 import { brushStroke } from "~ext/live-effects/blush-stroke.ts";
 import { comicTone } from "~ext/live-effects/comic-tone.ts";
+import { colorReplacement } from "~ext/live-effects/color-replacement.ts";
 
 import { compressor } from "~ext/live-effects/wips/compressor.ts";
 import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
 import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
-import { brotliDecompress } from "node:zlib";
 
 const plugins = [
   kirakiraBlur,
+  colorReplacement,
   gradientMap,
   paperTexture,
   gaussianBlur,

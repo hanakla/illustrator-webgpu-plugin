@@ -54,6 +54,8 @@ fn op_ai_alert(state: Rc<RefCell<OpState>>, #[string] message: String) -> Result
     Ok(())
 }
 
+/// Returns the user locale as a string.
+/// Likes `en_US`, `ja_JP`, etc.
 #[op2]
 #[string]
 fn op_ai_deno_get_user_locale(state: Rc<RefCell<OpState>>) -> String {

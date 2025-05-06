@@ -14,7 +14,11 @@ import {
   toColorCode,
   createCanvas,
 } from "./_utils.ts";
-import { createGPUDevice, includeOklchMix } from "./_shared.ts";
+import {
+  createGPUDevice,
+  includeOklabMix,
+  includeOklchMix,
+} from "./_shared.ts";
 
 // Type for color stop
 type ColorStop = {
@@ -674,14 +678,16 @@ export const gradientMap = definePlugin({
               }),
             ])
           ),
-          ui.button({
-            text: t("addStop"),
-            onClick: handleAddColorStop
-          }),
-          ui.button({
-            text: t("sortByPosition"),
-            onClick: handleSortByPosition
-          }),
+          ui.group({ direction: "row" }, [
+            ui.button({
+              text: t("addStop"),
+              onClick: handleAddColorStop
+            }),
+            ui.button({
+              text: t("sortByPosition"),
+              onClick: handleSortByPosition
+            }),
+          ]),
         ]),
 
         ui.separator(),
@@ -779,8 +785,6 @@ export const gradientMap = definePlugin({
             @group(0) @binding(3) var<uniform> params: Params;
             @group(0) @binding(4) var<storage, read> colorStops: array<ColorStop>;
 
-            ${includeOklchMix()}
-
             fn getLuminance(color: vec3f) -> f32 {
               // Standard luminance calculation (Rec. 709 coefficients)
               return dot(color, vec3f(0.2126, 0.7152, 0.0722));
@@ -827,7 +831,7 @@ export const gradientMap = definePlugin({
 
               let factor = (luminance - lowerStop.position) / range;
               // Use Oklch color space interpolation for more perceptually uniform results
-              return mixOklchVec4(lowerStop.color, upperStop.color, factor);
+              return mixOklabVec4(lowerStop.color, upperStop.color, factor);
             }
 
             @compute @workgroup_size(16, 16)
@@ -861,13 +865,18 @@ export const gradientMap = definePlugin({
               } else {
                 // Mix colors using Oklch interpolation for better results
                 finalColor = vec4f(
-                  mixOklch(originalColor.rgb, gradientColor.rgb, mixStrength),
+                  mixOklab(originalColor.rgb, gradientColor.rgb, mixStrength),
                   originalColor.a
                 );
               }
 
               textureStore(resultTexture, id.xy, finalColor);
             }
+
+            // This is includes below 2 functions
+            // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklabMix()}
           `;
 
           const shader = device.createShaderModule({

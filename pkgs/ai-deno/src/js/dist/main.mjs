@@ -457,10 +457,10 @@ async function createGPUDevice(options = {}, initializer) {
     }
   );
 }
-function includeOklchMix() {
+function includeOklabMix() {
   return `
     // Drop-in replacement for mix() that works with vec3f rgb colors
-    fn mixOklch(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32> {
+    fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32> {
       // RGB -> Linear RGB
       let linearColor1 = vec3<f32>(
         select(rgbColor1.r / 12.92, pow((rgbColor1.r + 0.055) / 1.055, 2.4), rgbColor1.r <= 0.04045),
@@ -468,7 +468,7 @@ function includeOklchMix() {
         select(rgbColor1.b / 12.92, pow((rgbColor1.b + 0.055) / 1.055, 2.4), rgbColor1.b <= 0.04045),
       );
 
-      let linearrgbColor2 = vec3<f32>(
+      let linearColor2 = vec3<f32>(
         select(rgbColor2.r / 12.92, pow((rgbColor2.r + 0.055) / 1.055, 2.4), rgbColor2.r <= 0.04045),
         select(rgbColor2.g / 12.92, pow((rgbColor2.g + 0.055) / 1.055, 2.4), rgbColor2.g <= 0.04045),
         select(rgbColor2.b / 12.92, pow((rgbColor2.b + 0.055) / 1.055, 2.4), rgbColor2.b <= 0.04045),
@@ -485,7 +485,7 @@ function includeOklchMix() {
         0.4122214708, 0.5363325363, 0.0514459929,
         0.2119034982, 0.6806995451, 0.1073969566,
         0.0883024619, 0.2817188376, 0.6299787005
-      ) * linearrgbColor2;
+      ) * linearColor2;
 
       // LMS -> Oklab
       let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
@@ -500,34 +500,8 @@ function includeOklchMix() {
       let oklab1 = oklabMatrix * lms1_pow;
       let oklab2 = oklabMatrix * lms2_pow;
 
-      // Oklab -> OKLCH
-      let L1 = oklab1.x;
-      let L2 = oklab2.x;
-      let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
-      let C2 = sqrt(oklab2.y * oklab2.y + oklab2.z * oklab2.z);
-      let H1 = atan2(oklab1.z, oklab1.y);
-      let H2 = atan2(oklab2.z, oklab2.y);
-
-      // \u8272\u76F8\u306E\u88DC\u9593\uFF08\u6700\u77ED\u7D4C\u8DEF\uFF09
-      let hDiff = H2 - H1;
-      let hDiffAdjusted = select(
-        hDiff,
-        hDiff - 2.0 * 3.14159265359,
-        hDiff > 3.14159265359
-      );
-      let hDiffFinal = select(
-        hDiffAdjusted,
-        hDiffAdjusted + 2.0 * 3.14159265359,
-        hDiffAdjusted < -3.14159265359
-      );
-
-      let L = mix(L1, L2, t);
-      let C = mix(C1, C2, t);
-      let H = H1 + t * hDiffFinal;
-
-      // OKLCH -> Oklab
-      let a = C * cos(H);
-      let b = C * sin(H);
+      // OKLAB\u7A7A\u9593\u3067\u76F4\u63A5\u88DC\u9593
+      let oklab_mixed = mix(oklab1, oklab2, t);
 
       // Oklab -> LMS
       let oklabInverseMatrix = mat3x3<f32>(
@@ -536,7 +510,7 @@ function includeOklchMix() {
         1.0, -0.0894841775, -1.2914855480
       );
 
-      let lms_pow = oklabInverseMatrix * vec3<f32>(L, a, b);
+      let lms_pow = oklabInverseMatrix * oklab_mixed;
       let lms = vec3<f32>(
         pow(lms_pow.x, 3.0),
         pow(lms_pow.y, 3.0),
@@ -554,17 +528,17 @@ function includeOklchMix() {
 
       // Linear RGB -> RGB
       let rgbResult = vec3<f32>(
-        select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
-        select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
-        select(12.92 * linearRgb.b, 1.055 * pow(linearRgb.b, 1.0/2.4) - 0.055, linearRgb.b <= 0.0031308),
+        select(linearRgb.r * 12.92, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
+        select(linearRgb.g * 12.92, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
+        select(linearRgb.b * 12.92, 1.055 * pow(linearRgb.b, 1.0/2.4) - 0.055, linearRgb.b <= 0.0031308)
       );
 
       return clamp(rgbResult, vec3<f32>(0.0), vec3<f32>(1.0));
     }
 
-    fn mixOklchVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32> {
+    fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32> {
       return vec4<f32>(
-        mixOklch(rgbColor1.rgb, rgbColor2.rgb, t),
+        mixOklab(rgbColor1.rgb, rgbColor2.rgb, t),
         mix(rgbColor1.a, rgbColor2.a, t)
       );
     }
@@ -973,7 +947,7 @@ var chromaticAberration = definePlugin({
 
               let strengthFactor = params.strength;
               let blendRatio = clamp(strengthFactor, 0.0, 1.0);
-              let result = mixOklch(origs.rgb, combinedColor, blendRatio);
+              let result = mixOklab(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
             } else if (params.colorMode == 2u) {
@@ -1000,7 +974,7 @@ var chromaticAberration = definePlugin({
 
               let strengthFactor = params.strength;
               let blendRatio = clamp(strengthFactor, 0.0, 1.0);
-              let result = mixOklch(origs.rgb, combinedColor, blendRatio);
+              let result = mixOklab(origs.rgb, combinedColor, blendRatio);
 
               effectColor = vec4f(result, a);
             } else if (params.colorMode == 3u) {
@@ -1030,7 +1004,7 @@ var chromaticAberration = definePlugin({
             if (opacityFactor <= 0.0) {
               finalColor = originalColor;
             } else {
-              let blendedRgb = mixOklch(originalColor.rgb, effectColor.rgb, opacityFactor);
+              let blendedRgb = mixOklab(originalColor.rgb, effectColor.rgb, opacityFactor);
 
               let alphaDifference = effectColor.a - originalColor.a;
               let adjustedAlpha = originalColor.a + alphaDifference * opacityFactor;
@@ -1044,111 +1018,16 @@ var chromaticAberration = definePlugin({
 
               let ringColor = vec4f(1.0, 1.0, 0.3, 1.0);
 
-              finalColor = mixOklchVec4(finalColor, ringColor, ringIntensity);
+              finalColor = mixOklabVec4(finalColor, ringColor, ringIntensity);
             }
 
             textureStore(resultTexture, id.xy, finalColor);
           }
 
-          fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32> {
-            let linearColor1 = vec3<f32>(
-              select(color1.r / 12.92, pow((color1.r + 0.055) / 1.055, 2.4), color1.r <= 0.04045),
-              select(color1.g / 12.92, pow((color1.g + 0.055) / 1.055, 2.4), color1.g <= 0.04045),
-              select(color1.b / 12.92, pow((color1.b + 0.055) / 1.055, 2.4), color1.b <= 0.04045),
-            );
-
-            let linearColor2 = vec3<f32>(
-              select(color2.r / 12.92, pow((color2.r + 0.055) / 1.055, 2.4), color2.r <= 0.04045),
-              select(color2.g / 12.92, pow((color2.g + 0.055) / 1.055, 2.4), color2.g <= 0.04045),
-              select(color2.b / 12.92, pow((color2.b + 0.055) / 1.055, 2.4), color2.b <= 0.04045),
-            );
-
-            let lms1 = mat3x3<f32>(
-              0.4122214708, 0.5363325363, 0.0514459929,
-              0.2119034982, 0.6806995451, 0.1073969566,
-              0.0883024619, 0.2817188376, 0.6299787005
-            ) * linearColor1;
-
-            let lms2 = mat3x3<f32>(
-              0.4122214708, 0.5363325363, 0.0514459929,
-              0.2119034982, 0.6806995451, 0.1073969566,
-              0.0883024619, 0.2817188376, 0.6299787005
-            ) * linearColor2;
-
-            let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
-            let lms2_pow = vec3<f32>(pow(lms2.x, 1.0/3.0), pow(lms2.y, 1.0/3.0), pow(lms2.z, 1.0/3.0));
-
-            let oklabMatrix = mat3x3<f32>(
-              0.2104542553, 0.7936177850, -0.0040720468,
-              1.9779984951, -2.4285922050, 0.4505937099,
-              0.0259040371, 0.7827717662, -0.8086757660
-            );
-
-            let oklab1 = oklabMatrix * lms1_pow;
-            let oklab2 = oklabMatrix * lms2_pow;
-
-            let L1 = oklab1.x;
-            let L2 = oklab2.x;
-            let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
-            let C2 = sqrt(oklab2.y * oklab2.y + oklab2.z * oklab2.z);
-            let H1 = atan2(oklab1.z, oklab1.y);
-            let H2 = atan2(oklab2.z, oklab2.y);
-
-            let hDiff = H2 - H1;
-            let hDiffAdjusted = select(
-              hDiff,
-              hDiff - 2.0 * 3.14159265359,
-              hDiff > 3.14159265359
-            );
-            let hDiffFinal = select(
-              hDiffAdjusted,
-              hDiffAdjusted + 2.0 * 3.14159265359,
-              hDiffAdjusted < -3.14159265359
-            );
-
-            let L = mix(L1, L2, t);
-            let C = mix(C1, C2, t);
-            let H = H1 + t * hDiffFinal;
-
-            let a = C * cos(H);
-            let b = C * sin(H);
-
-            let oklabInverseMatrix = mat3x3<f32>(
-              1.0, 0.3963377774, 0.2158037573,
-              1.0, -0.1055613458, -0.0638541728,
-              1.0, -0.0894841775, -1.2914855480
-            );
-
-            let lms_pow = oklabInverseMatrix * vec3<f32>(L, a, b);
-            let lms = vec3<f32>(
-              pow(lms_pow.x, 3.0),
-              pow(lms_pow.y, 3.0),
-              pow(lms_pow.z, 3.0)
-            );
-
-            let lmsToRgbMatrix = mat3x3<f32>(
-              4.0767416621, -3.3077115913, 0.2309699292,
-              -1.2684380046, 2.6097574011, -0.3413193965,
-              -0.0041960863, -0.7034186147, 1.7076147010
-            );
-
-            let linearRgb = lmsToRgbMatrix * lms;
-
-            let rgbResult = vec3<f32>(
-              select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
-              select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
-              select(12.92 * linearRgb.b, 1.055 * pow(linearRgb.b, 1.0/2.4) - 0.055, linearRgb.b <= 0.0031308),
-            );
-
-            return clamp(rgbResult, vec3<f32>(0.0), vec3<f32>(1.0));
-          }
-
-          fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32> {
-            return vec4<f32>(
-              mixOklch(color1.rgb, color2.rgb, t),
-              mix(color1.a, color2.a, t)
-            );
-          }
+          // This is includes below 2 functions
+          // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+          // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+          ${includeOklabMix()}
       `;
         const shader = device.createShaderModule({
           label: "Chromatic Aberration Shader",
@@ -1518,7 +1397,7 @@ var testBlueFill = definePlugin({
   }
 });
 
-// src/js/src/live-effects/directional-blur.ts
+// src/js/src/live-effects/blur-directional.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions2,
   makeStructuredView as makeStructuredView2
@@ -1882,22 +1761,22 @@ var directionalBlur = definePlugin({
 
                 let blurredColor = vec4f(unpremultipliedRGB, normalizedAlpha);
 
-                finalColor = mixOklchVec4(originalColor, blurredColor, normalizedOpacity);
+                finalColor = mixOklabVec4(originalColor, blurredColor, normalizedOpacity);
 
                 let emphasisFactor = params.originalEmphasis * originalColor.a;
-                let blendedRGB = mixOklch(finalColor.rgb, originalColor.rgb, emphasisFactor);
+                let blendedRGB = mixOklab(finalColor.rgb, originalColor.rgb, emphasisFactor);
                 finalColor = vec4f(blendedRGB, finalColor.a);
               } else {
                 finalColor = originalColor;
               }
 
-              // This is includes below 2 functions
-              // fn mixOklch(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
-              // fn mixOklchVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
               textureStore(resultTexture, id.xy, finalColor);
             }
 
-            ${includeOklchMix()}
+            // This is includes below 2 functions
+            // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklabMix()}
           `;
           const shader = device.createShaderModule({
             label: "Directional Blur V1 Shader",
@@ -2040,7 +1919,7 @@ var directionalBlur = definePlugin({
   }
 });
 
-// src/js/src/live-effects/kirakira-blur.ts
+// src/js/src/live-effects/blur-kirakira.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions3,
   makeStructuredView as makeStructuredView3
@@ -2051,6 +1930,7 @@ var t3 = createTranslator({
     radius: "Blur Radius (px)",
     strength: "Blur Strength",
     sparkle: "Sparkle Intensity",
+    blendOpacity: "Blur Opacity",
     makeOriginalTransparent: "Make Original Transparent",
     useCustomColor: "Use Custom Blur Color",
     customColor: "Custom Blur Color"
@@ -2060,6 +1940,7 @@ var t3 = createTranslator({
     radius: "\u307C\u304B\u3057\u534A\u5F84 (px)",
     strength: "\u307C\u304B\u3057\u5F37\u5EA6",
     sparkle: "\u304D\u3089\u3081\u304D\u5F37\u5EA6",
+    blendOpacity: "\u30D6\u30E9\u30FC\u4E0D\u900F\u660E\u5EA6",
     makeOriginalTransparent: "\u5143\u753B\u50CF\u3092\u900F\u660E\u306B\u3059\u308B",
     useCustomColor: "\u30AB\u30B9\u30BF\u30E0\u30D6\u30E9\u30FC\u8272\u3092\u4F7F\u7528",
     customColor: "\u30AB\u30B9\u30BF\u30E0\u30D6\u30E9\u30FC\u8272"
@@ -2068,7 +1949,7 @@ var t3 = createTranslator({
 var kirakiraBlur = definePlugin({
   id: "kirakira-blur-v1",
   title: t3("title"),
-  version: { major: 1, minor: 0 },
+  version: { major: 1, minor: 1 },
   liveEffect: {
     styleFilterFlags: {
       type: 2 /* kPostEffectFilter */,
@@ -2086,6 +1967,10 @@ var kirakiraBlur = definePlugin({
       sparkle: {
         type: "real",
         default: 0.5
+      },
+      blendOpacity: {
+        type: "real",
+        default: 1
       },
       makeOriginalTransparent: {
         type: "bool",
@@ -2109,7 +1994,8 @@ var kirakiraBlur = definePlugin({
       return {
         ...params,
         radius: Math.max(0, Math.min(200, params.radius)),
-        strength: Math.max(0, Math.min(2, params.strength))
+        strength: Math.max(0, Math.min(2, params.strength)),
+        blendOpacity: Math.max(0, Math.min(1, params.blendOpacity))
       };
     },
     onAdjustColors: (params, adjustColor) => {
@@ -2124,6 +2010,7 @@ var kirakiraBlur = definePlugin({
         radius: Math.round(params.radius * scaleFactor),
         strength: params.strength,
         sparkle: params.sparkle,
+        blendOpacity: params.blendOpacity,
         makeOriginalTransparent: params.makeOriginalTransparent,
         useCustomColor: params.useCustomColor,
         customColor: params.customColor
@@ -2134,6 +2021,7 @@ var kirakiraBlur = definePlugin({
         radius: Math.round(lerp(paramsA.radius, paramsB.radius, t22)),
         strength: lerp(paramsA.strength, paramsB.strength, t22),
         sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t22),
+        blendOpacity: lerp(paramsA.blendOpacity, paramsB.blendOpacity, t22),
         makeOriginalTransparent: t22 < 0.5 ? paramsA.makeOriginalTransparent : paramsB.makeOriginalTransparent,
         useCustomColor: t22 < 0.5 ? paramsA.useCustomColor : paramsB.useCustomColor,
         customColor: {
@@ -2168,6 +2056,13 @@ var kirakiraBlur = definePlugin({
             ui.numberInput({ key: "sparkle", dataType: "float", value: params.sparkle })
           ])
         ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t3("blendOpacity") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({ key: "blendOpacity", dataType: "float", min: 0, max: 1, value: params.blendOpacity }),
+            ui.numberInput({ key: "blendOpacity", dataType: "float", value: params.blendOpacity })
+          ])
+        ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
           ui.checkbox({ key: "useCustomColor", value: params.useCustomColor, label: t3("useCustomColor") }),
@@ -2191,152 +2086,18 @@ var kirakiraBlur = definePlugin({
           device: { label: "WebGPU(Kirakira Blur)" }
         },
         (device) => {
-          const verticalBlurCode = `
+          const commonBlurCode = `
             struct Params {
               outputSize: vec2i,
               dpiScale: f32,
               radius: i32,
               strength: f32,
               sparkle: f32,
+              blendOpacity: f32,
               makeOriginalTransparent: i32,
               useCustomColor: i32,
               customColor: vec4f,
-            }
-
-            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-            @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
-            @group(0) @binding(2) var textureSampler: sampler;
-            @group(0) @binding(3) var<uniform> params: Params;
-
-            fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
-              let gaussianExp = -0.5 * (offset * offset) / (sigma * sigma);
-              return exp(gaussianExp) / (2.5066282746 * sigma);
-            }
-
-            @compute @workgroup_size(16, 16)
-            fn computeMain(@builtin(global_invocation_id) id: vec3u) {
-              let adjustedDims = vec2f(textureDimensions(inputTexture));
-              let dims = vec2f(params.outputSize);
-              let texCoord = vec2f(id.xy) / dims;
-              let toInputTexCoord = dims / adjustedDims;
-
-              if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
-
-              // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u30D6\u30E9\u30FC\u534A\u5F84\u3068\u30B7\u30B0\u30DE\u306E\u8A08\u7B97
-              let radiusScaled = f32(params.radius) * params.dpiScale;
-              let sigma = radiusScaled * 0.33 * params.strength;
-
-              if (sigma <= 0.0) {
-                let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-                textureStore(resultTexture, id.xy, originalColor);
-                return;
-              }
-
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
-
-              // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u304B\u3069\u3046\u304B\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u8272\u3092\u6C7A\u5B9A
-              var sampledRGB: vec3f;
-              if (params.useCustomColor != 0) {
-                // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
-                sampledRGB = params.customColor.rgb;
-              } else {
-                // \u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
-                sampledRGB = originalColor.rgb;
-              }
-
-              // \u30A2\u30EB\u30D5\u30A1\u5024\u306F\u5E38\u306B\u5143\u753B\u50CF\u304B\u3089\u53D6\u5F97
-              let sampledAlpha = originalColor.a;
-
-              // \u30A2\u30EB\u30D5\u30A1\u3068RGB\u3092\u5206\u3051\u3066\u8A08\u7B97\u3059\u308B\u305F\u3081\u306B\u5909\u6570\u3092\u5206\u3051\u308B
-              let centerWeight = gaussianWeight(0.0, sigma);
-
-              // \u30A2\u30EB\u30D5\u30A1\u8A08\u7B97\u7528
-              var totalWeightAlpha = centerWeight;
-              var resultAlpha = sampledAlpha * centerWeight;
-
-              // RGB\u8A08\u7B97\u7528\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
-              var totalWeightRGB = centerWeight * sampledAlpha;
-              // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u3067\u3082RGB\u5024\u3092\u4FDD\u6301\u3059\u308B\uFF08\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u304B\u3089\u623B\u3059\uFF09
-              var resultRGB: vec3f;
-              if (sampledAlpha > 0.0) {
-                resultRGB = sampledRGB * centerWeight * sampledAlpha;
-              } else {
-                // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u306F\u5468\u56F2\u304B\u3089\u8272\u3092\u63A8\u6E2C\u3059\u308B\u305F\u3081\u521D\u671F\u5024\u306F0
-                resultRGB = vec3f(0.0);
-              }
-
-              let pixelStep = 1.0 / dims.y;
-              let radiusScaledInt = i32(ceil(radiusScaled));
-
-              for (var i = 1; i <= radiusScaledInt; i = i + 1) {
-                let offset = f32(i);
-                let weight = gaussianWeight(offset, sigma);
-
-                let offsetUp = vec2f(0.0, pixelStep * offset);
-                let offsetDown = vec2f(0.0, -pixelStep * offset);
-
-                let upCoord = texCoord * toInputTexCoord + offsetUp;
-                let downCoord = texCoord * toInputTexCoord + offsetDown;
-
-                let sampleUp = textureSampleLevel(inputTexture, textureSampler, upCoord, 0.0);
-                let sampleDown = textureSampleLevel(inputTexture, textureSampler, downCoord, 0.0);
-
-                // \u30AB\u30B9\u30BF\u30E0\u8272\u307E\u305F\u306F\u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528
-                var sampleUpRGB: vec3f;
-                var sampleDownRGB: vec3f;
-
-                if (params.useCustomColor != 0) {
-                  sampleUpRGB = params.customColor.rgb;
-                  sampleDownRGB = params.customColor.rgb;
-                } else {
-                  sampleUpRGB = sampleUp.rgb;
-                  sampleDownRGB = sampleDown.rgb;
-                }
-
-                // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
-                resultAlpha += (sampleUp.a + sampleDown.a) * weight;
-                totalWeightAlpha += weight * 2.0;
-
-                // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
-                // \u30A2\u30EB\u30D5\u30A1\u304C0\u3067\u306A\u3051\u308C\u3070RGB\u3092\u8003\u616E
-                if (sampleUp.a > 0.0) {
-                  resultRGB += sampleUpRGB * weight * sampleUp.a;
-                  totalWeightRGB += weight * sampleUp.a;
-                }
-
-                if (sampleDown.a > 0.0) {
-                  resultRGB += sampleDownRGB * weight * sampleDown.a;
-                  totalWeightRGB += weight * sampleDown.a;
-                }
-              }
-
-              // \u6700\u7D42\u7684\u306A\u30A2\u30EB\u30D5\u30A1\u5024\u3092\u8A08\u7B97
-              resultAlpha = resultAlpha / totalWeightAlpha;
-
-              // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u91CD\u307F\u3067\u6B63\u898F\u5316\uFF09
-              var finalRGB: vec3f;
-              if (totalWeightRGB > 0.0) {
-                finalRGB = resultRGB / totalWeightRGB;
-              } else {
-                // \u30A2\u30EB\u30D5\u30A1\u304C\u3059\u3079\u30660\u306A\u3089\u3001\u5143\u306E\u8272\u3092\u4F7F\u7528
-                finalRGB = originalColor.rgb;
-              }
-
-              let finalColor = vec4f(finalRGB, resultAlpha);
-
-              textureStore(resultTexture, id.xy, finalColor);
-            }
-          `;
-          const horizontalBlurCode = `
-            struct Params {
-              outputSize: vec2i,
-              dpiScale: f32,
-              radius: i32,
-              strength: f32,
-              sparkle: f32,
-              makeOriginalTransparent: i32,
-              useCustomColor: i32,
-              customColor: vec4f,
+              direction: i32,  // 0: vertical, 1: horizontal
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -2359,180 +2120,169 @@ var kirakiraBlur = definePlugin({
 
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              // \u5143\u753B\u50CF\u3092\u53D6\u5F97
-              let originalColor = textureSampleLevel(originalTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              // Get original texture color (used for horizontal pass)
+              var originalColor = vec4f(0.0);
+              if (params.direction == 1) {
+                originalColor = textureSampleLevel(originalTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              }
 
-              // DPI\u30B9\u30B1\u30FC\u30EB\u3092\u8003\u616E\u3057\u305F\u30D6\u30E9\u30FC\u534A\u5F84\u3068\u30B7\u30B0\u30DE\u306E\u8A08\u7B97
+              // DPI-scaled blur radius and sigma calculation
               let radiusScaled = f32(params.radius) * params.dpiScale;
               let sigma = radiusScaled * 0.33 * params.strength;
 
               if (sigma <= 0.0) {
-                textureStore(resultTexture, id.xy, originalColor);
+                // If no blur, return original or intermediate color
+                let sourceColor = select(
+                  textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0),
+                  originalColor,
+                  params.direction == 1
+                );
+                textureStore(resultTexture, id.xy, sourceColor);
                 return;
               }
 
               let intermediateColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
-              // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u304B\u3069\u3046\u304B\u3067\u30B5\u30F3\u30D7\u30EA\u30F3\u30B0\u8272\u3092\u6C7A\u5B9A
+              // Determine color to use based on custom color setting
               var sampledRGB: vec3f;
               if (params.useCustomColor != 0) {
-                // \u30AB\u30B9\u30BF\u30E0\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
                 sampledRGB = params.customColor.rgb;
               } else {
-                // \u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528\u3059\u308B\u5834\u5408
                 sampledRGB = intermediateColor.rgb;
               }
 
-              // \u30A2\u30EB\u30D5\u30A1\u5024\u306F\u5E38\u306B\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u304B\u3089\u53D6\u5F97
+              // Alpha is always from intermediate texture
               let sampledAlpha = intermediateColor.a;
 
-              // \u30A2\u30EB\u30D5\u30A1\u3068RGB\u3092\u5206\u3051\u3066\u8A08\u7B97\u3059\u308B\u305F\u3081\u306B\u5909\u6570\u3092\u5206\u3051\u308B
+              // Center weight for Gaussian blur
               let centerWeight = gaussianWeight(0.0, sigma);
 
-              // \u30A2\u30EB\u30D5\u30A1\u8A08\u7B97\u7528
+              // Alpha calculation
               var totalWeightAlpha = centerWeight;
               var resultAlpha = sampledAlpha * centerWeight;
 
-              // RGB\u8A08\u7B97\u7528\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
+              // RGB calculation (weighted by alpha)
               var totalWeightRGB = centerWeight * sampledAlpha;
-              // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u3067\u3082RGB\u5024\u3092\u4FDD\u6301\u3059\u308B\uFF08\u30D7\u30EA\u30DE\u30EB\u30C1\u30D7\u30E9\u30A4\u30C9\u304B\u3089\u623B\u3059\uFF09
               var resultRGB: vec3f;
               if (sampledAlpha > 0.0) {
                 resultRGB = sampledRGB * centerWeight * sampledAlpha;
               } else {
-                // \u30A2\u30EB\u30D5\u30A1\u304C0\u306E\u5834\u5408\u306F\u5468\u56F2\u304B\u3089\u8272\u3092\u63A8\u6E2C\u3059\u308B\u305F\u3081\u521D\u671F\u5024\u306F0
                 resultRGB = vec3f(0.0);
               }
 
-              let pixelStep = 1.0 / dims.x;
+              // Determine step direction based on direction parameter
+              var pixelStep: vec2f;
+              if (params.direction == 1) {
+                pixelStep = vec2f(1.0 / dims.x, 0.0); // Horizontal step
+              } else {
+                pixelStep = vec2f(0.0, 1.0 / dims.y); // Vertical step
+              }
+
               let radiusScaledInt = i32(ceil(radiusScaled));
 
+              // Process blur samples
               for (var i = 1; i <= radiusScaledInt; i = i + 1) {
                 let offset = f32(i);
                 let weight = gaussianWeight(offset, sigma);
 
-                let offsetRight = vec2f(pixelStep * offset, 0.0);
-                let offsetLeft = vec2f(-pixelStep * offset, 0.0);
+                let offsetPos = pixelStep * offset;
+                let offsetNeg = -pixelStep * offset;
 
-                let rightCoord = texCoord * toInputTexCoord + offsetRight;
-                let leftCoord = texCoord * toInputTexCoord + offsetLeft;
+                let posCoord = texCoord * toInputTexCoord + offsetPos;
+                let negCoord = texCoord * toInputTexCoord + offsetNeg;
 
-                let sampleRight = textureSampleLevel(inputTexture, textureSampler, rightCoord, 0.0);
-                let sampleLeft = textureSampleLevel(inputTexture, textureSampler, leftCoord, 0.0);
+                let samplePos = textureSampleLevel(inputTexture, textureSampler, posCoord, 0.0);
+                let sampleNeg = textureSampleLevel(inputTexture, textureSampler, negCoord, 0.0);
 
-                // \u30AB\u30B9\u30BF\u30E0\u8272\u307E\u305F\u306F\u4E2D\u9593\u30C6\u30AF\u30B9\u30C1\u30E3\u306E\u8272\u3092\u4F7F\u7528
-                var sampleRightRGB: vec3f;
-                var sampleLeftRGB: vec3f;
+                // Color sampling based on custom color setting
+                var samplePosRGB: vec3f;
+                var sampleNegRGB: vec3f;
 
                 if (params.useCustomColor != 0) {
-                  sampleRightRGB = params.customColor.rgb;
-                  sampleLeftRGB = params.customColor.rgb;
+                  samplePosRGB = params.customColor.rgb;
+                  sampleNegRGB = params.customColor.rgb;
                 } else {
-                  sampleRightRGB = sampleRight.rgb;
-                  sampleLeftRGB = sampleLeft.rgb;
+                  samplePosRGB = samplePos.rgb;
+                  sampleNegRGB = sampleNeg.rgb;
                 }
 
-                // \u30A2\u30EB\u30D5\u30A1\u5024\u306E\u8A08\u7B97
-                resultAlpha += (sampleRight.a + sampleLeft.a) * weight;
+                // Alpha calculation
+                resultAlpha += (samplePos.a + sampleNeg.a) * weight;
                 totalWeightAlpha += weight * 2.0;
 
-                // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u3067\u91CD\u307F\u4ED8\u3051\uFF09
-                // \u30A2\u30EB\u30D5\u30A1\u304C0\u3067\u306A\u3051\u308C\u3070RGB\u3092\u8003\u616E
-                if (sampleRight.a > 0.0) {
-                  resultRGB += sampleRightRGB * weight * sampleRight.a;
-                  totalWeightRGB += weight * sampleRight.a;
+                // RGB calculation (weighted by alpha)
+                if (samplePos.a > 0.0) {
+                  resultRGB += samplePosRGB * weight * samplePos.a;
+                  totalWeightRGB += weight * samplePos.a;
                 }
 
-                if (sampleLeft.a > 0.0) {
-                  resultRGB += sampleLeftRGB * weight * sampleLeft.a;
-                  totalWeightRGB += weight * sampleLeft.a;
+                if (sampleNeg.a > 0.0) {
+                  resultRGB += sampleNegRGB * weight * sampleNeg.a;
+                  totalWeightRGB += weight * sampleNeg.a;
                 }
               }
 
-              // \u6700\u7D42\u7684\u306A\u30A2\u30EB\u30D5\u30A1\u5024\u3092\u8A08\u7B97
+              // Calculate final alpha
               resultAlpha = resultAlpha / totalWeightAlpha;
 
-              // RGB\u5024\u306E\u8A08\u7B97\uFF08\u30A2\u30EB\u30D5\u30A1\u91CD\u307F\u3067\u6B63\u898F\u5316\uFF09
+              // Calculate final RGB (normalized by alpha weights)
               var finalRGB: vec3f;
               if (totalWeightRGB > 0.0) {
                 finalRGB = resultRGB / totalWeightRGB;
               } else {
-                // \u30A2\u30EB\u30D5\u30A1\u304C\u3059\u3079\u30660\u306A\u3089\u3001\u5143\u306E\u8272\u3092\u4F7F\u7528
                 finalRGB = intermediateColor.rgb;
               }
 
-              // \u57FA\u672C\u7684\u306A\u30D6\u30E9\u30FC\u7D50\u679C
-              let blurColor = vec4f(finalRGB, resultAlpha);
+              // Basic blur result
+              var finalColor = vec4f(finalRGB, resultAlpha);
 
-              // \u304D\u3089\u3081\u304D\u52B9\u679C\u3092\u9069\u7528\uFF08\u5024\u3092\u6700\u59272\u500D\u307E\u3067\u5897\u5E45\uFF09
-              let sparkleMultiplier = 1.0 + params.sparkle;
-              let sparkledColor = vec4f(blurColor.rgb * sparkleMultiplier, blurColor.a);
+              // Apply additional effects for horizontal pass only
+              if (params.direction == 1) {
+                // Apply sparkle effect (amplify values up to 2x)
+                let sparkleMultiplier = 1.0 + params.sparkle;
+                // Apply blendOpacity to the blur color's alpha
+                let sparkledColor = vec4f(finalColor.rgb * sparkleMultiplier, finalColor.a * params.blendOpacity);
 
-              // \u5143\u753B\u50CF\u306E\u900F\u660E\u5EA6\u306B\u57FA\u3065\u3044\u3066\u5408\u6210
-              // \u5143\u753B\u50CF\u304C\u4E0D\u900F\u660E\u306A\u90E8\u5206\u307B\u3069\u5143\u753B\u50CF\u306E\u8272\u3092\u4F7F\u7528
-              let blendFactor = originalColor.a;
-              let blendedRGB = mix(sparkledColor.rgb, originalColor.rgb, blendFactor);
+                // Blend with original based on original alpha
+                let blendFactor = originalColor.a;
+                let blendedRGB = mix(sparkledColor.rgb, originalColor.rgb, blendFactor);
 
-                              // \u300C\u5143\u753B\u50CF\u3092\u900F\u660E\u306B\u3059\u308B\u300D\u8A2D\u5B9A\u306B\u57FA\u3065\u3044\u3066\u30A2\u30EB\u30D5\u30A1\u3092\u8ABF\u6574
-              var resultColor: vec4f;
-              if (params.makeOriginalTransparent != 0) {
-                // \u5408\u6210\u3057\u305FRGB\u3092\u4F7F\u7528\u3057\u3001\u5143\u753B\u50CF\u304C\u4E0D\u900F\u660E\u3060\u3063\u305F\u90E8\u5206\u306E\u30A2\u30EB\u30D5\u30A1\u30920\u306B
-                let resultAlpha = select(sparkledColor.a, 0.0, originalColor.a > 0.0);
-                resultColor = vec4f(blendedRGB, resultAlpha);
-              } else {
-                // \u901A\u5E38\u306E\u5408\u6210\uFF1A\u5143\u753B\u50CF\u306E\u4E0D\u900F\u660E\u90E8\u5206\u306F\u5143\u753B\u50CF\u306E\u8272\u3001\u900F\u660E\u90E8\u5206\u306F\u30D6\u30E9\u30FC+\u304D\u3089\u3081\u304D\u52B9\u679C
-                resultColor = vec4f(blendedRGB, max(originalColor.a, sparkledColor.a));
+                // Adjust alpha based on makeOriginalTransparent setting
+                if (params.makeOriginalTransparent != 0) {
+                  // Use blended RGB but set alpha to 0 where original was opaque
+                  let resultAlpha = select(sparkledColor.a, 0.0, originalColor.a > 0.0);
+                  finalColor = vec4f(blendedRGB, resultAlpha);
+                } else {
+                  // Normal blend: use original color for opaque parts, blur+sparkle for transparent parts
+                  // Apply blendOpacity to control how visible the blur effect is
+                  finalColor = vec4f(blendedRGB, max(originalColor.a, sparkledColor.a));
+                }
+
+                // Clamp results to valid range
+                finalColor = clamp(finalColor, vec4f(0.0), vec4f(1.0));
               }
 
-              // \u7D50\u679C\u306F0.0\uFF5E1.0\u306E\u7BC4\u56F2\u306B\u5236\u9650
-              resultColor = clamp(resultColor, vec4f(0.0), vec4f(1.0));
-
-              textureStore(resultTexture, id.xy, resultColor);
+              textureStore(resultTexture, id.xy, finalColor);
             }
           `;
-          const verticalShader = device.createShaderModule({
-            label: "Kirakira Blur Vertical Shader",
-            code: verticalBlurCode
+          const shader = device.createShaderModule({
+            label: "Kirakira Blur Common Shader",
+            code: commonBlurCode
           });
-          const horizontalShader = device.createShaderModule({
-            label: "Kirakira Blur Horizontal Shader",
-            code: horizontalBlurCode
-          });
-          const verticalPipelineDef = makeShaderDataDefinitions3(verticalBlurCode);
-          const horizontalPipelineDef = makeShaderDataDefinitions3(horizontalBlurCode);
-          const verticalPipeline = device.createComputePipeline({
-            label: "Kirakira Blur Vertical Pipeline",
+          const pipelineDef = makeShaderDataDefinitions3(commonBlurCode);
+          const pipeline = device.createComputePipeline({
+            label: "Kirakira Blur Pipeline",
             layout: "auto",
             compute: {
-              module: verticalShader,
+              module: shader,
               entryPoint: "computeMain"
             }
           });
-          const horizontalPipeline = device.createComputePipeline({
-            label: "Kirakira Blur Horizontal Pipeline",
-            layout: "auto",
-            compute: {
-              module: horizontalShader,
-              entryPoint: "computeMain"
-            }
-          });
-          return {
-            device,
-            verticalPipeline,
-            horizontalPipeline,
-            verticalPipelineDef,
-            horizontalPipelineDef
-          };
+          return { device, pipeline, pipelineDef };
         }
       );
     },
-    goLiveEffect: async ({
-      device,
-      verticalPipeline,
-      horizontalPipeline,
-      verticalPipelineDef,
-      horizontalPipelineDef
-    }, params, imgData, { dpi, baseDpi }) => {
+    goLiveEffect: async ({ device, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
       console.log("Kirakira Blur V1", params);
       const dpiRatio = dpi / baseDpi;
       const paddingSize = Math.ceil(params.radius * dpiRatio);
@@ -2565,7 +2315,7 @@ var kirakiraBlur = definePlugin({
         minFilter: "nearest"
       });
       const verticalUniformValues = makeStructuredView3(
-        verticalPipelineDef.uniforms.params
+        pipelineDef.uniforms.params
       );
       const verticalUniformBuffer = device.createBuffer({
         label: "Kirakira Blur Vertical Params Buffer",
@@ -2573,7 +2323,7 @@ var kirakiraBlur = definePlugin({
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
       const horizontalUniformValues = makeStructuredView3(
-        horizontalPipelineDef.uniforms.params
+        pipelineDef.uniforms.params
       );
       const horizontalUniformBuffer = device.createBuffer({
         label: "Kirakira Blur Horizontal Params Buffer",
@@ -2586,6 +2336,7 @@ var kirakiraBlur = definePlugin({
         radius: params.radius,
         strength: params.strength,
         sparkle: params.sparkle,
+        blendOpacity: params.blendOpacity,
         makeOriginalTransparent: params.makeOriginalTransparent ? 1 : 0,
         useCustomColor: params.useCustomColor ? 1 : 0,
         customColor: [
@@ -2593,7 +2344,9 @@ var kirakiraBlur = definePlugin({
           params.customColor.g,
           params.customColor.b,
           params.customColor.a
-        ]
+        ],
+        direction: 0
+        // 縦方向パス
       });
       horizontalUniformValues.set({
         outputSize: [outputWidth, outputHeight],
@@ -2601,6 +2354,7 @@ var kirakiraBlur = definePlugin({
         radius: params.radius,
         strength: params.strength,
         sparkle: params.sparkle,
+        blendOpacity: params.blendOpacity,
         makeOriginalTransparent: params.makeOriginalTransparent ? 1 : 0,
         useCustomColor: params.useCustomColor ? 1 : 0,
         customColor: [
@@ -2608,7 +2362,9 @@ var kirakiraBlur = definePlugin({
           params.customColor.g,
           params.customColor.b,
           params.customColor.a
-        ]
+        ],
+        direction: 1
+        // 横方向パス
       });
       device.queue.writeBuffer(
         verticalUniformBuffer,
@@ -2628,7 +2384,7 @@ var kirakiraBlur = definePlugin({
       );
       const verticalBindGroup = device.createBindGroup({
         label: "Kirakira Blur Vertical Bind Group",
-        layout: verticalPipeline.getBindGroupLayout(0),
+        layout: pipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
@@ -2645,12 +2401,17 @@ var kirakiraBlur = definePlugin({
           {
             binding: 3,
             resource: { buffer: verticalUniformBuffer }
+          },
+          {
+            binding: 4,
+            resource: inputTexture.createView()
+            // 縦方向パスでは使用しないが、バインドは必要
           }
         ]
       });
       const horizontalBindGroup = device.createBindGroup({
         label: "Kirakira Blur Horizontal Bind Group",
-        layout: horizontalPipeline.getBindGroupLayout(0),
+        layout: pipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
@@ -2671,6 +2432,7 @@ var kirakiraBlur = definePlugin({
           {
             binding: 4,
             resource: inputTexture.createView()
+            // 元画像（横方向パスで使用）
           }
         ]
       });
@@ -2685,7 +2447,7 @@ var kirakiraBlur = definePlugin({
       const verticalPass = commandEncoder.beginComputePass({
         label: "Kirakira Blur Vertical Pass"
       });
-      verticalPass.setPipeline(verticalPipeline);
+      verticalPass.setPipeline(pipeline);
       verticalPass.setBindGroup(0, verticalBindGroup);
       verticalPass.dispatchWorkgroups(
         Math.ceil(bufferInputWidth / 16),
@@ -2695,7 +2457,7 @@ var kirakiraBlur = definePlugin({
       const horizontalPass = commandEncoder.beginComputePass({
         label: "Kirakira Blur Horizontal Pass"
       });
-      horizontalPass.setPipeline(horizontalPipeline);
+      horizontalPass.setPipeline(pipeline);
       horizontalPass.setBindGroup(0, horizontalBindGroup);
       horizontalPass.dispatchWorkgroups(
         Math.ceil(bufferInputWidth / 16),
@@ -5134,7 +4896,7 @@ fn computeMain(@builtin(global_invocation_id) id: vec3u) {
   }
 });
 
-// src/js/src/live-effects/fluid-distortion.ts
+// src/js/src/live-effects/distortion-fluid.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions9,
   makeStructuredView as makeStructuredView9
@@ -6607,7 +6369,7 @@ var kaleidoscope = definePlugin({
   }
 });
 
-// src/js/src/live-effects/vhs-interlace.ts
+// src/js/src/live-effects/filter-vhs-interlace.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions11,
   makeStructuredView as makeStructuredView11
@@ -7401,16 +7163,7 @@ var t12 = createTranslator({
     bicubic: "Smooth",
     blocksX: "Horizontal Block Size",
     blocksY: "Vertical Block Size",
-    linkAxes: "Link Axes",
-    enableRefraction: "Enable Block Refraction",
-    refraction: "Refraction Strength",
-    seed: "Pattern Seed",
-    patternType: "Refraction Pattern",
-    blockPattern: "Block",
-    ripplePattern: "Ripple",
-    mixedPattern: "Mixed",
-    rippleFrequency: "Ripple Frequency",
-    rippleComplexity: "Ripple Complexity"
+    linkAxes: "Link Axes"
   },
   ja: {
     title: "\u30C0\u30A6\u30F3\u30B5\u30F3\u30D7\u30E9\u30FC V1",
@@ -7419,19 +7172,10 @@ var t12 = createTranslator({
     bicubic: "\u306A\u3081\u3089\u304B",
     blocksX: "\u6A2A\u65B9\u5411\u30D6\u30ED\u30C3\u30AF\u30B5\u30A4\u30BA",
     blocksY: "\u7E26\u65B9\u5411\u30D6\u30ED\u30C3\u30AF\u30B5\u30A4\u30BA",
-    linkAxes: "\u7E26\u6A2A\u9023\u52D5",
-    enableRefraction: "\u30D6\u30ED\u30C3\u30AF\u5C48\u6298\u3092\u6709\u52B9\u5316",
-    refraction: "\u5C48\u6298\u7387",
-    seed: "\u30D1\u30BF\u30FC\u30F3\u30B7\u30FC\u30C9",
-    patternType: "\u5C48\u6298\u30D1\u30BF\u30FC\u30F3",
-    blockPattern: "\u30D6\u30ED\u30C3\u30AF",
-    ripplePattern: "\u6CE2\u7D0B",
-    mixedPattern: "\u30DF\u30C3\u30AF\u30B9",
-    rippleFrequency: "\u6CE2\u7D0B\u306E\u983B\u5EA6",
-    rippleComplexity: "\u6CE2\u7D0B\u306E\u8907\u96D1\u3055"
+    linkAxes: "\u7E26\u6A2A\u9023\u52D5"
   }
 });
-var MAX_BLOCKS = 48;
+var MAX_BLOCKS = 96;
 var downsampler = definePlugin({
   id: "downsampler-v1",
   title: t12("title"),
@@ -7458,31 +7202,6 @@ var downsampler = definePlugin({
         type: "string",
         enum: ["bilinear", "bicubic"],
         default: "bilinear"
-      },
-      enableRefraction: {
-        type: "bool",
-        default: false
-      },
-      patternType: {
-        type: "string",
-        enum: ["block", "ripple", "mixed"],
-        default: "block"
-      },
-      refraction: {
-        type: "real",
-        default: 0.1
-      },
-      seed: {
-        type: "real",
-        default: 1
-      },
-      rippleFrequency: {
-        type: "real",
-        default: 5
-      },
-      rippleComplexity: {
-        type: "real",
-        default: 3
       }
     },
     onEditParameters: (params) => {
@@ -7499,26 +7218,11 @@ var downsampler = definePlugin({
         blocksX: lerp(paramsA.blocksX, paramsB.blocksX, t22),
         blocksY: lerp(paramsA.blocksY, paramsB.blocksY, t22),
         linkAxes: t22 < 0.5 ? paramsA.linkAxes : paramsB.linkAxes,
-        mode: t22 < 0.5 ? paramsA.mode : paramsB.mode,
-        enableRefraction: t22 < 0.5 ? paramsA.enableRefraction : paramsB.enableRefraction,
-        patternType: t22 < 0.5 ? paramsA.patternType : paramsB.patternType,
-        refraction: lerp(paramsA.refraction, paramsB.refraction, t22),
-        seed: lerp(paramsA.seed, paramsB.seed, t22),
-        rippleFrequency: lerp(
-          paramsA.rippleFrequency,
-          paramsB.rippleFrequency,
-          t22
-        ),
-        rippleComplexity: lerp(
-          paramsA.rippleComplexity,
-          paramsB.rippleComplexity,
-          t22
-        )
+        mode: t22 < 0.5 ? paramsA.mode : paramsB.mode
       };
     },
     renderUI: (params, { setParam }) => {
       const onChangeBlocksX = ({ value }) => {
-        console.log({ value });
         setParam({ blocksX: value });
         if (params.linkAxes) setParam({ blocksY: value });
       };
@@ -7569,80 +7273,6 @@ var downsampler = definePlugin({
         ]),
         ui.group({ direction: "row" }, [
           ui.checkbox({ key: "linkAxes", value: params.linkAxes, label: t12("linkAxes") })
-        ]),
-        ui.separator(),
-        ui.group({ direction: "row" }, [
-          ui.checkbox({ key: "enableRefraction", value: params.enableRefraction, label: t12("enableRefraction") })
-        ]),
-        ui.group({ direction: "col", disabled: !params.enableRefraction }, [
-          ui.text({ text: t12("patternType") }),
-          ui.select({
-            key: "patternType",
-            value: params.patternType,
-            options: [
-              { label: t12("blockPattern"), value: "block" },
-              { label: t12("ripplePattern"), value: "ripple" },
-              { label: t12("mixedPattern"), value: "mixed" }
-            ]
-          })
-        ]),
-        ui.group({ direction: "col", disabled: !params.enableRefraction }, [
-          ui.text({ text: t12("refraction") }),
-          ui.group({ direction: "row" }, [
-            ui.slider({
-              key: "refraction",
-              dataType: "float",
-              min: 0,
-              max: 1,
-              value: params.refraction
-            }),
-            ui.numberInput({ key: "refraction", dataType: "float", value: params.refraction })
-          ])
-        ]),
-        ui.group({ direction: "col", disabled: !params.enableRefraction }, [
-          ui.text({ text: t12("seed") }),
-          ui.group({ direction: "row" }, [
-            ui.slider({
-              key: "seed",
-              dataType: "float",
-              min: 0.1,
-              max: 100,
-              value: params.seed
-            }),
-            ui.numberInput({ key: "seed", dataType: "float", value: params.seed })
-          ])
-        ]),
-        ui.group({
-          direction: "col",
-          disabled: !params.enableRefraction || params.patternType === "block"
-        }, [
-          ui.text({ text: t12("rippleFrequency") }),
-          ui.group({ direction: "row" }, [
-            ui.slider({
-              key: "rippleFrequency",
-              dataType: "float",
-              min: 1,
-              max: 20,
-              value: params.rippleFrequency
-            }),
-            ui.numberInput({ key: "rippleFrequency", dataType: "float", value: params.rippleFrequency })
-          ])
-        ]),
-        ui.group({
-          direction: "col",
-          disabled: !params.enableRefraction || params.patternType === "block"
-        }, [
-          ui.text({ text: t12("rippleComplexity") }),
-          ui.group({ direction: "row" }, [
-            ui.slider({
-              key: "rippleComplexity",
-              dataType: "float",
-              min: 1,
-              max: 10,
-              value: params.rippleComplexity
-            }),
-            ui.numberInput({ key: "rippleComplexity", dataType: "float", value: params.rippleComplexity })
-          ])
         ])
       ]);
     },
@@ -7658,85 +7288,13 @@ var downsampler = definePlugin({
               dpiScale: f32,
               blocksX: f32,
               blocksY: f32,
-              mode: i32,            // 0: bilinear, 1: bicubic
-              enableRefraction: i32, // 0: disabled, 1: enabled
-              patternType: i32,     // 0: block, 1: ripple, 2: mixed
-              refraction: f32,
-              seed: f32,
-              rippleFrequency: f32,
-              rippleComplexity: f32,
+              mode: i32, // 0: bilinear, 1: bicubic
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;
             @group(0) @binding(1) var resultTexture: texture_storage_2d<rgba8unorm, write>;
             @group(0) @binding(2) var textureSampler: sampler;
             @group(0) @binding(3) var<uniform> params: Params;
-
-            // Hash function for pseudo-random number generation
-            fn hash21(p: vec2f) -> f32 {
-              var n = dot(p, vec2f(127.1, 311.7));
-              return fract(sin(n) * 43758.5453);
-            }
-
-            // Cubic weight function for bicubic sampling
-            fn cubicWeight(x: f32) -> f32 {
-              let absX = abs(x);
-              if (absX < 1.0) {
-                return (1.5 * absX - 2.5) * absX * absX + 1.0;
-              } else if (absX < 2.0) {
-                return ((-0.5 * absX + 2.5) * absX - 4.0) * absX + 2.0;
-              }
-              return 0.0;
-            }
-
-            // Bicubic texture sampling at a given coordinate with pre-calculated dimensions
-            fn sampleBicubic(texCoord: vec2f, dims: vec2f, scale: vec2f) -> vec4f {
-              let adjustedCoord = texCoord * scale;
-
-              let texelSize = 1.0 / dims;
-
-              let tc = adjustedCoord * dims - 0.5;
-              let fxy = fract(tc);
-              let ixy = tc - fxy;
-
-              // Calculate bicubic weights
-              var wx: array<f32, 4>;
-              var wy: array<f32, 4>;
-
-              for (var i = 0u; i < 4u; i++) {
-                wx[i] = cubicWeight(f32(i) - 1.0 - fxy.x);
-                wy[i] = cubicWeight(f32(i) - 1.0 - fxy.y);
-              }
-
-              // Normalize weights
-              let sumX = wx[0] + wx[1] + wx[2] + wx[3];
-              let sumY = wy[0] + wy[1] + wy[2] + wy[3];
-
-              for (var i = 0u; i < 4u; i++) {
-                wx[i] = wx[i] / sumX;
-                wy[i] = wy[i] / sumY;
-              }
-
-              var color = vec4f(0.0);
-
-              // Sample 16 texels and apply weights
-              for (var y = 0u; y < 4u; y++) {
-                for (var x = 0u; x < 4u; x++) {
-                  let samplePos = vec2f(
-                    (ixy.x + f32(x) - 1.0) * texelSize.x,
-                    (ixy.y + f32(y) - 1.0) * texelSize.y
-                  );
-
-                  // Clamp to valid texture coordinates
-                  let clampedPos = clamp(samplePos, vec2f(0.0), vec2f(1.0) - texelSize);
-                  let sample = textureSampleLevel(inputTexture, textureSampler, clampedPos, 0.0);
-
-                  color += sample * wx[x] * wy[y];
-                }
-              }
-
-              return color;
-            }
 
             @compute @workgroup_size(16, 16)
             fn computeMain(@builtin(global_invocation_id) id: vec3u) {
@@ -7752,124 +7310,16 @@ var downsampler = definePlugin({
 
               let blockX = floor(texCoord.x * blocksX);
               let blockY = floor(texCoord.y * blocksY);
-              let blockPos = vec2f(blockX, blockY);
-
-              let blockUV = fract(texCoord * vec2f(blocksX, blocksY));
 
               let scaledCoordX = (blockX + 0.5) / blocksX;
               let scaledCoordY = (blockY + 0.5) / blocksY;
 
               // Base sampling coordinate (block center)
-              var downscaledCoord = vec2f(scaledCoordX, scaledCoordY);
-
-              // Apply refraction if enabled
-              if (params.enableRefraction != 0) {
-                var displacement = vec2f(0.0);
-
-              if (params.patternType == 0) { // Block pattern
-                let blockHash = hash21(blockPos + vec2f(params.seed));
-                let angle = blockHash * 6.28;
-                let blockDir = vec2f(cos(angle), sin(angle));
-                let distanceFromCenter = length(blockUV - vec2f(0.5));
-                displacement = blockDir * distanceFromCenter;
-                } else if (params.patternType == 1) { // Ripple pattern
-                var combinedDisplacement = vec2f(0.0);
-                let maxCenters = min(params.rippleComplexity * 2.0, 12.0);
-
-                let seedOffset = vec2f(sin(params.seed * 0.1), cos(params.seed * 0.1));
-                let p = texCoord + seedOffset;
-
-                let mainCenter = vec2f(0.5) + vec2f(sin(params.seed * 0.753) * 0.2, cos(params.seed * 0.371) * 0.2);
-
-                for (var c = 0.0; c < maxCenters; c += 1.0) {
-                  let centerOffset = vec2f(
-                    sin(params.seed * 1.7 + c * 3.33) * 0.3,
-                    cos(params.seed * 2.1 + c * 2.72) * 0.3
-                  );
-
-                  let center = mainCenter + centerOffset * (0.4 + c * 0.05);
-                  let baseDistance = length(p - center);
-                  let noiseScale = hash21(p * (c + 1.0) + vec2f(params.seed)) * 0.15;
-                  let distortedDist = baseDistance * (1.0 + noiseScale);
-                  let centerFreq = params.rippleFrequency * (0.8 + hash21(vec2f(c, params.seed)) * 0.4);
-                  let phase = params.seed * (c + 1.0) * 0.3;
-
-                  let rippleValue = sin(distortedDist * centerFreq * 6.28 + phase);
-                  let dir = normalize(p - center);
-                  let strength = (1.0 / (c + 1.0)) * 0.5;
-                  let organicFactor = sin(distortedDist * centerFreq * 3.14 + phase * 1.5) * 0.2;
-
-                  let warpedDir = vec2f(
-                    dir.x + sin(dir.y * 5.0 + params.seed) * 0.2,
-                    dir.y + cos(dir.x * 5.0 + params.seed) * 0.2
-                  );
-
-                  combinedDisplacement += warpedDir * (rippleValue + organicFactor) * strength;
-                }
-
-                displacement = combinedDisplacement;
-                } else if (params.patternType == 2) { // Mixed pattern
-                let blockHash = hash21(blockPos + vec2f(params.seed));
-                let angle = blockHash * 6.28;
-                let blockDir = vec2f(cos(angle), sin(angle));
-                let distanceFromCenter = length(blockUV - vec2f(0.5));
-                let blockDisp = blockDir * distanceFromCenter;
-
-                  // Ripple pattern
-                  let seedOffset = vec2f(sin(params.seed * 0.1), cos(params.seed * 0.1));
-                  let p = texCoord + seedOffset;
-                  let center = vec2f(0.5) + vec2f(sin(params.seed * 0.753) * 0.2, cos(params.seed * 0.371) * 0.2);
-                  let dist = length(p - center);
-                  let baseRipple = sin(dist * params.rippleFrequency * 6.28);
-
-                  var rippleSum = baseRipple;
-                  let maxComplexity = min(params.rippleComplexity, 10.0);
-
-                  for (var i = 1.0; i < maxComplexity; i += 1.0) {
-                    let offset = vec2f(
-                      sin(params.seed * 0.1 + i * 0.37),
-                      cos(params.seed * 0.1 + i * 0.53)
-                    ) * 0.4;
-
-                    let altCenter = center + offset;
-                    let altDist = length(p - altCenter);
-                    let altFreq = params.rippleFrequency * (0.5 + i * 0.2);
-                    let altPhase = params.seed * i * 0.1;
-                    let altRipple = sin(altDist * altFreq * 6.28 + altPhase);
-                    rippleSum += altRipple / i;
-                  }
-
-                  rippleSum /= maxComplexity;
-                  let dir = normalize(p - center);
-                  let rippleDisp = dir * rippleSum;
-
-                  // Mix both patterns
-                  displacement = blockDisp * 0.5 + rippleDisp * 0.5;
-                } else { // Default fallback to block
-                let blockHash = hash21(blockPos + vec2f(params.seed));
-                let angle = blockHash * 6.28;
-                let blockDir = vec2f(cos(angle), sin(angle));
-                let distanceFromCenter = length(blockUV - vec2f(0.5));
-                displacement = blockDir * distanceFromCenter;
-                }
-
-                // Scale displacement by refraction strength
-                let refractStrength = params.refraction * 0.2;
-                downscaledCoord += displacement * refractStrength;
-
-                // Clamp to prevent sampling outside texture
-                downscaledCoord = clamp(downscaledCoord, vec2f(0.0), vec2f(1.0));
-              }
-
+              let downscaledCoord = vec2f(scaledCoordX, scaledCoordY);
               let finalSampleCoord = downscaledCoord * toInputTexCoord;
 
               var finalColor: vec4f;
-
-              if (params.mode == 0) { // Bilinear
-                finalColor = textureSampleLevel(inputTexture, textureSampler, finalSampleCoord, 0.0);
-              } else { // Bicubic
-                finalColor = sampleBicubic(downscaledCoord, textureDims, toInputTexCoord);
-              }
+              finalColor = textureSampleLevel(inputTexture, textureSampler, finalSampleCoord, 0.0);
 
               textureStore(resultTexture, id.xy, finalColor);
             }
@@ -7892,18 +7342,6 @@ var downsampler = definePlugin({
       );
     },
     goLiveEffect: async ({ device, pipeline, pipelineDef }, params, imgData, { dpi, baseDpi }) => {
-      console.log(
-        "Downsampler V1",
-        params,
-        "Device DPI:",
-        dpi,
-        "Base DPI:",
-        baseDpi,
-        "Raw size:",
-        imgData.width,
-        "x",
-        imgData.height
-      );
       const modeValue = params.mode === "bilinear" ? 0 : 1;
       const outputWidth = imgData.width;
       const outputHeight = imgData.height;
@@ -7940,13 +7378,7 @@ var downsampler = definePlugin({
         dpiScale: dpi / baseDpi,
         blocksX: params.blocksX,
         blocksY: params.blocksY,
-        mode: modeValue,
-        enableRefraction: params.enableRefraction ? 1 : 0,
-        patternType: params.patternType === "block" ? 0 : params.patternType === "ripple" ? 1 : 2,
-        refraction: params.refraction,
-        seed: params.seed,
-        rippleFrequency: params.rippleFrequency,
-        rippleComplexity: params.rippleComplexity
+        mode: modeValue
       });
       device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer);
       const bindGroup = device.createBindGroup({
@@ -8363,7 +7795,7 @@ var waveDistortion = definePlugin({
   }
 });
 
-// src/js/src/live-effects/selective-color-correction.ts
+// src/js/src/live-effects/color-selective-correction.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions14,
   makeStructuredView as makeStructuredView14
@@ -9063,15 +8495,15 @@ var selectiveColorCorrection = definePlugin({
               if (params.previewMask != 0) {
                 textureStore(resultTexture, id.xy, vec4f(maskColor, originalColor.a));
               } else {
-                let mixedColor = mixOklch(originalColor.rgb, finalColor, params.mix);
+                let mixedColor = mixOklab(originalColor.rgb, finalColor, params.mix);
                 textureStore(resultTexture, id.xy, vec4f(mixedColor, originalColor.a));
               }
             }
 
             // This is includes below 2 functions
-            // fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32>;
-            // fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32>;
-            ${includeOklchMix()}
+            // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklabMix()}
           `;
           const shader = device.createShaderModule({
             label: "Selective Color Correction Shader",
@@ -9964,7 +9396,7 @@ var dataMosh = definePlugin({
   }
 });
 
-// src/js/src/live-effects/gaussian-blur.ts
+// src/js/src/live-effects/blur-gaussian.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions16,
   makeStructuredView as makeStructuredView16
@@ -10069,30 +9501,30 @@ var gaussianBlur = definePlugin({
               // Ignore 256 padded pixels
               if (texCoord.x > 1.0 || texCoord.y > 1.0) { return; }
 
-              let originalColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
+              let inputColor = textureSampleLevel(inputTexture, textureSampler, texCoord * toInputTexCoord, 0.0);
 
               let radiusScaled = f32(params.radius) * params.dpiScale;
               let sigma = radiusScaled * params.sigma;
 
               // Return original color if no blur is applied
               if (sigma <= 0.0) {
-                textureStore(resultTexture, id.xy, originalColor);
+                textureStore(resultTexture, id.xy, inputColor);
                 return;
               }
 
               let centerWeight = gaussianWeight(0.0, sigma);
               var totalWeightAlpha = centerWeight;
-              var resultAlpha = originalColor.a * centerWeight;
+              var resultAlpha = inputColor.a * centerWeight;
 
               var totalWeightColor = centerWeight;
-              var resultRGB = originalColor.rgb * centerWeight;
+              var resultRGB = inputColor.rgb * centerWeight;
 
               var weightedColorSum = vec3f(0.0);
               var weightedColorWeight = 0.0;
 
-              if (originalColor.a > 0.0) {
-                weightedColorSum = originalColor.rgb * originalColor.a * centerWeight;
-                weightedColorWeight = originalColor.a * centerWeight;
+              if (inputColor.a > 0.0) {
+                weightedColorSum = inputColor.rgb * inputColor.a * centerWeight;
+                weightedColorWeight = inputColor.a * centerWeight;
               }
 
               var pixelStep: f32;
@@ -10604,6 +10036,8 @@ var brushStroke = definePlugin({
             @group(0) @binding(2) var textureSampler: sampler;
             @group(0) @binding(3) var<uniform> params: Params;
 
+            ${includeOklabMix()}
+
             fn hash(n: f32) -> f32 {
               return fract(sin(n) * 43758.5453);
             }
@@ -10758,7 +10192,7 @@ var brushStroke = definePlugin({
                   let colorB = vec4f(originalColor.rgb, 1.0);
 
                   // Oklch\u3067\u30AB\u30E9\u30FC\u30D6\u30EC\u30F3\u30C9
-                  let blendedColor = mixOklchVec4(colorA, colorB, blendFactor);
+                  let blendedColor = mixOklabVec4(colorA, colorB, blendFactor);
                   finalColor = vec4f(blendedColor.rgb, targetAlpha);
                 } else {
                   // \u5B8C\u5168\u900F\u660E\u306E\u5834\u5408
@@ -10776,116 +10210,6 @@ var brushStroke = definePlugin({
               }
 
               textureStore(resultTexture, id.xy, finalColor);
-            }
-
-            // Drop-in replacement for mix() that works with vec3f rgb colors
-            fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32> {
-              // RGB -> Linear RGB
-              let linearColor1 = vec3<f32>(
-                select(color1.r / 12.92, pow((color1.r + 0.055) / 1.055, 2.4), color1.r <= 0.04045),
-                select(color1.g / 12.92, pow((color1.g + 0.055) / 1.055, 2.4), color1.g <= 0.04045),
-                select(color1.b / 12.92, pow((color1.b + 0.055) / 1.055, 2.4), color1.b <= 0.04045),
-              );
-
-              let linearColor2 = vec3<f32>(
-                select(color2.r / 12.92, pow((color2.r + 0.055) / 1.055, 2.4), color2.r <= 0.04045),
-                select(color2.g / 12.92, pow((color2.g + 0.055) / 1.055, 2.4), color2.g <= 0.04045),
-                select(color2.b / 12.92, pow((color2.b + 0.055) / 1.055, 2.4), color2.b <= 0.04045),
-              );
-
-              // Linear RGB -> LMS
-              let lms1 = mat3x3<f32>(
-                0.4122214708, 0.5363325363, 0.0514459929,
-                0.2119034982, 0.6806995451, 0.1073969566,
-                0.0883024619, 0.2817188376, 0.6299787005
-              ) * linearColor1;
-
-              let lms2 = mat3x3<f32>(
-                0.4122214708, 0.5363325363, 0.0514459929,
-                0.2119034982, 0.6806995451, 0.1073969566,
-                0.0883024619, 0.2817188376, 0.6299787005
-              ) * linearColor2;
-
-              // LMS -> Oklab
-              let lms1_pow = vec3<f32>(pow(lms1.x, 1.0/3.0), pow(lms1.y, 1.0/3.0), pow(lms1.z, 1.0/3.0));
-              let lms2_pow = vec3<f32>(pow(lms2.x, 1.0/3.0), pow(lms2.y, 1.0/3.0), pow(lms2.z, 1.0/3.0));
-
-              let oklabMatrix = mat3x3<f32>(
-                0.2104542553, 0.7936177850, -0.0040720468,
-                1.9779984951, -2.4285922050, 0.4505937099,
-                0.0259040371, 0.7827717662, -0.8086757660
-              );
-
-              let oklab1 = oklabMatrix * lms1_pow;
-              let oklab2 = oklabMatrix * lms2_pow;
-
-              // Oklab -> OKLCH
-              let L1 = oklab1.x;
-              let L2 = oklab2.x;
-              let C1 = sqrt(oklab1.y * oklab1.y + oklab1.z * oklab1.z);
-              let C2 = sqrt(oklab2.y * oklab2.y + oklab2.z * oklab2.z);
-              let H1 = atan2(oklab1.z, oklab1.y);
-              let H2 = atan2(oklab2.z, oklab2.y);
-
-              // \u8272\u76F8\u306E\u88DC\u9593\uFF08\u6700\u77ED\u7D4C\u8DEF\uFF09
-              let hDiff = H2 - H1;
-              let hDiffAdjusted = select(
-                hDiff,
-                hDiff - 2.0 * 3.14159265359,
-                hDiff > 3.14159265359
-              );
-              let hDiffFinal = select(
-                hDiffAdjusted,
-                hDiffAdjusted + 2.0 * 3.14159265359,
-                hDiffAdjusted < -3.14159265359
-              );
-
-              let L = mix(L1, L2, t);
-              let C = mix(C1, C2, t);
-              let H = H1 + t * hDiffFinal;
-
-              // OKLCH -> Oklab
-              let a = C * cos(H);
-              let b = C * sin(H);
-
-              // Oklab -> LMS
-              let oklabInverseMatrix = mat3x3<f32>(
-                1.0, 0.3963377774, 0.2158037573,
-                1.0, -0.1055613458, -0.0638541728,
-                1.0, -0.0894841775, -1.2914855480
-              );
-
-              let lms_pow = oklabInverseMatrix * vec3<f32>(L, a, b);
-              let lms = vec3<f32>(
-                pow(lms_pow.x, 3.0),
-                pow(lms_pow.y, 3.0),
-                pow(lms_pow.z, 3.0)
-              );
-
-              // LMS -> Linear RGB
-              let lmsToRgbMatrix = mat3x3<f32>(
-                4.0767416621, -3.3077115913, 0.2309699292,
-                -1.2684380046, 2.6097574011, -0.3413193965,
-                -0.0041960863, -0.7034186147, 1.7076147010
-              );
-
-              let linearRgb = lmsToRgbMatrix * lms;
-
-              // Linear RGB -> RGB
-              let rgbResult = vec3<f32>(
-                select(12.92 * linearRgb.r, 1.055 * pow(linearRgb.r, 1.0/2.4) - 0.055, linearRgb.r <= 0.0031308),
-                select(12.92 * linearRgb.g, 1.055 * pow(linearRgb.g, 1.0/2.4) - 0.055, linearRgb.g <= 0.0031308),
-                select(12.92 * linearRgb.b, 1.055 * pow(linearRgb.b, 1.0/2.4) - 0.055, linearRgb.b <= 0.0031308),
-              );
-
-              return clamp(rgbResult, vec3<f32>(0.0), vec3<f32>(1.0));
-            }
-
-            fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32> {
-              return vec4<f32>(
-                mixOklch(color1.rgb, color2.rgb, t),
-                mix(color1.a, color2.a, t)
-              );
             }
           `;
           const shader = device.createShaderModule({
@@ -11023,7 +10347,7 @@ var brushStroke = definePlugin({
   }
 });
 
-// src/js/src/live-effects/paper-texture.ts
+// src/js/src/live-effects/texture-paper.ts
 import {
   makeShaderDataDefinitions as makeShaderDataDefinitions18,
   makeStructuredView as makeStructuredView18
@@ -13331,14 +12655,16 @@ var gradientMap = definePlugin({
               })
             ])
           ),
-          ui.button({
-            text: t20("addStop"),
-            onClick: handleAddColorStop
-          }),
-          ui.button({
-            text: t20("sortByPosition"),
-            onClick: handleSortByPosition
-          })
+          ui.group({ direction: "row" }, [
+            ui.button({
+              text: t20("addStop"),
+              onClick: handleAddColorStop
+            }),
+            ui.button({
+              text: t20("sortByPosition"),
+              onClick: handleSortByPosition
+            })
+          ])
         ]),
         ui.separator(),
         ui.group({ direction: "col" }, [
@@ -13430,8 +12756,6 @@ var gradientMap = definePlugin({
             @group(0) @binding(3) var<uniform> params: Params;
             @group(0) @binding(4) var<storage, read> colorStops: array<ColorStop>;
 
-            ${includeOklchMix()}
-
             fn getLuminance(color: vec3f) -> f32 {
               // Standard luminance calculation (Rec. 709 coefficients)
               return dot(color, vec3f(0.2126, 0.7152, 0.0722));
@@ -13478,7 +12802,7 @@ var gradientMap = definePlugin({
 
               let factor = (luminance - lowerStop.position) / range;
               // Use Oklch color space interpolation for more perceptually uniform results
-              return mixOklchVec4(lowerStop.color, upperStop.color, factor);
+              return mixOklabVec4(lowerStop.color, upperStop.color, factor);
             }
 
             @compute @workgroup_size(16, 16)
@@ -13512,13 +12836,18 @@ var gradientMap = definePlugin({
               } else {
                 // Mix colors using Oklch interpolation for better results
                 finalColor = vec4f(
-                  mixOklch(originalColor.rgb, gradientColor.rgb, mixStrength),
+                  mixOklab(originalColor.rgb, gradientColor.rgb, mixStrength),
                   originalColor.a
                 );
               }
 
               textureStore(resultTexture, id.xy, finalColor);
             }
+
+            // This is includes below 2 functions
+            // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklabMix()}
           `;
           const shader = device.createShaderModule({
             label: "Gradient Map Shader",
@@ -14165,6 +13494,9 @@ var husky = definePlugin({
 
 // src/js/src/main.ts
 var EFFECTS_DIR = new URL(toFileUrl2(join2(homedir(), ".ai-deno/effects")));
+var collator = new Intl.Collator(
+  _AI_DENO_.op_ai_deno_get_user_locale().replace(/_/g, "-")
+);
 var allPlugins = [
   brushStroke,
   chromaticAberration,
@@ -14190,7 +13522,9 @@ var allPlugins = [
   testBlueFill,
   vhsInterlace,
   waveDistortion
-];
+].sort((a, b) => {
+  return collator.compare(a.title, b.title);
+});
 var effectInits = /* @__PURE__ */ new Map();
 var allEffectPlugins = Object.fromEntries(
   allPlugins.filter((p) => !!p.liveEffect).map((p) => [p.id, p])
@@ -14209,7 +13543,8 @@ try {
           } catch (e) {
             await new Promise((resolve) => setTimeout(resolve, 500));
             throw new Error(
-              `[effect: ${effect.id}] Failed to initialize effect`,
+              `[effect: ${effect.id}] Failed to initialize effect: ${e.message}
+`,
               {
                 cause: e
               }

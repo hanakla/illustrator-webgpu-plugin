@@ -13,7 +13,7 @@ import {
   parseColorCode,
   toColorCode,
 } from "./_utils.ts";
-import { createGPUDevice, includeOklchMix } from "./_shared.ts";
+import { createGPUDevice, includeOklabMix } from "./_shared.ts";
 
 // 翻訳テキスト
 const t = createTranslator({
@@ -754,15 +754,15 @@ export const selectiveColorCorrection = definePlugin({
               if (params.previewMask != 0) {
                 textureStore(resultTexture, id.xy, vec4f(maskColor, originalColor.a));
               } else {
-                let mixedColor = mixOklch(originalColor.rgb, finalColor, params.mix);
+                let mixedColor = mixOklab(originalColor.rgb, finalColor, params.mix);
                 textureStore(resultTexture, id.xy, vec4f(mixedColor, originalColor.a));
               }
             }
 
             // This is includes below 2 functions
-            // fn mixOklch(color1: vec3<f32>, color2: vec3<f32>, t: f32) -> vec3<f32>;
-            // fn mixOklchVec4(color1: vec4<f32>, color2: vec4<f32>, t: f32) -> vec4<f32>;
-            ${includeOklchMix()}
+            // fn mixOklab(rgbColor1: vec3<f32>, rgbColor2: vec3<f32>, t: f32) -> vec3<f32>;
+            // fn mixOklabVec4(rgbColor1: vec4<f32>, rgbColor2: vec4<f32>, t: f32) -> vec4<f32>;
+            ${includeOklabMix()}
           `;
 
           const shader = device.createShaderModule({

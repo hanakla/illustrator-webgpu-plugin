@@ -160,7 +160,7 @@ ASErr HelloWorldPlugin::GoLiveEffect(AILiveEffectGoMessage* message) {
 
   // csl("art JSON: %s", suai::art::serialize::ArtToJSON(art).dump(2).c_str());
   // Test calling for checking it works
-  //  suai::art::serialize::ArtToJSON(art);
+  // csl("art JSON: %s", suai::art::serialize::ArtToJSON(art).dump(2).c_str());
 
   PluginParams params;
   error = this->getDictionaryValues(
@@ -692,8 +692,8 @@ ASErr HelloWorldPlugin::LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage* 
   ASErr error = kNoErr;
 
   // Exposing adjustColorCallback to Deno
-  AdjustColorCallbackLambda adjustColorCallback = [this, message](const char* color
-                                                  ) -> const char* {
+  AdjustColorCallbackLambda adjustColorCallback =
+      [this, message](const char* color) -> const char* {
     json input = json::parse(color);
 
     AIColor aiColor;
@@ -743,7 +743,8 @@ ASErr HelloWorldPlugin::LiveEffectAdjustColors(AILiveEffectAdjustColorsMessage* 
   return error;
 }
 
-ASErr HelloWorldPlugin::LiveEffectScaleParameters(AILiveEffectScaleParamMessage* message
+ASErr HelloWorldPlugin::LiveEffectScaleParameters(
+    AILiveEffectScaleParamMessage* message
 ) {
   std::cout << "SCALING LIVE!! EFFECT!!!" << std::endl;
 
@@ -845,16 +846,20 @@ ASErr HelloWorldPlugin::getDictionaryValues(
 ) {
   ASErr error = kNoErr;
 
-  std::string effectName = suai::str::toUtf8StdString(suai::dict::getUnicodeString(
-      dict, AI_DENO_DICT_EFFECT_NAME,
-      suai::str::toAiUnicodeStringUtf8(defaultParams.effectName), &error
-  ));
+  std::string effectName = suai::str::toUtf8StdString(
+      suai::dict::getUnicodeString(
+          dict, AI_DENO_DICT_EFFECT_NAME,
+          suai::str::toAiUnicodeStringUtf8(defaultParams.effectName), &error
+      )
+  );
   CHKERR();
 
-  std::string paramsJson = suai::str::toUtf8StdString(suai::dict::getUnicodeString(
-      dict, AI_DENO_DICT_PARAMS,
-      suai::str::toAiUnicodeStringUtf8(defaultParams.params.dump()), &error
-  ));
+  std::string paramsJson = suai::str::toUtf8StdString(
+      suai::dict::getUnicodeString(
+          dict, AI_DENO_DICT_PARAMS,
+          suai::str::toAiUnicodeStringUtf8(defaultParams.params.dump()), &error
+      )
+  );
   CHKERR();
 
   params->effectName = effectName;
@@ -913,7 +918,8 @@ void HelloWorldPlugin::putPreferences(PluginPreferences& pref, ASErr* err = null
   }
 }
 
-void HelloWorldPlugin::StaticHandleDenoAiAlert(const ai_deno::JsonFunctionResult* request
+void HelloWorldPlugin::StaticHandleDenoAiAlert(
+    const ai_deno::JsonFunctionResult* request
 ) {
   json req = json(request->json);
 
