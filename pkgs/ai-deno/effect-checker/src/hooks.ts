@@ -17,7 +17,7 @@ export function useEventCallback<T extends (...args: any[]) => any>(fn: T) {
   return stableRef.current;
 }
 
-export function useStableEvent(
+export function useStableEffect(
   callback: () => (() => void) | void,
   deps: DependencyList = []
 ) {

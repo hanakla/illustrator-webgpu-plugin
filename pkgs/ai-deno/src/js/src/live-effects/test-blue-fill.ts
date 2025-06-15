@@ -3,6 +3,7 @@ import { definePlugin, StyleFilterFlag } from "../plugin.ts";
 import { ui } from "../ui/nodes.ts";
 import { toPng } from "./_utils.ts";
 import { paddingImageData } from "./_utils.ts";
+import { logger } from "../logger.ts";
 
 const global: {
   lastInput: {
@@ -21,6 +22,7 @@ export const testBlueFill = definePlugin({
   title: "Test Blue Fill",
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Other",
     paramSchema: {
       useNewBuffer: {
         type: "bool",
@@ -163,6 +165,7 @@ export const testBlueFill = definePlugin({
           toFileUrl(join(Deno.cwd(), "./"))
         );
         const png = await toPng(global.lastInput);
+        logger.info("[test-blue-fill] Saving PNG to", path);
         Deno.writeFile(path, new Uint8Array(await png.arrayBuffer()));
 
         _AI_DENO_.op_ai_alert(`Saved to ${path}`);

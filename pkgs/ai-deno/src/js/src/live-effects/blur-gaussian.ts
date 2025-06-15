@@ -34,6 +34,7 @@ export const gaussianBlur = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Blur",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],
@@ -94,7 +95,7 @@ export const gaussianBlur = definePlugin({
               dpiScale: f32,
               radius: f32,
               sigma: f32,
-              direction: i32,  // 0: vertical, 1: horizontal
+              direction: i32, // 0: vertical, 1: horizontal
             }
 
             @group(0) @binding(0) var inputTexture: texture_2d<f32>;

@@ -2,47 +2,62 @@
 import "./mocks.ts";
 import { useState, useRef, useEffect, useCallback, useReducer } from "react";
 import { createRoot } from "react-dom/client";
-import { useEventCallback, useStableEvent, useThroughRef } from "./hooks.ts";
+import { useEventCallback, useStableEffect, useThroughRef } from "./hooks.ts";
 
 import { UI_NODE_SCHEMA } from "~ext/ui/nodes.ts";
 
 import { gaussianBlur } from "~ext/live-effects/blur-gaussian.ts";
 import { pixelSort } from "~ext/live-effects/pixel-sort.ts";
-import { kirakiraBlur } from "~ext/live-effects/blur-kirakira.ts";
+import { kirakiraBlur1_1 } from "~ext/live-effects/blur-kirakira.ts";
 import { glitch } from "~ext/live-effects/glitch.ts";
 import { coastic } from "~ext/live-effects/coastic.ts";
 import { dithering } from "~ext/live-effects/dithering.ts";
 import { chromaticAberration } from "~ext/live-effects/chromatic-aberration.ts";
 import { directionalBlur } from "~ext/live-effects/blur-directional.ts";
+import { bloom } from "~ext/live-effects/blur-bloom.ts";
 import { halftone } from "~ext/live-effects/halftone.ts";
 import { testBlueFill } from "~ext/live-effects/test-blue-fill.ts";
 import { innerGlow } from "~ext/live-effects/inner-glow.ts";
 import { outline } from "~ext/live-effects/outline.ts";
 import { fluidDistortion } from "~ext/live-effects/distortion-fluid.ts";
+import { spraying } from "~ext/live-effects/distortion-spraying.ts";
 import { kaleidoscope } from "~ext/live-effects/kaleidoscope.ts";
-import { downsampler } from "~ext/live-effects/downsampler.ts";
-import { vhsInterlace } from "~ext/live-effects/filter-vhs-interlace.ts";
+import { downsampler } from "~ext/live-effects/distortion-downsampler.ts";
+import { vhsInterlace } from "~ext/live-effects/stylize-vhs-interlace.ts";
 import { dataMosh } from "~ext/live-effects/data-mosh.ts";
-import { waveDistortion } from "~ext/live-effects/wave-distortion.ts";
+import { waveDistortion } from "~ext/live-effects/distortion-wave.ts";
 import { selectiveColorCorrection } from "~ext/live-effects/color-selective-correction.ts";
 import { husky } from "~ext/live-effects/husky.ts";
 import { cosmicWaves } from "~ext/live-effects/extra/cosmic-waves.ts";
 import { paperTexture } from "~ext/live-effects/texture-paper.ts";
+import { paperTextureV2 } from "~ext/live-effects/texture-paper-v2.ts";
 import { gradientMap } from "~ext/live-effects/gradient-map.ts";
-import { brushStroke } from "~ext/live-effects/blush-stroke.ts";
-import { comicTone } from "~ext/live-effects/comic-tone.ts";
+import { brushStroke } from "~ext/live-effects/stylize-blush-stroke.ts";
+import { comicTone } from "~ext/live-effects/stylize-comic-tone.ts";
 import { colorReplacement } from "~ext/live-effects/color-replacement.ts";
+import { posterization } from "~ext/live-effects/color-posterization.ts";
 
 import { compressor } from "~ext/live-effects/wips/compressor.ts";
 import { imageReverbGPU } from "~ext/live-effects/wips/image-reverb-gpu.ts";
 import { imageReverb } from "~ext/live-effects/wips/image-reverb.ts";
 import { exprTube } from "~ext/live-effects/wips/tube.ts";
+import { oilPainting } from "~ext/live-effects/wips/color-oil-painting.ts";
+import { sunbrust } from "~ext/live-effects/wips/color-sunbrust.ts";
+
 
 const plugins = [
-  kirakiraBlur,
+  paperTextureV2,
+  paperTexture,
+  oilPainting,
+  sunbrust,
+  spraying,
+  dithering,
+  bloom,
+  outline,
+  posterization,
+  kirakiraBlur1_1,
   colorReplacement,
   gradientMap,
-  paperTexture,
   gaussianBlur,
   fluidDistortion,
   halftone,
@@ -53,7 +68,6 @@ const plugins = [
   directionalBlur,
   husky,
   exprTube,
-  dithering,
   selectiveColorCorrection,
   vhsInterlace,
   waveDistortion,
@@ -65,12 +79,13 @@ const plugins = [
   imageReverbGPU,
   glitch,
   pixelSort,
-  outline,
   // innerGlow,
   testBlueFill,
 ];
 
 const effectInits = new Map<string, any>();
+
+const DEFAULT_CLEAR_COLOR = "#ddd";
 
 setTimeout(async () => {
   // Initialize effects
@@ -109,8 +124,10 @@ function Controls({
   const [params, setParams] = useState<any>(getInitialParams(currentPlugin));
   const pluginStateRef = useRef<any>(undefined);
   const [dpi, setDpi] = useState(72);
+  const [clearColor, setClearColor] = useState(DEFAULT_CLEAR_COLOR);
   const [paused, setPaused] = useState(false);
   const [isPreviewMode, setPreviewMode] = useState(false);
+  const [isFilterDisabled, setFilterDisabled] = useState(false);
 
   const pausedRef = useThroughRef(paused);
   const paramsRef = useThroughRef(params);
@@ -124,31 +141,38 @@ function Controls({
   useEffect(() => {
     setParams(getInitialParams(currentPlugin));
 
-    const source1Btn = document.getElementById("img-source-1")!;
-    const source2Btn = document.getElementById("img-source-2")!;
+    const imgSourceButtons = Array.from(
+      document.querySelectorAll("[data-img-source]")
+    ) as HTMLButtonElement[];
 
     const abort = new AbortController();
     const signal = abort.signal;
 
-    source1Btn.addEventListener(
-      "click",
-      async () => {
-        const response = await fetch("./source.png");
-        const blob = await response.blob();
-        await onLoadImage(blob);
-      },
-      { signal }
-    );
+    console.log(imgSourceButtons);
 
-    source2Btn.addEventListener(
-      "click",
-      async () => {
-        const response = await fetch("./source2.png");
-        const blob = await response.blob();
-        await onLoadImage(blob);
-      },
-      { signal }
-    );
+    imgSourceButtons.forEach((btn) => {
+      console.log({ btn });
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const imageFile = btn.dataset.imgSource;
+        if (!imageFile) return;
+
+        await onLoadImage(
+          await (await fetch(new URL(imageFile, window.location.href))).blob()
+        );
+      });
+    });
+
+    Array.from(document.querySelectorAll("[data-bg-color]")).forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+
+        const color = (e.currentTarget as HTMLButtonElement).dataset.bgColor;
+        if (!color) return;
+
+        setClearColor(color);
+      });
+    });
 
     window.addEventListener("dragover", (e) => e.preventDefault(), { signal });
 
@@ -194,11 +218,9 @@ function Controls({
     };
   }, []);
 
-  useStableEvent(() => {
-    const sizeLabel = document.getElementById("size-label")!;
+  useStableEffect(() => {
+    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
     const colorLabel = document.getElementById("color-label")!;
-    const canvas: HTMLCanvasElement = document.getElementById("canvas")!;
-    const ctx = canvas.getContext("2d")!;
 
     const abort = new AbortController();
     const signal = abort.signal;
@@ -225,91 +247,134 @@ function Controls({
       { signal }
     );
 
+    return () => {
+      abort.abort();
+    }
+  }, []);
+
+  useStableEffect(() => {
+    const sizeLabel = document.getElementById("size-label")!;
+    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+    const ctx = canvas.getContext("2d")!;
+
+    const abort = new AbortController();
+    const signal = abort.signal;
+
     let animId = requestAnimationFrame(async function loop() {
       const init = effectInits.get(currentPlugin.id);
       const params = paramsRef.current;
 
       if (signal.aborted) return;
-      if (pausedRef.current || !sourceImgData.current || !scaledImgData.current)
+      if (
+        pausedRef.current ||
+        !sourceImgData.current ||
+        !scaledImgData.current
+      ) {
+        animId = requestAnimationFrame(loop);
+        return;
+      }
+
+      if (isFilterDisabled) {
+        // Draw the source image directly
+        ctx.fillStyle = DEFAULT_CLEAR_COLOR;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          await createImageBitmap(scaledImgData.current!),
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+        sizeLabel.textContent = `${scaledImgData.current.width}x${scaledImgData.current.height} @ ${dpi}dpi / Source: ${sourceImgData.current.width}x${sourceImgData.current.height}`;
         return (animId = requestAnimationFrame(loop));
+      }
 
       const timeLabel = `goLiveEffect (${currentPlugin.title})`;
+
       console.time(timeLabel);
-      const input = {
-        width: scaledImgData.current.width,
-        height: scaledImgData.current.height,
-        data: Uint8ClampedArray.from(scaledImgData.current.data),
-      };
 
-      const result = await currentPlugin.liveEffect.goLiveEffect(
-        init,
-        params,
-        input,
-        {
-          dpi: dpiRef.current,
-          baseDpi: 72,
-          isInPreview: isPreviewMode,
+      try {
+        const input = {
+          width: scaledImgData.current.width,
+          height: scaledImgData.current.height,
+          data: Uint8ClampedArray.from(scaledImgData.current.data),
+        };
+
+        const result = await currentPlugin.liveEffect.goLiveEffect(
+          init,
+          params,
+          input,
+          {
+            dpi,
+            baseDpi: 72,
+            isInPreview: isPreviewMode,
+          }
+        );
+        if (signal.aborted) return;
+
+        const currentDpiScale = 72 / dpi;
+
+        // as 72dpi image
+        const resultData = new ImageData(
+          result.data,
+          result.width,
+          result.height
+        );
+        const image = await createImageBitmap(resultData);
+        resultImgData.current = resultData;
+        // const sourceImage = await createImageBitmap(scaledImgData);
+
+        sizeLabel.textContent =
+          `${resultData.width}x${resultData.height} | input: ${input.width}x${input.height} @ ${dpi}dpi` +
+          ` / Source: ${sourceImgData.current.width}x${sourceImgData.current.height}`;
+        canvas.style.width = `${(result.width * currentDpiScale) | 0}px`;
+        canvas.style.height = `${(result.height * currentDpiScale) | 0}px`;
+        canvas.width = result.width;
+        canvas.height = result.height;
+
+        // time based linear colort ping-pong light-gray to dark-gray
+        // ctx.fillStyle = `hsl(0, 0%, ${Math.max(
+        //   Math.sin(Date.now() / 500) * 60,
+        //   20
+        // )}%)`;
+        ctx.fillStyle = clearColor;
+        // ctx.fillStyle = "#ddd";
+        // ctx.fillRect(0, 0, result.width, result.height);
+
+        // draw gradient background
+        // const gradient = ctx.createLinearGradient(0, 0, 0, result.height);
+        // gradient.addColorStop(0, "#f0f0f0");
+        // gradient.addColorStop(1, "#474747");
+        // ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, result.width, result.height);
+
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        // ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+
+
+      } finally {
+        console.timeEnd(timeLabel);
+
+        if (!signal.aborted) {
+            setTimeout(() => {
+            animId = requestAnimationFrame(loop);
+          }, 800);
         }
-      );
-      if (signal.aborted) return;
-
-      const currentDpiScale = 72 / dpiRef.current;
-
-      // as 72dpi image
-      const resultData = new ImageData(
-        result.data,
-        result.width,
-        result.height
-      );
-      const image = await createImageBitmap(resultData);
-      resultImgData.current = resultData;
-      // const sourceImage = await createImageBitmap(scaledImgData);
-
-      sizeLabel.textContent =
-        `${resultData.width}x${resultData.height} <= input: ${input.width}x${input.height} @ ${dpi}dpi` +
-        ` / Source: ${sourceImgData.current.width}x${sourceImgData.current.height}`;
-      canvas.style.width = `${(result.width * currentDpiScale) | 0}px`;
-      canvas.style.height = `${(result.height * currentDpiScale) | 0}px`;
-      canvas.width = result.width;
-      canvas.height = result.height;
-
-      // time based linear colort ping-pong light-gray to dark-gray
-      // ctx.fillStyle = `hsl(0, 0%, ${Math.max(
-      //   Math.sin(Date.now() / 500) * 60,
-      //   20
-      // )}%)`;
-      ctx.fillStyle = "#ddd";
-      // ctx.fillStyle = "#ddd";
-      // ctx.fillRect(0, 0, result.width, result.height);
-
-      // draw gradient background
-      // const gradient = ctx.createLinearGradient(0, 0, 0, result.height);
-      // gradient.addColorStop(0, "#f0f0f0");
-      // gradient.addColorStop(1, "#474747");
-      // ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, result.width, result.height);
-
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      // ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
-      console.timeEnd(timeLabel);
-
-      setTimeout(() => {
-        animId = requestAnimationFrame(loop);
-      }, 800);
+      }
     });
 
     return () => {
       cancelAnimationFrame(animId);
       abort.abort();
     };
-  }, [currentPlugin, isPreviewMode]);
+  }, [currentPlugin, isFilterDisabled, dpi, clearColor, isPreviewMode]);
 
   const onParamChanged = useEventCallback((key, value) => {
     const nextParams = { ...params, [key]: value };
     setParams(nextParams);
   });
 
-  const onEffectChanged = useEventCallback(
+  const onFilterChanged = useEventCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const effectId = e.currentTarget.value;
       const effect = plugins.find((effect) => effect.id === effectId)!;
@@ -385,6 +450,7 @@ function Controls({
             style={{
               display: "flex",
               flexDirection: node.direction === "col" ? "column" : "row",
+              flexWrap: "wrap",
               gap: "8px",
             }}
           >
@@ -484,6 +550,7 @@ function Controls({
             <input
               type="checkbox"
               checked={node.value}
+              className="mr-1"
               onChange={(e) => {
                 if (node.key) onParamChanged(node.key, e.currentTarget.checked);
                 onChangeHandler(node, e.currentTarget.checked);
@@ -551,17 +618,10 @@ function Controls({
   const tree = renderUI(params);
 
   const parseResult = UI_NODE_SCHEMA.safeParse(tree);
-  console.info(parseResult);
+  // console.info(parseResult);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-        paddingRight: "16px",
-      }}
-    >
+    <div className="flex flex-col gap-2 pr-2">
       <select value={dpi} onChange={onDpiChanged} style={{ width: "100%" }}>
         <option value="72">72 dpi</option>
         <option value="144">144 dpi</option>
@@ -573,7 +633,7 @@ function Controls({
         <br />
         <select
           value={plugins.find((e) => e.id === pluginId).id}
-          onChange={onEffectChanged}
+          onChange={onFilterChanged}
         >
           {plugins.map((plugin) => (
             <option key={plugin.id} value={plugin.id}>
@@ -586,10 +646,20 @@ function Controls({
       <label>
         <input
           type="checkbox"
+          className="mr-1"
           checked={isPreviewMode}
           onChange={(e) => setPreviewMode(e.currentTarget.checked)}
         />
-        Preview mode
+        プレビューモード
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          className="mr-1"
+          checked={isFilterDisabled}
+          onChange={(e) => setFilterDisabled(e.currentTarget.checked)}
+        />
+        フィルター無効
       </label>
 
       <button

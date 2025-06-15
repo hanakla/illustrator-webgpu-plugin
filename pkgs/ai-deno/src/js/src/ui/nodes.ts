@@ -246,6 +246,13 @@ const UiSeparatorSchema = z.object({
 });
 export type UISeparator = z.infer<typeof UiSeparatorSchema>;
 
+const UiNodeDummySchema = z.object({
+  type: z.literal("dummy"),
+  width: z.number().optional(),
+  height: z.number().optional(),
+});
+export type UINodeDummy = z.infer<typeof UiNodeDummySchema>;
+
 const UiNodeGroupSchema: z.ZodType<UINodeGroup> = z.lazy(() =>
   z.object({
     type: z.literal("group"),
@@ -273,6 +280,7 @@ export type UINode =
   | UINodeButton
   | UISelect
   | UISeparator
+  | UINodeDummy
   | null;
 
 export const UI_NODE_SCHEMA = z.union([
@@ -285,5 +293,6 @@ export const UI_NODE_SCHEMA = z.union([
   UiNodeTextSchema,
   UiNodeButtonSchema,
   UiSelectSchema,
+  UiNodeDummySchema,
   UiSeparatorSchema,
 ]);

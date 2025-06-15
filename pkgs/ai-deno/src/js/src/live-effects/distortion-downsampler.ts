@@ -45,6 +45,7 @@ export const downsampler = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Distortion",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],

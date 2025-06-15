@@ -28,7 +28,7 @@ const t = createTranslator({
     padding: "Padding",
   },
   ja: {
-    title: "フルイド ディストーション V1",
+    title: "流体ディストーション V1",
     intensity: "強度",
     speed: "速度",
     scale: "スケール",
@@ -44,6 +44,7 @@ export const fluidDistortion = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Distortion",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],

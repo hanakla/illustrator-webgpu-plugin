@@ -153,6 +153,13 @@ export type AIPlugin<
   version: { major: number; minor: number };
 
   liveEffect?: {
+    subCategory?:
+      | "Distortion"
+      | "Texture"
+      | "Blur"
+      | "Color"
+      | "Stylize"
+      | "Other";
     paramSchema: T;
 
     /** map to styleFilterFlags */

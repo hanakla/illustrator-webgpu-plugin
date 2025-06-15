@@ -118,7 +118,7 @@ ASErr HelloWorldPlugin::InitLiveEffect(SPInterfaceMessage* message) {
     csl(" creating menu data");
     AddLiveEffectMenuData menu;
     menu.category =
-        suai::str::strdup(ai::UnicodeString("Deno Effectors", kAIUTF8CharacterEncoding));
+        suai::str::strdup(ai::UnicodeString("WebGPU Filters", kAIUTF8CharacterEncoding));
     menu.title   = title;
     menu.options = 0;
 

@@ -29,7 +29,7 @@ const t = createTranslator({
     time: "Time",
   },
   ja: {
-    title: "ウェーブ ディストーション",
+    title: "波形ディストーション",
     amplitude: "振幅",
     frequency: "周波数",
     angle: "角度",
@@ -47,6 +47,7 @@ export const waveDistortion = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Distortion",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],

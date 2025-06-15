@@ -5,47 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
     <script src="./src/index.tsx" type="module"></script>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        font-family: Arial, sans-serif;
-      }
-    </style>
+    <link rel="stylesheet" href="./src/app.css" />
   </head>
   <body>
-    <div style="display: flex; padding: 8px">
-      <div id="controls" style="flex: none"></div>
-      <div>
-        <div>
-          <button type="button" id="img-source-1">Source 1</button>
-          <button type="button" id="img-source-2">Source 2</button>
+    <div class="flex h-screen text-sm/[1.2]">
+      <div
+        id="controls"
+        class="flex-none max-w-[320px] p-2 mr-2 border-r border-gray-200"
+      ></div>
+      <div class="p-1">
+        <div class="flex items-center gap-2 mb-2">
+          <div>
+            <button type="button" data-img-source="source.png">Source 1</button>
+            <button type="button" data-img-source="source2.png">
+              Source 2
+            </button>
+            <button type="button" data-img-source="source3.webp">
+              Source 3
+            </button>
+          </div>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="w-4 h-4 appearance-none"
+              style="background-color: #000"
+              data-bg-color="#000"
+            />
+            <button
+              type="button"
+              class="w-4 h-4 appearance-none"
+              style="background-color: #ddd"
+              data-bg-color="#ddd"
+            />
+            <button
+              type="button"
+              class="w-4 h-4 appearance-none"
+              style="background-color: #fff"
+              data-bg-color="#fff"
+            />
+          </div>
         </div>
-        <span
-          id="size-label"
-          style="
-            display: flex;
-            font-size: 12px;
-            margin-top: calc((1em - 1lh) / 2);
-            margin-bottom: 4px;
-          "
-        ></span>
+        <span id="size-label" class="flex text-sm -mt-half-leading mb-1"></span>
         <span
           id="color-label"
-          style="
-            display: flex;
-            font-size: 12px;
-            margin-top: calc((1em - 1lh) / 2);
-            margin-left: 16px;
-            margin-bottom: 4px;
-          "
+          class="flex text-sm -mt-half-leading ml-4 mb-1"
         ></span>
         <canvas
           id="canvas"
           width="800"
           height="600"
-          style="max-width: 600px; max-height: 600px"
+          class="max-w-[600px] max-h-[600px]"
         ></canvas>
       </div>
     </div>

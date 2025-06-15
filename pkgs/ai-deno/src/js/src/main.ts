@@ -11,32 +11,40 @@ import { toFileUrl, join, fromFileUrl } from "jsr:@std/path@1.0.8";
 import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
 import { homedir } from "node:os";
 
-import { chromaticAberration } from "./live-effects/chromatic-aberration.ts";
+import { chromaticAberration } from "./live-effects/stylize-chromatic-aberration.ts";
 import { testBlueFill } from "./live-effects/test-blue-fill.ts";
 import { ChangeEventHandler, ui, UINode, UI_NODE_SCHEMA } from "./ui/nodes.ts";
 import { directionalBlur } from "./live-effects/blur-directional.ts";
-import { kirakiraBlur } from "./live-effects/blur-kirakira.ts";
-import { dithering } from "./live-effects/dithering.ts";
+import {
+  kirakiraBlur1,
+  kirakiraBlur1_1,
+} from "./live-effects/blur-kirakira.ts";
+import { dithering } from "./live-effects/stylize-dithering.ts";
 import { pixelSort } from "./live-effects/pixel-sort.ts";
-import { glitch } from "./live-effects/glitch.ts";
+import { glitch } from "./live-effects/distortion-glitch.ts";
 import { logger } from "./logger.ts";
-import { outline } from "./live-effects/outline.ts";
-import { innerGlow } from "./live-effects/inner-glow.ts";
-import { coastic } from "./live-effects/coastic.ts";
-import { halftone } from "./live-effects/halftone.ts";
+import { outline } from "./live-effects/stylize-outline.ts";
+import { innerGlow } from "./live-effects/stylize-inner-glow.ts";
+import { coastic } from "./live-effects/other-coastic.ts";
+import { halftone } from "./live-effects/stylize-halftone.ts";
 import { fluidDistortion } from "./live-effects/distortion-fluid.ts";
 import { kaleidoscope } from "./live-effects/kaleidoscope.ts";
-import { vhsInterlace } from "./live-effects/filter-vhs-interlace.ts";
-import { downsampler } from "./live-effects/downsampler.ts";
-import { waveDistortion } from "./live-effects/wave-distortion.ts";
+import { vhsInterlace } from "./live-effects/stylize-vhs-interlace.ts";
+import { downsampler } from "./live-effects/distortion-downsampler.ts";
+import { waveDistortion } from "./live-effects/distortion-wave.ts";
 import { selectiveColorCorrection } from "./live-effects/color-selective-correction.ts";
+import { posterization } from "./live-effects/color-posterization.ts";
 import { dataMosh } from "./live-effects/data-mosh.ts";
 import { gaussianBlur } from "./live-effects/blur-gaussian.ts";
-import { brushStroke } from "./live-effects/blush-stroke.ts";
+import { brushStroke } from "./live-effects/stylize-blush-stroke.ts";
 import { paperTexture } from "./live-effects/texture-paper.ts";
-import { comicTone } from "./live-effects/comic-tone.ts";
-import { gradientMap } from "./live-effects/gradient-map.ts";
+import { paperTextureV2 } from "./live-effects/texture-paper-v2.ts";
+import { comicTone } from "./live-effects/stylize-comic-tone.ts";
+import { gradientMap } from "./live-effects/color-gradient-map.ts";
 import { husky } from "./live-effects/husky.ts";
+import { bloom } from "./live-effects/blur-bloom.ts";
+import { spraying } from "./live-effects/distortion-spraying.ts";
+import { oilPainting } from "./live-effects/wips/color-oil-painting.ts";
 
 const EFFECTS_DIR = new URL(toFileUrl(join(homedir(), ".ai-deno/effects")));
 
@@ -46,6 +54,7 @@ const collator = new Intl.Collator(
 
 const allPlugins: AIPlugin<any, any, any>[] = [
   brushStroke,
+  bloom,
   chromaticAberration,
   coastic,
   comicTone,
@@ -61,15 +70,52 @@ const allPlugins: AIPlugin<any, any, any>[] = [
   husky,
   // innerGlow,
   kaleidoscope,
-  kirakiraBlur,
+  kirakiraBlur1,
+  kirakiraBlur1_1,
   outline,
   paperTexture,
+  paperTextureV2,
   // pixelSort,
   selectiveColorCorrection,
+  spraying,
   testBlueFill,
   vhsInterlace,
   waveDistortion,
+  posterization,
+  oilPainting,
 ].sort((a, b) => {
+  const isLegacyA = a.title.startsWith("Legacy");
+  const isLegacyB = b.title.startsWith("Legacy");
+  if (isLegacyA && !isLegacyB) return -1;
+  if (!isLegacyA && isLegacyB) return 1;
+
+  if (
+    a.liveEffect?.subCategory &&
+    b.liveEffect?.subCategory &&
+    a.liveEffect.subCategory !== b.liveEffect.subCategory
+  ) {
+    const cmp = collator.compare(
+      a.liveEffect.subCategory,
+      b.liveEffect.subCategory
+    );
+
+    // "Other"カテゴリは一番最初に来るようにする
+    // (あんまり使わなさそうだからアクセスしづらいところに)
+    if (
+      a.liveEffect.subCategory === "Other" &&
+      b.liveEffect.subCategory !== "Other"
+    )
+      return -1;
+
+    if (
+      a.liveEffect.subCategory !== "Other" &&
+      b.liveEffect.subCategory === "Other"
+    )
+      return 1;
+
+    return cmp;
+  }
+
   return collator.compare(a.title, b.title);
 });
 
@@ -226,8 +272,8 @@ export function getEffectViewNode(effectId: string, params: any): UINode {
 
     tree = ui.group({ direction: "col" }, [
       tree,
+      ui.separator(),
       ui.group({ direction: "row" }, [
-        ui.separator(),
         ui.text({
           size: "sm",
           text: `AiDeno: ${_AI_DENO_.op_ai_get_plugin_version()} Plugin: ${

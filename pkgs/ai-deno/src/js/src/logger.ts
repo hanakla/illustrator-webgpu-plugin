@@ -4,20 +4,25 @@ const _AI_DENO_ = globalThis._AI_DENO_ ?? {
 };
 
 const enableLogger = _AI_DENO_.op_aideno_debug_enabled();
-console.log("[deno_ai(js)] enableLogger", enableLogger);
+console.log(
+  "%c[deno_ai(js)]%c enableLogger",
+  "font-weight:bold",
+  "",
+  enableLogger
+);
 
 export const logger = {
   log: (...args: any[]) => {
     if (!enableLogger) return;
-    console.log("[deno_ai(js)]", ...args);
+    console.log("%c[deno_ai(js)]%c", "font-weight:bold", "", ...args);
   },
   info: (...args: any[]) => {
     if (!enableLogger) return;
-    console.info("[deno_ai(js)]", ...args);
+    console.info("%c[deno_ai(js)]%c", "font-weight:bold", "", ...args);
   },
   error: (...args: any[]) => {
     if (!enableLogger) return;
-    console.error("[deno_ai(js)]", ...args);
+    console.error("%c[deno_ai(js)]%c", "font-weight:bold", "", ...args);
   },
   time: (label: string) => {
     if (!enableLogger) return;

@@ -1,6 +1,13 @@
 import { decodeBase64 } from "jsr:@std/encoding@1.0.7";
 import { ColorRGBA } from "../plugin.ts";
 
+export type CanvasRenderingContext2D =
+  import("jsr:@gfx/canvas").CanvasRenderingContext2D;
+export const Path2D =
+  typeof window === "undefined"
+    ? (await import("jsr:@gfx/canvas")).Path2D
+    : globalThis.Path2D;
+
 const createCanvasImpl: (
   width: number,
   height: number

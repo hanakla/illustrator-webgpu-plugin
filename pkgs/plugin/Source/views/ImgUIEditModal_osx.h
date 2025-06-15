@@ -336,7 +336,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   self.device       = device;
   self.commandQueue = [device newCommandQueue];
   resultStatus      = ModalStatusCode::None;
-  windowFlags       = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+  windowFlags       = ImGuiWindowFlags_NoTitleBar |  // ImGuiWindowFlags_NoResize |
                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                 ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
                 ImGuiWindowFlags_NoBackground |
@@ -416,7 +416,7 @@ class ImGuiModalOSX : public ImGuiModal::IModalImpl {
   [commandBuffer presentDrawable:self.currentDrawable];
   [commandBuffer commit];
 
-  // std::cout << "Window size: " << windowSize.x << ", " << windowSize.y << std::endl;
+  std::cout << "Window size: " << windowSize.x << ", " << windowSize.y << std::endl;
 
   // Update window size based on ImGui content
   std::optional<std::tuple<int, int>> returnedSize = std::nullopt;

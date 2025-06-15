@@ -78,6 +78,7 @@ export const comicTone = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Stylize",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],

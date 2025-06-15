@@ -4,6 +4,7 @@ import { ui } from "../ui/nodes.ts";
 import {
   lerp,
   createCanvas,
+  Path2D,
   type CanvasRenderingContext2D,
   addWebGPUAlignmentPadding,
   ImageDataLike,
@@ -13,13 +14,13 @@ import {
   makeShaderDataDefinitions,
   makeStructuredView,
 } from "npm:webgpu-utils";
-import {} from "npm:svg-variable-width-line";
+import * as svgVariableWidthLine from "npm:@hanakla/svg-variable-width-line";
 import { createGPUDevice } from "./_shared.ts";
 
 // Translation texts for the plugin interfaces
 const t = createTranslator({
   en: {
-    title: "Paper Texture Generator",
+    title: "Paper Texture Generator v2",
     paperType: "Paper Type",
     beatingDegree: "Beating Degree",
     fiberAmount: "Fiber Amount",
@@ -34,7 +35,7 @@ const t = createTranslator({
     surfaceRoughness: "Surface Roughness",
   },
   ja: {
-    title: "紙テクスチャ生成",
+    title: "紙テクスチャ生成 v2",
     paperType: "紙の種類",
     beatingDegree: "叩解度",
     fiberAmount: "繊維の量",
@@ -65,10 +66,10 @@ const defaultValues = {
 };
 
 // Plugin definition
-export const paperTexture = definePlugin({
-  id: "paper-texture-generator-v1",
+export const paperTextureV2 = definePlugin({
+  id: "paper-texture-generator-v2",
   title: t("title"),
-  version: { major: 1, minor: 0 },
+  version: { major: 2, minor: 0 },
   liveEffect: {
     subCategory: "Texture",
     styleFilterFlags: {
@@ -600,7 +601,13 @@ export const paperTexture = definePlugin({
       );
 
       // Render fibers using the same plans but scaled up
-      renderFibersFromPlan(baseCtx, fiberPlans, dpiScale);
+      renderFibersFromPlan(
+        baseCtx,
+        fiberPlans,
+        dpiScale,
+        paperParams,
+        renderRandom
+      );
 
       // Add coating and gloss
       addCoating(baseCtx, imgData.width, imgData.height, paperParams);
@@ -778,6 +785,10 @@ interface PaperType {
   beatingDegree: number;
   japanesePaper?: boolean;
   fibers: FiberType[];
+  // svg-variable-width-line用の設定
+  baseWeight: number;
+  weightVariation: number;
+  smoothingPasses: number;
 }
 
 // Paper types definition
@@ -790,6 +801,9 @@ const paperTypes: Record<string, PaperType> = {
     coating: 0,
     gloss: 0.2,
     beatingDegree: 0.7,
+    baseWeight: 1.2,
+    weightVariation: 0.3,
+    smoothingPasses: 2,
     fibers: [
       { ratio: 0.7, baseGrayOffset: 0 },
       { ratio: 0.2, baseGrayOffset: -20 },
@@ -804,6 +818,9 @@ const paperTypes: Record<string, PaperType> = {
     coating: 0.6,
     gloss: 0.75,
     beatingDegree: 0.9,
+    baseWeight: 0.8,
+    weightVariation: 0.2,
+    smoothingPasses: 3,
     fibers: [
       { ratio: 0.8, baseGrayOffset: 0 },
       { ratio: 0.2, baseGrayOffset: -15 },
@@ -817,6 +834,9 @@ const paperTypes: Record<string, PaperType> = {
     coating: 0.6,
     gloss: 0.7,
     beatingDegree: 0.8,
+    baseWeight: 1.0,
+    weightVariation: 0.25,
+    smoothingPasses: 3,
     fibers: [
       { ratio: 0.9, baseGrayOffset: 0 },
       { ratio: 0.1, baseGrayOffset: -10 },
@@ -830,6 +850,9 @@ const paperTypes: Record<string, PaperType> = {
     coating: 0,
     gloss: 0.1,
     beatingDegree: 0.5,
+    baseWeight: 1.8,
+    weightVariation: 0.6,
+    smoothingPasses: 1,
     fibers: [
       { ratio: 0.5, baseGrayOffset: 0 },
       { ratio: 0.3, baseGrayOffset: -30 },
@@ -844,6 +867,9 @@ const paperTypes: Record<string, PaperType> = {
     coating: 0.3,
     gloss: 0.4,
     beatingDegree: 0.6,
+    baseWeight: 1.1,
+    weightVariation: 0.35,
+    smoothingPasses: 2,
     fibers: [
       { ratio: 0.7, baseGrayOffset: 0 },
       { ratio: 0.3, baseGrayOffset: -15 },
@@ -858,6 +884,9 @@ const paperTypes: Record<string, PaperType> = {
     gloss: 0.05,
     beatingDegree: 0.3,
     japanesePaper: true,
+    baseWeight: 2.5,
+    weightVariation: 1.2,
+    smoothingPasses: 1,
     fibers: [
       { ratio: 0.5, baseGrayOffset: 0 },
       { ratio: 0.3, baseGrayOffset: -25 },
@@ -873,6 +902,9 @@ const paperTypes: Record<string, PaperType> = {
     gloss: 0.1,
     beatingDegree: 0.4,
     japanesePaper: true,
+    baseWeight: 2.0,
+    weightVariation: 0.9,
+    smoothingPasses: 1,
     fibers: [
       { ratio: 0.6, baseGrayOffset: 0 },
       { ratio: 0.4, baseGrayOffset: -20 },
@@ -887,6 +919,9 @@ const paperTypes: Record<string, PaperType> = {
     gloss: 0.15,
     beatingDegree: 0.5,
     japanesePaper: true,
+    baseWeight: 1.8,
+    weightVariation: 0.8,
+    smoothingPasses: 2,
     fibers: [
       { ratio: 0.7, baseGrayOffset: 0 },
       { ratio: 0.3, baseGrayOffset: 20 },
@@ -901,6 +936,9 @@ const paperTypes: Record<string, PaperType> = {
     gloss: 0.2,
     beatingDegree: 0.6,
     japanesePaper: true,
+    baseWeight: 1.5,
+    weightVariation: 0.7,
+    smoothingPasses: 2,
     fibers: [
       { ratio: 0.8, baseGrayOffset: 0 },
       { ratio: 0.2, baseGrayOffset: 15 },
@@ -915,6 +953,9 @@ const paperTypes: Record<string, PaperType> = {
     gloss: 0.08,
     beatingDegree: 0.35,
     japanesePaper: true,
+    baseWeight: 3.0,
+    weightVariation: 1.5,
+    smoothingPasses: 1,
     fibers: [
       { ratio: 0.4, baseGrayOffset: 0 },
       { ratio: 0.4, baseGrayOffset: -25 },
@@ -923,7 +964,104 @@ const paperTypes: Record<string, PaperType> = {
   },
 };
 
-// SeededRandom class
+// Create variable width line using svg-variable-width-line
+function createVariableWidthLine(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  baseWidth: number,
+  paperParams: PaperType,
+  random: SeededRandom,
+  dpiScale: number
+): Path2D {
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const length = Math.sqrt(dx * dx + dy * dy);
+
+  // Generate points along the line with weight variation
+  const numPoints = Math.max(3, Math.floor(length / (8 * dpiScale)));
+  const points: svgVariableWidthLine.Point[] = [];
+
+  for (let i = 0; i < numPoints; i++) {
+    const t = i / (numPoints - 1);
+    const x = startX + dx * t;
+    const y = startY + dy * t;
+
+    // Calculate weight with random variation
+    const baseWeight = paperParams.baseWeight * baseWidth * dpiScale;
+    const variation = paperParams.weightVariation * baseWeight;
+    const randomFactor = (random.next() - 0.5) * 2;
+    let w = baseWeight + variation * randomFactor;
+
+    // Add tapering effect at the ends
+    const taperFactor = Math.sin(t * Math.PI);
+    w *= 0.3 + 0.7 * taperFactor;
+
+    // Ensure minimum width
+    w = Math.max(0.1 * dpiScale, w);
+
+    points.push({ x, y, w });
+  }
+
+  // Apply smoothing based on paper type
+  const smoothedPoints = svgVariableWidthLine.smooth(
+    points,
+    paperParams.smoothingPasses
+  );
+
+  // Generate SVG path data
+  const { d } = svgVariableWidthLine.compute(...smoothedPoints);
+
+  // Convert to Path2D for Canvas rendering
+  return new Path2D(d);
+}
+
+// Create path for Japanese paper branch with natural variation
+function createJapaneseBranchPath(
+  path: [number, number][],
+  baseWidth: number,
+  paperParams: PaperType,
+  random: SeededRandom,
+  dpiScale: number
+): Path2D {
+  if (path.length < 2) {
+    return new Path2D();
+  }
+
+  const points: svgVariableWidthLine.Point[] = [];
+
+  for (let i = 0; i < path.length; i++) {
+    const [x, y] = path[i];
+
+    // Calculate weight with gradual tapering and variation
+    const baseWeight = paperParams.baseWeight * baseWidth * dpiScale;
+    const variation = paperParams.weightVariation * baseWeight;
+    const randomFactor = (random.next() - 0.5) * 2;
+    let w = baseWeight + variation * randomFactor;
+
+    // Natural tapering from root to tip
+    const t = i / (path.length - 1);
+    const taperFactor = Math.pow(1 - t, 0.7);
+    w *= 0.2 + 0.8 * taperFactor;
+
+    // Ensure minimum width
+    w = Math.max(0.1 * dpiScale, w);
+
+    points.push({ x, y, w });
+  }
+
+  // Apply smoothing for natural curves
+  const smoothedPoints = svgVariableWidthLine.smooth(
+    points,
+    paperParams.smoothingPasses
+  );
+
+  // Generate SVG path data
+  const { d } = svgVariableWidthLine.compute(...smoothedPoints);
+
+  return new Path2D(d);
+}
 class SeededRandom {
   private seed: number;
 
@@ -1191,35 +1329,61 @@ function planJapanesePaperFiber(
 function renderFibersFromPlan(
   ctx: CanvasRenderingContext2D,
   fiberPlans: FiberPlan[],
-  dpiScale: number
+  dpiScale: number,
+  paperParams: PaperType,
+  random: SeededRandom
 ): void {
   for (const fiber of fiberPlans) {
     if (fiber.type === "japanese") {
-      renderJapaneseFiberFromPlan(ctx, fiber.plan, dpiScale);
-    } else {
-      // Regular fiber
-      ctx.beginPath();
-      ctx.moveTo(fiber.x * dpiScale, fiber.y * dpiScale);
-      ctx.lineTo(
-        (fiber.x + Math.cos(fiber.angle) * fiber.length) * dpiScale,
-        (fiber.y + Math.sin(fiber.angle) * fiber.length) * dpiScale
+      renderJapaneseFiberFromPlan(
+        ctx,
+        fiber.plan,
+        dpiScale,
+        paperParams,
+        random
       );
-      ctx.strokeStyle = `rgb(${fiber.gray}, ${fiber.gray}, ${fiber.gray})`;
-      ctx.lineWidth = fiber.width * dpiScale;
-      ctx.stroke();
+    } else {
+      // Regular fiber using variable width line
+      const startX = fiber.x * dpiScale;
+      const startY = fiber.y * dpiScale;
+      const endX = (fiber.x + Math.cos(fiber.angle) * fiber.length) * dpiScale;
+      const endY = (fiber.y + Math.sin(fiber.angle) * fiber.length) * dpiScale;
 
-      // Micro fibers if needed
+      const fiberPath = createVariableWidthLine(
+        startX,
+        startY,
+        endX,
+        endY,
+        fiber.width,
+        paperParams,
+        random,
+        1
+      );
+
+      ctx.fillStyle = `rgb(${fiber.gray}, ${fiber.gray}, ${fiber.gray})`;
+      ctx.fill(fiberPath);
+
+      // Micro fibers with natural variation
       if (fiber.hasMicroFibers) {
         for (const micro of fiber.microDetails) {
-          ctx.beginPath();
-          ctx.moveTo(fiber.x * dpiScale, fiber.y * dpiScale);
-          ctx.lineTo(
-            (fiber.x + Math.cos(micro.angle) * micro.length) * dpiScale,
-            (fiber.y + Math.sin(micro.angle) * micro.length) * dpiScale
+          const microEndX =
+            (fiber.x + Math.cos(micro.angle) * micro.length) * dpiScale;
+          const microEndY =
+            (fiber.y + Math.sin(micro.angle) * micro.length) * dpiScale;
+
+          const microPath = createVariableWidthLine(
+            startX,
+            startY,
+            microEndX,
+            microEndY,
+            fiber.width * 0.3,
+            paperParams,
+            random,
+            1
           );
-          ctx.strokeStyle = `rgb(${micro.gray}, ${micro.gray}, ${micro.gray})`;
-          ctx.lineWidth = fiber.width * 0.3 * dpiScale;
-          ctx.stroke();
+
+          ctx.fillStyle = `rgb(${micro.gray}, ${micro.gray}, ${micro.gray})`;
+          ctx.fill(microPath);
         }
       }
     }
@@ -1230,46 +1394,63 @@ function renderFibersFromPlan(
 function renderJapaneseFiberFromPlan(
   ctx: CanvasRenderingContext2D,
   plan: JapanesePaperFiberPlan,
-  dpiScale: number
+  dpiScale: number,
+  paperParams: PaperType,
+  random: SeededRandom
 ): void {
-  // Render branches
+  // Render branches with natural variation
   for (const branch of plan.branches) {
     // Main branch
-    ctx.beginPath();
-    ctx.moveTo(branch.start[0] * dpiScale, branch.start[1] * dpiScale);
-    ctx.lineTo(branch.end[0] * dpiScale, branch.end[1] * dpiScale);
-    ctx.strokeStyle = `rgb(${branch.gray}, ${branch.gray}, ${branch.gray})`;
-    ctx.lineWidth = branch.width * dpiScale;
-    ctx.stroke();
+    const mainBranchPath = createVariableWidthLine(
+      branch.start[0] * dpiScale,
+      branch.start[1] * dpiScale,
+      branch.end[0] * dpiScale,
+      branch.end[1] * dpiScale,
+      branch.width,
+      paperParams,
+      random,
+      1
+    );
+
+    ctx.fillStyle = `rgb(${branch.gray}, ${branch.gray}, ${branch.gray})`;
+    ctx.fill(mainBranchPath);
 
     // Sub branch if exists
     if (branch.subBranch) {
-      ctx.beginPath();
-      ctx.moveTo(
+      const subBranchPath = createVariableWidthLine(
         branch.subBranch.start[0] * dpiScale,
-        branch.subBranch.start[1] * dpiScale
-      );
-      ctx.lineTo(
+        branch.subBranch.start[1] * dpiScale,
         branch.subBranch.end[0] * dpiScale,
-        branch.subBranch.end[1] * dpiScale
+        branch.subBranch.end[1] * dpiScale,
+        branch.subBranch.width,
+        paperParams,
+        random,
+        1
       );
-      ctx.strokeStyle = `rgb(${branch.subBranch.gray}, ${branch.subBranch.gray}, ${branch.subBranch.gray})`;
-      ctx.lineWidth = branch.subBranch.width * dpiScale;
-      ctx.stroke();
+
+      ctx.fillStyle = `rgb(${branch.subBranch.gray}, ${branch.subBranch.gray}, ${branch.subBranch.gray})`;
+      ctx.fill(subBranchPath);
     }
   }
 
-  // Render main path
-  ctx.beginPath();
-  ctx.moveTo(plan.mainPath[0][0] * dpiScale, plan.mainPath[0][1] * dpiScale);
-  for (let i = 1; i < plan.mainPath.length; i++) {
-    const [px, py] = plan.mainPath[i];
-    ctx.lineTo(px * dpiScale, py * dpiScale);
-  }
+  // Render main path with natural flowing curves
+  if (plan.mainPath.length >= 2) {
+    const scaledPath: [number, number][] = plan.mainPath.map(([x, y]) => [
+      x * dpiScale,
+      y * dpiScale,
+    ]);
 
-  ctx.strokeStyle = `rgb(${plan.finalGray}, ${plan.finalGray}, ${plan.finalGray})`;
-  ctx.lineWidth = plan.baseWidth * dpiScale;
-  ctx.stroke();
+    const mainPath = createJapaneseBranchPath(
+      scaledPath,
+      plan.baseWidth,
+      paperParams,
+      random,
+      1
+    );
+
+    ctx.fillStyle = `rgb(${plan.finalGray}, ${plan.finalGray}, ${plan.finalGray})`;
+    ctx.fill(mainPath);
+  }
 }
 
 // Add coating layer

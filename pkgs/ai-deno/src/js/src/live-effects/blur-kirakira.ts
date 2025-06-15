@@ -18,7 +18,8 @@ import { createGPUDevice } from "./_shared.ts";
 
 const t = createTranslator({
   en: {
-    title: "Kirakira Blur",
+    title1: "Legacy / Kirakira Blur",
+    title1_1: "Kirakira Blur V1.1",
     radius: "Blur Radius (px)",
     strength: "Blur Strength",
     sparkle: "Sparkle Intensity",
@@ -28,7 +29,8 @@ const t = createTranslator({
     customColor: "Custom Blur Color",
   },
   ja: {
-    title: "キラキラブラー",
+    title1: "Legacy / キラキラブラー",
+    title1_1: "キラキラブラー V1.1",
     radius: "ぼかし半径 (px)",
     strength: "ぼかし強度",
     sparkle: "きらめき強度",
@@ -39,11 +41,12 @@ const t = createTranslator({
   },
 });
 
-export const kirakiraBlur = definePlugin({
-  id: "kirakira-blur-v1",
-  title: t("title"),
-  version: { major: 1, minor: 0 },
+export const kirakiraBlur1_1 = definePlugin({
+  id: "kirakira-blur-v1.1",
+  title: t("title1_1"),
+  version: { major: 1, minor: 1 },
   liveEffect: {
+    subCategory: "Blur",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],
@@ -644,3 +647,11 @@ export const kirakiraBlur = definePlugin({
     },
   },
 });
+
+// Legacy compatibility
+export const kirakiraBlur1 = {
+  ...kirakiraBlur1_1,
+  id: "kirakira-blur-v1",
+  title: t("title1"),
+  version: { major: 1, minor: 0 },
+};

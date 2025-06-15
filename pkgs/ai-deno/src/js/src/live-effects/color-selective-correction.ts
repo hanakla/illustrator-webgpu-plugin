@@ -87,6 +87,7 @@ export const selectiveColorCorrection = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Color",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],

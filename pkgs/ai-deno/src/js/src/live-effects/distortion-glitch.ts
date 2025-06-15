@@ -42,6 +42,7 @@ export const glitch = definePlugin({
   title: t("title"),
   version: { major: 1, minor: 0 },
   liveEffect: {
+    subCategory: "Distortion",
     styleFilterFlags: {
       type: StyleFilterFlag.kPostEffectFilter,
       features: [],
@@ -107,21 +108,21 @@ export const glitch = definePlugin({
           ui.text({ text: t("slices") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "slices", dataType: "int", min: 1, max: 400, value: params.slices }),
-            ui.numberInput({ dataType: "int", key: "slices", value: params.slices, min: 1, max: 400, step: 1 }),
+            ui.numberInput({ dataType: "int", key: "slices", value: params.slices, step: 1 }),
           ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("colorShift") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "colorShift", dataType: "float", min: 0, max: 100, value: params.colorShift }),
-            ui.numberInput({ dataType: "float", key: "colorShift", value: params.colorShift, min: 0, max: 1, step: 0.01 }),
+            ui.numberInput({ dataType: "float", key: "colorShift", value: params.colorShift, step: 0.01 }),
           ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("angle") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "angle", dataType: "float", min: -1, max: 1, value: params.angle }),
-            ui.numberInput({ dataType: "float", key: "angle", value: params.angle, min: -1, max: 1, step: 0.01 }),
+            ui.numberInput({ dataType: "float", key: "angle", value: params.angle, step: 0.01 }),
           ]),
           ui.button({ text: t("reset"), onClick: () => { setParam({ angle: 0 }) } }),
         ]),
@@ -129,14 +130,14 @@ export const glitch = definePlugin({
           ui.text({ text: t("bias") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "bias", dataType: "float", min: -1, max: 1, value: params.bias }),
-            ui.numberInput({ dataType: "float", key: "bias", value: params.bias, min: -1, max: 1, step: 0.01 }),
+            ui.numberInput({ dataType: "float", key: "bias", value: params.bias, step: 0.01 }),
           ]),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("seed") }),
           ui.group({ direction: "row" }, [
             ui.slider({ key: "seed", dataType: "int", min: 0, max: 10000, value: params.seed }),
-            ui.numberInput({ dataType: "int", key: "seed", value: params.seed, min: 0, max: 10000, step: 1 }),
+            ui.numberInput({ dataType: "int", key: "seed", value: params.seed, step: 1 }),
           ]),
         ]),
       ]);

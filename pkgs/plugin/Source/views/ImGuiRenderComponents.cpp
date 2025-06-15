@@ -16,6 +16,9 @@ using json = nlohmann::json;
 
 #include "./ImGuiRenderComponents.h"
 
+#include "../../deps/imgui/imgui_internal.h"
+using namespace ImGui;
+
 template <typename T>
 std::optional<T> getOptional(json& j) {
   std::optional<T> result;
@@ -327,19 +330,22 @@ ModalStatusCode AiDenoImGuiRenderComponents(
       ui::styleStack.pushVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 4.0f));
       ImGui::Separator();
       ui::styleStack.clear();
+    } else if (type == "dummy") {
+      auto size = ImVec2(node["width"].get<float>(), node["height"].get<float>());
+      ImGui::Dummy(size);
     }
   };
 
   static bool is_open = true;
 
   ImGui::SetNextWindowPos(ImVec2(0, 0), 0, ImVec2(0, 0));
-  ImGui::Begin("polygon specs", &is_open, windowFlags);
+  // ImGui::SetNextWindowSize(ImVec2(1000, 1000));
+
+  ImGui::Begin("preferences", &is_open, windowFlags);
 
   renderNode(renderTree);
 
-  ImGui::Dummy(ImVec2(0, 8));
-
-  ImGui::Dummy(ImVec2(64, 0));
+  ImGui::Dummy(ImVec2(64, 2));
   ImGui::SameLine();
 
   static ButtonProps cancelBtnProps{.kind = ButtonKind::Default};
@@ -350,13 +356,15 @@ ModalStatusCode AiDenoImGuiRenderComponents(
   if (ui::Button("  OK  ", okBtnProps)) { resultStatus = ModalStatusCode::OK; }
 
   if (currentSize != nullptr) {
-    ImVec2 max  = ImGui::GetWindowContentRegionMax();
-    ImVec2 min  = ImGui::GetWindowContentRegionMin();
-    ImVec2 size = ImVec2(max.x - min.x, max.y - min.y);
-    // ImVec2 size = ImGui::GetWindowSize();
+    ImGuiWindow* window = ImGui::GetCurrentWindowRead();
 
-    *currentSize = size;
-    // std::cout << "WindowSize: " << size.x << ", " << size.y << std::endl;
+    if (window) {
+      ImVec2 contentSize = window->ContentSizeIdeal;
+      *currentSize       = ImVec2(
+          contentSize.x + ImGui::GetStyle().WindowPadding.y * 2,
+          contentSize.y + ImGui::GetStyle().WindowPadding.y * 2
+      );
+    }
   }
 
   ui::keyStack.reset();
