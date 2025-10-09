@@ -3,6 +3,9 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <stack>
+#include <chrono>
+#include <vector>
 #include "./libs/format.h"
 #include "IllustratorSDK.h"
 #include "json.hpp"
