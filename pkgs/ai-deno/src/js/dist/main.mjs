@@ -1947,6 +1947,7 @@ var t3 = createTranslator({
     radius: "Blur Radius (px)",
     strength: "Blur Strength",
     sparkle: "Sparkle Intensity",
+    sparkleAlpha: "Intension Alpha-channel",
     blendOpacity: "Blur Opacity",
     makeOriginalTransparent: "Make Original Transparent",
     useCustomColor: "Use Custom Blur Color",
@@ -1958,6 +1959,7 @@ var t3 = createTranslator({
     radius: "\u307C\u304B\u3057\u534A\u5F84 (px)",
     strength: "\u307C\u304B\u3057\u5F37\u5EA6",
     sparkle: "\u304D\u3089\u3081\u304D\u5F37\u5EA6",
+    sparkleAlpha: "\u4E0D\u900F\u660E\u5EA6\u306E\u304D\u3089\u3081\u304D",
     blendOpacity: "\u30D6\u30E9\u30FC\u4E0D\u900F\u660E\u5EA6",
     makeOriginalTransparent: "\u5143\u753B\u50CF\u3092\u900F\u660E\u306B\u3059\u308B",
     useCustomColor: "\u30AB\u30B9\u30BF\u30E0\u30D6\u30E9\u30FC\u8272\u3092\u4F7F\u7528",
@@ -1986,6 +1988,10 @@ var kirakiraBlur1_1 = definePlugin({
       sparkle: {
         type: "real",
         default: 0.5
+      },
+      sparkleAlpha: {
+        type: "bool",
+        default: true
       },
       blendOpacity: {
         type: "real",
@@ -2040,6 +2046,7 @@ var kirakiraBlur1_1 = definePlugin({
         radius: Math.round(lerp(paramsA.radius, paramsB.radius, t27)),
         strength: lerp(paramsA.strength, paramsB.strength, t27),
         sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t27),
+        sparkleAlpha: t27 < 0.5 ? paramsA.sparkleAlpha : paramsB.sparkleAlpha,
         blendOpacity: lerp(paramsA.blendOpacity, paramsB.blendOpacity, t27),
         makeOriginalTransparent: t27 < 0.5 ? paramsA.makeOriginalTransparent : paramsB.makeOriginalTransparent,
         useCustomColor: t27 < 0.5 ? paramsA.useCustomColor : paramsB.useCustomColor,
@@ -2073,7 +2080,8 @@ var kirakiraBlur1_1 = definePlugin({
           ui.group({ direction: "row" }, [
             ui.slider({ key: "sparkle", dataType: "float", min: 0, max: 1, value: params.sparkle }),
             ui.numberInput({ key: "sparkle", dataType: "float", value: params.sparkle })
-          ])
+          ]),
+          ui.checkbox({ key: "sparkleAlpha", value: params.sparkleAlpha, label: t3("sparkleAlpha") })
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t3("blendOpacity") }),
@@ -2112,6 +2120,7 @@ var kirakiraBlur1_1 = definePlugin({
               radius: i32,
               strength: f32,
               sparkle: f32,
+              sparkleAlpha: f32,
               blendOpacity: f32,
               makeOriginalTransparent: i32,
               useCustomColor: i32,
@@ -2259,8 +2268,10 @@ var kirakiraBlur1_1 = definePlugin({
               if (params.direction == 1) {
                 // Apply sparkle effect (amplify values up to 2x)
                 let sparkleMultiplier = 1.0 + params.sparkle;
+                let sparkleAlphaMultiplier = 1.0 + params.sparkle * params.sparkleAlpha;
+
                 // Apply blendOpacity to the blur color's alpha
-                let sparkledColor = vec4f(finalColor.rgb * sparkleMultiplier, finalColor.a * params.blendOpacity);
+                let sparkledColor = vec4f(finalColor.rgb * sparkleMultiplier, finalColor.a * sparkleAlphaMultiplier * params.blendOpacity);
 
                 // Blend with original based on original alpha
                 let blendFactor = originalColor.a;
@@ -4905,7 +4916,7 @@ var fluidDistortion = definePlugin({
       },
       colorShift: {
         type: "real",
-        default: 0.1
+        default: 0
       },
       padding: {
         type: "int",
@@ -4945,6 +4956,7 @@ var fluidDistortion = definePlugin({
         scale: lerp(paramsA.scale, paramsB.scale, t27),
         turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t27),
         colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t27),
+        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t27)),
         timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t27)
       };
     },
@@ -11621,7 +11633,8 @@ var t20 = createTranslator({
     lightDirection: "Light Direction",
     lightIntensity: "Light Intensity",
     depthEffect: "Depth Effect",
-    surfaceRoughness: "Surface Roughness"
+    surfaceRoughness: "Surface Roughness",
+    maxFiberLength: "Max Fiber Length"
   },
   ja: {
     title: "\u7D19\u30C6\u30AF\u30B9\u30C1\u30E3\u751F\u6210 v2",
@@ -11636,7 +11649,8 @@ var t20 = createTranslator({
     lightDirection: "\u5149\u306E\u65B9\u5411",
     lightIntensity: "\u5149\u306E\u5F37\u3055",
     depthEffect: "\u51F9\u51F8\u52B9\u679C",
-    surfaceRoughness: "\u8868\u9762\u306E\u7C97\u3055"
+    surfaceRoughness: "\u8868\u9762\u306E\u7C97\u3055",
+    maxFiberLength: "\u7E4A\u7DAD\u306E\u6700\u5927\u9577"
   }
 });
 var defaultValues2 = {
@@ -11650,7 +11664,8 @@ var defaultValues2 = {
   lightIntensity: 0.5,
   lightAngle: 45,
   depthEffect: 0.5,
-  surfaceRoughness: 0.3
+  surfaceRoughness: 0.3,
+  maxFiberLength: 100
 };
 var paperTextureV2 = definePlugin({
   id: "paper-texture-generator-v2",
@@ -11718,6 +11733,10 @@ var paperTextureV2 = definePlugin({
       surfaceRoughness: {
         type: "real",
         default: defaultValues2.surfaceRoughness
+      },
+      maxFiberLength: {
+        type: "real",
+        default: defaultValues2.maxFiberLength
       }
     },
     onEditParameters: (params) => {
@@ -11729,7 +11748,8 @@ var paperTextureV2 = definePlugin({
     onScaleParams(params, scaleFactor) {
       return {
         ...params,
-        fiberAmount: params.fiberAmount * scaleFactor
+        fiberAmount: params.fiberAmount * scaleFactor,
+        maxFiberLength: params.maxFiberLength * scaleFactor
       };
     },
     onInterpolate: (paramsA, paramsB, t27) => {
@@ -11748,7 +11768,8 @@ var paperTextureV2 = definePlugin({
           paramsA.surfaceRoughness,
           paramsB.surfaceRoughness,
           t27
-        )
+        ),
+        maxFiberLength: lerp(paramsA.maxFiberLength, paramsB.maxFiberLength, t27)
       };
     },
     renderUI: (params, { setParam }) => {
@@ -11826,6 +11847,27 @@ var paperTextureV2 = definePlugin({
             ui.button({
               text: t20("reset"),
               onClick: () => setParam({ fiberDarkness: defaultValues2.fiberDarkness })
+            })
+          ])
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t20("maxFiberLength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "maxFiberLength",
+              dataType: "float",
+              min: 20,
+              max: 500,
+              value: params.maxFiberLength
+            }),
+            ui.numberInput({
+              key: "maxFiberLength",
+              dataType: "float",
+              value: params.maxFiberLength
+            }),
+            ui.button({
+              text: t20("reset"),
+              onClick: () => setParam({ maxFiberLength: defaultValues2.maxFiberLength })
             })
           ])
         ]),
@@ -12132,6 +12174,7 @@ var paperTextureV2 = definePlugin({
         params.beatingDegree,
         params.fiberAmount,
         params.fiberDarkness,
+        params.maxFiberLength,
         random
       );
       const baseCanvas = await createCanvas(imgData.width, imgData.height);
@@ -12523,7 +12566,7 @@ function addBaseTexture2(ctx, width, height, params, random, dpiScale = 1) {
   }
   ctx.putImageData(imageData, 0, 0);
 }
-function planFibers2(width, height, params, beatingDegree, fiberAmount, fiberDarkness, random) {
+function planFibers2(width, height, params, beatingDegree, fiberAmount, fiberDarkness, maxFiberLength, random) {
   const fiberPlans = [];
   const baseCount = 300 * fiberAmount;
   const fiberCount = Math.floor(
@@ -12536,7 +12579,7 @@ function planFibers2(width, height, params, beatingDegree, fiberAmount, fiberDar
     for (let i = 0; i < fiberTypeCount; i++) {
       const x = random.next() * width;
       const y = random.next() * height;
-      const fiberLength = 20 + random.next() * (80 * (1 - beatingDegree));
+      const fiberLength = 20 + random.next() * ((maxFiberLength - 20) * (1 - beatingDegree));
       const fiberWidth = 0.2 + (1 - beatingDegree) * 1.5;
       const angle = random.next() * Math.PI * (1 + (1 - beatingDegree));
       if (params.japanesePaper) {
