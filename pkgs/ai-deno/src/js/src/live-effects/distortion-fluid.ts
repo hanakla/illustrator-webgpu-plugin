@@ -108,6 +108,7 @@ export const fluidDistortion = definePlugin({
         scale: lerp(paramsA.scale, paramsB.scale, t),
         turbulence: lerp(paramsA.turbulence, paramsB.turbulence, t),
         colorShift: lerp(paramsA.colorShift, paramsB.colorShift, t),
+        padding: Math.round(lerp(paramsA.padding, paramsB.padding, t)),
         timeSeed: lerp(paramsA.timeSeed, paramsB.timeSeed, t),
       };
     },
