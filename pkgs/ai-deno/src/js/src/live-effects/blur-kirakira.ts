@@ -23,6 +23,7 @@ const t = createTranslator({
     radius: "Blur Radius (px)",
     strength: "Blur Strength",
     sparkle: "Sparkle Intensity",
+    sparkleAlpha: "Intension Alpha-channel",
     blendOpacity: "Blur Opacity",
     makeOriginalTransparent: "Make Original Transparent",
     useCustomColor: "Use Custom Blur Color",
@@ -34,6 +35,7 @@ const t = createTranslator({
     radius: "ぼかし半径 (px)",
     strength: "ぼかし強度",
     sparkle: "きらめき強度",
+    sparkleAlpha: "不透明度のきらめき",
     blendOpacity: "ブラー不透明度",
     makeOriginalTransparent: "元画像を透明にする",
     useCustomColor: "カスタムブラー色を使用",
@@ -63,6 +65,10 @@ export const kirakiraBlur1_1 = definePlugin({
       sparkle: {
         type: "real",
         default: 0.5,
+      },
+      sparkleAlpha: {
+        type: "bool",
+        default: true,
       },
       blendOpacity: {
         type: "real",
@@ -117,6 +123,7 @@ export const kirakiraBlur1_1 = definePlugin({
         radius: Math.round(lerp(paramsA.radius, paramsB.radius, t)),
         strength: lerp(paramsA.strength, paramsB.strength, t),
         sparkle: lerp(paramsA.sparkle, paramsB.sparkle, t),
+        sparkleAlpha: t < 0.5 ? paramsA.sparkleAlpha : paramsB.sparkleAlpha,
         blendOpacity: lerp(paramsA.blendOpacity, paramsB.blendOpacity, t),
         makeOriginalTransparent:
           t < 0.5
@@ -157,6 +164,7 @@ export const kirakiraBlur1_1 = definePlugin({
             ui.slider({ key: "sparkle", dataType: 'float', min: 0, max: 1, value: params.sparkle }),
             ui.numberInput({ key: "sparkle", dataType: 'float', value: params.sparkle }),
           ]),
+          ui.checkbox({ key: "sparkleAlpha", value: params.sparkleAlpha, label: t("sparkleAlpha") }),
         ]),
         ui.group({ direction: "col" }, [
           ui.text({ text: t("blendOpacity") }),
@@ -196,6 +204,7 @@ export const kirakiraBlur1_1 = definePlugin({
               radius: i32,
               strength: f32,
               sparkle: f32,
+              sparkleAlpha: f32,
               blendOpacity: f32,
               makeOriginalTransparent: i32,
               useCustomColor: i32,
@@ -343,8 +352,10 @@ export const kirakiraBlur1_1 = definePlugin({
               if (params.direction == 1) {
                 // Apply sparkle effect (amplify values up to 2x)
                 let sparkleMultiplier = 1.0 + params.sparkle;
+                let sparkleAlphaMultiplier = 1.0 + params.sparkle * params.sparkleAlpha;
+
                 // Apply blendOpacity to the blur color's alpha
-                let sparkledColor = vec4f(finalColor.rgb * sparkleMultiplier, finalColor.a * params.blendOpacity);
+                let sparkledColor = vec4f(finalColor.rgb * sparkleMultiplier, finalColor.a * sparkleAlphaMultiplier * params.blendOpacity);
 
                 // Blend with original based on original alpha
                 let blendFactor = originalColor.a;
