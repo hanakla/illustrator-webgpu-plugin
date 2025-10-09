@@ -68,7 +68,7 @@ export const fluidDistortion = definePlugin({
       },
       colorShift: {
         type: "real",
-        default: 0.1,
+        default: 0,
       },
       padding: {
         type: "int",
