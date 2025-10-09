@@ -1,4 +1,5 @@
-# Dinostrator - A WebGPU LiveEffects for Adobe Illustrator
+# illustrator-webgpu-plugin
+A WebGPU LiveEffects for Adobe Illustrator
 
 [Deno](https://deno.com) and [WebGPU](https://developer.mozilla.org/ja/docs/Web/API/WebGPU_API) runs as Illustrator SDK Plugin.
 
