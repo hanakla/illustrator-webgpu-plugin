@@ -33,6 +33,7 @@ const t = createTranslator({
     lightIntensity: "Light Intensity",
     depthEffect: "Depth Effect",
     surfaceRoughness: "Surface Roughness",
+    maxFiberLength: "Max Fiber Length",
   },
   ja: {
     title: "紙テクスチャ生成 v2",
@@ -48,6 +49,7 @@ const t = createTranslator({
     lightIntensity: "光の強さ",
     depthEffect: "凹凸効果",
     surfaceRoughness: "表面の粗さ",
+    maxFiberLength: "繊維の最大長",
   },
 });
 
@@ -63,6 +65,7 @@ const defaultValues = {
   lightAngle: 45.0,
   depthEffect: 0.5,
   surfaceRoughness: 0.3,
+  maxFiberLength: 100,
 };
 
 // Plugin definition
@@ -133,6 +136,10 @@ export const paperTextureV2 = definePlugin({
         type: "real",
         default: defaultValues.surfaceRoughness,
       },
+      maxFiberLength: {
+        type: "real",
+        default: defaultValues.maxFiberLength,
+      },
     },
     onEditParameters: (params) => {
       return params;
@@ -144,6 +151,7 @@ export const paperTextureV2 = definePlugin({
       return {
         ...params,
         fiberAmount: params.fiberAmount * scaleFactor,
+        maxFiberLength: params.maxFiberLength * scaleFactor,
       };
     },
     onInterpolate: (paramsA, paramsB, t) => {
@@ -164,6 +172,7 @@ export const paperTextureV2 = definePlugin({
           paramsB.surfaceRoughness,
           t
         ),
+        maxFiberLength: lerp(paramsA.maxFiberLength, paramsB.maxFiberLength, t),
       };
     },
     renderUI: (params, { setParam }) => {
@@ -244,6 +253,28 @@ export const paperTextureV2 = definePlugin({
               text: t("reset"),
               onClick: () =>
                 setParam({ fiberDarkness: defaultValues.fiberDarkness }),
+            }),
+          ]),
+        ]),
+        ui.group({ direction: "col" }, [
+          ui.text({ text: t("maxFiberLength") }),
+          ui.group({ direction: "row" }, [
+            ui.slider({
+              key: "maxFiberLength",
+              dataType: "float",
+              min: 20,
+              max: 500,
+              value: params.maxFiberLength,
+            }),
+            ui.numberInput({
+              key: "maxFiberLength",
+              dataType: "float",
+              value: params.maxFiberLength,
+            }),
+            ui.button({
+              text: t("reset"),
+              onClick: () =>
+                setParam({ maxFiberLength: defaultValues.maxFiberLength }),
             }),
           ]),
         ]),
@@ -577,6 +608,7 @@ export const paperTextureV2 = definePlugin({
         params.beatingDegree,
         params.fiberAmount,
         params.fiberDarkness,
+        params.maxFiberLength,
         random
       );
 
@@ -1173,6 +1205,7 @@ function planFibers(
   beatingDegree: number,
   fiberAmount: number,
   fiberDarkness: number,
+  maxFiberLength: number,
   random: SeededRandom
 ): FiberPlan[] {
   const fiberPlans = [];
@@ -1191,7 +1224,8 @@ function planFibers(
     for (let i = 0; i < fiberTypeCount; i++) {
       const x = random.next() * width;
       const y = random.next() * height;
-      const fiberLength = 20 + random.next() * (80 * (1 - beatingDegree));
+      const fiberLength =
+        20 + random.next() * ((maxFiberLength - 20) * (1 - beatingDegree));
       const fiberWidth = 0.2 + (1 - beatingDegree) * 1.5;
       const angle = random.next() * Math.PI * (1 + (1 - beatingDegree));
 
