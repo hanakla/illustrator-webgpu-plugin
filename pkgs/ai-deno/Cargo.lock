@@ -108,12 +108,13 @@ dependencies = [
  "deno_cache_dir",
  "deno_core",
  "deno_error",
- "deno_graph",
+ "deno_graph 0.103.0",
  "deno_lib",
  "deno_npm",
  "deno_npm_cache",
  "deno_package_json",
  "deno_path_util",
+ "deno_permissions",
  "deno_resolver",
  "deno_runtime",
  "deno_semver",
@@ -135,7 +136,6 @@ dependencies = [
  "tokio-util",
  "twox-hash 2.1.0",
  "url",
- "v8",
  "wildcard",
  "winapi",
 ]
@@ -1811,6 +1811,39 @@ dependencies = [
  "capacity_builder",
  "chrono",
  "data-url",
+ "deno_error",
+ "deno_media_type",
+ "deno_path_util",
+ "deno_semver",
+ "deno_unsync",
+ "futures",
+ "import_map",
+ "indexmap 2.9.0",
+ "log",
+ "monch",
+ "once_cell",
+ "parking_lot",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sys_traits",
+ "thiserror 2.0.17",
+ "url",
+ "wasm_dep_analyzer",
+]
+
+[[package]]
+name = "deno_graph"
+version = "0.103.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2594e83855f172895f0e391099ca5d09dc8ae1072789c7e9ed3c3dc52a267dc6"
+dependencies = [
+ "async-trait",
+ "boxed_error",
+ "capacity_builder",
+ "chrono",
+ "data-url",
  "deno_ast",
  "deno_error",
  "deno_media_type",
@@ -2233,7 +2266,7 @@ dependencies = [
  "chrono",
  "deno_config",
  "deno_error",
- "deno_graph",
+ "deno_graph 0.102.0",
  "deno_lockfile",
  "deno_npm",
  "deno_npm_cache",
@@ -2408,7 +2441,7 @@ dependencies = [
  "deno_cache_dir",
  "deno_config",
  "deno_error",
- "deno_graph",
+ "deno_graph 0.102.0",
  "deno_lockfile",
  "deno_maybe_sync",
  "deno_media_type",
@@ -5306,7 +5339,7 @@ dependencies = [
  "capacity_builder",
  "dashmap 5.5.3",
  "deno_error",
- "deno_graph",
+ "deno_graph 0.102.0",
  "deno_maybe_sync",
  "deno_media_type",
  "deno_package_json",
@@ -6114,7 +6147,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls",
- "socket2 0.5.8",
+ "socket2 0.6.0",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -7911,9 +7944,9 @@ dependencies = [
 
 [[package]]
 name = "timezone_provider"
-version = "0.0.16"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14fab21f70d8ca989ca76d399d26f4487747ac2def3816d93eaa966f8dfa2ea7"
+checksum = "f357f8e2cddee6a7b56b69fbb4cab30a7e82914c80ee7f9a5eb799ee3de3f24d"
 dependencies = [
  "tinystr 0.8.1",
  "zerotrie",
