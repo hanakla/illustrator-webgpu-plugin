@@ -11,6 +11,7 @@ use std::path::Path;
 use crate::deno::error::Error;
 use crate::deno::runtime::Runtime;
 use crate::deno::traits::{ToDefinedValue, ToV8String};
+use crate::deno_println;
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -64,9 +65,10 @@ fn resolve_path(
     path_str: impl AsRef<Path>,
     current_dir: &Path,
 ) -> Result<ModuleSpecifier, JsErrorBox> {
+    use std::borrow::Cow;
     let path = current_dir.join(path_str);
-    let path = deno_core::normalize_path(path);
-    deno_core::url::Url::from_file_path(&path).map_err(|()| {
+    let path = deno_core::normalize_path(Cow::Borrowed(path.as_path()));
+    deno_core::url::Url::from_file_path(path.as_ref()).map_err(|()| {
         JsErrorBox::generic(format!(
             "Failed to resolve path: {}",
             path.to_string_lossy().to_string()
@@ -109,7 +111,12 @@ impl ModuleHandle {
     ) -> Result<v8::Global<v8::Function>, Error> {
         let value = self.get_value_ref(runtime, name)?;
 
-        let mut scope = runtime.deno_runtime().handle_scope();
+        let deno_runtime = runtime.deno_runtime();
+        let context = deno_runtime.main_context();
+        let isolate = deno_runtime.v8_isolate();
+        v8::scope!(handle_scope, isolate);
+        let context_local = v8::Local::new(handle_scope, context);
+        let mut scope = v8::ContextScope::new(handle_scope, context_local);
         let local = v8::Local::<v8::Value>::new(&mut scope, value);
 
         if !local.is_function() {
@@ -141,11 +148,18 @@ impl ModuleHandle {
                 ));
             };
 
-        let mut scope = runtime.deno_runtime().handle_scope();
+        let deno_runtime = runtime.deno_runtime();
+        let context = deno_runtime.main_context();
+        let isolate = deno_runtime.v8_isolate();
+        v8::scope!(handle_scope, isolate);
+        let context_local = v8::Local::new(handle_scope, context);
+        let mut scope = v8::ContextScope::new(handle_scope, context_local);
         let module_namespace = module_namespace.open(&mut scope);
         assert!(module_namespace.is_module_namespace_object());
 
-        let key = name.to_v8_string(&mut scope)?.cast::<v8::Value>();
+        let key = v8::String::new(&scope, name)
+            .ok_or_else(|| Error::V8Encoding(name.to_string()))?
+            .cast::<v8::Value>();
         let value = module_namespace.get(&mut scope, key);
 
         match value.if_defined() {
@@ -155,14 +169,25 @@ impl ModuleHandle {
     }
 
     pub fn get_module_exports(&self, runtime: &mut Runtime) -> Result<Vec<String>, Error> {
+        println!("[DEBUG] get_module_exports: trying to get namespace for module_id: {}", self.module_id);
+
         let module_namespace =
             if let Ok(namespace) = runtime.deno_runtime().get_module_namespace(self.module_id) {
+                println!("[DEBUG] get_module_exports: successfully got namespace");
                 namespace
             } else {
+                println!("[DEBUG] get_module_exports: failed to get namespace for module_id: {}", self.module_id);
+                // Try to get more information about why it failed
+                eprintln!("[DEBUG] Module {} namespace not available - module may not be fully evaluated", self.module_id);
                 return Err(Error::Runtime(self.module_id().to_string()));
             };
 
-        let mut scope = runtime.deno_runtime().handle_scope();
+        let deno_runtime = runtime.deno_runtime();
+        let context = deno_runtime.main_context();
+        let isolate = deno_runtime.v8_isolate();
+        v8::scope!(handle_scope, isolate);
+        let context_local = v8::Local::new(handle_scope, context);
+        let mut scope = v8::ContextScope::new(handle_scope, context_local);
         let module_namespace = module_namespace.open(&mut scope);
         assert!(module_namespace.is_module_namespace_object());
 

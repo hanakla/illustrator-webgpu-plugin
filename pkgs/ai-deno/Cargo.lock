@@ -105,6 +105,7 @@ dependencies = [
  "cbindgen",
  "dashmap 6.1.0",
  "deno_ast",
+ "deno_bundle_runtime",
  "deno_cache_dir",
  "deno_core",
  "deno_error",

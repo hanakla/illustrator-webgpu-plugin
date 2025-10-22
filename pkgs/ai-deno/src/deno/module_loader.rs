@@ -135,14 +135,17 @@ impl AiDenoModuleLoader {
             deno_resolver::cjs::IsCjsResolutionMode::ImplicitTypeCommonJs,
         );
 
-        let cjs_translator = NodeCodeTranslator::new(MaybeArc::new(CjsModuleExportAnalyzer::new(
-            AiDenoCjsCodeAnalyzer::new(MaybeArc::new(RealFs::default()), cjs_tracker),
-            pkg_manager.clone(),
-            node_resolver.clone(),
-            pkg_manager.clone(),
-            pkg_json_resolver.clone(),
-            real_sys.clone(),
-        )));
+        let cjs_translator = NodeCodeTranslator::new(
+            MaybeArc::new(CjsModuleExportAnalyzer::new(
+                AiDenoCjsCodeAnalyzer::new(MaybeArc::new(RealFs::default()), cjs_tracker),
+                pkg_manager.clone(),
+                node_resolver.clone(),
+                pkg_manager.clone(),
+                pkg_json_resolver.clone(),
+                real_sys.clone(),
+            )),
+            node_resolver::analyze::NodeCodeTranslatorMode::ModuleLoader,
+        );
 
         // let module_graph = ModuleGraph::new(deno_graph::GraphKind::All);
 
@@ -230,7 +233,7 @@ impl AiDenoModuleLoader {
         let package_name = specifier.strip_prefix("npm:").unwrap_or(specifier);
 
         let npm_client = self.pkg_manager.npm_client.clone();
-        let (name, version, _sub_path) = parse_npm_specifier(package_name).map_err(|err| {
+        let (name, version, sub_path) = parse_npm_specifier(package_name).map_err(|err| {
             ModuleLoaderError::from(JsErrorBox::generic(format!(
                 "Failed to parse npm specifier: {} - {}",
                 package_name, err
@@ -271,7 +274,14 @@ impl AiDenoModuleLoader {
             deno_println!("Package already installed: {}@{:?}", name, resolved_version);
         }
 
-        return Ok(ModuleSpecifier::parse(specifier).unwrap());
+        // Return specifier with resolved version
+        let resolved_specifier = if sub_path.is_empty() {
+            format!("npm:{}@{}", name, resolved_version)
+        } else {
+            format!("npm:{}@{}/{}", name, resolved_version, sub_path)
+        };
+
+        return Ok(ModuleSpecifier::parse(&resolved_specifier).unwrap());
     }
 
     pub fn resolve_npm_module(
@@ -380,7 +390,13 @@ impl AiDenoModuleLoader {
                 let path = self
                     .pkg_manager
                     .resolve_specifier_to_file_path(module_specifier.as_str(), None)
-                    .unwrap();
+                    .map_err(|err| {
+                        ModuleLoaderError::from(JsErrorBox::generic(format!(
+                            "Failed to resolve npm package: {} - {:?}",
+                            module_specifier,
+                            err
+                        )))
+                    })?;
 
                 let content = std::fs::read_to_string(&path).map_err(|err| {
                     ModuleLoaderError::from(JsErrorBox::generic(format!(

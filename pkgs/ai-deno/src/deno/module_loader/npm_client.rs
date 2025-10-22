@@ -38,6 +38,7 @@ impl From<NpmPackageError> for JsErrorBox {
     }
 }
 
+#[derive(Debug)]
 pub struct NpmClient {
     pub registry_url: String,
     pub http_client: reqwest::Client,
@@ -151,16 +152,40 @@ impl NpmCacheHttpClient for NpmClient {
     async fn download_with_retries_on_any_tokio_runtime(
         &self,
         url: Url,
-        maybe_auth_header: Option<(HeaderName, HeaderValue)>,
-    ) -> Result<Option<Vec<u8>>, deno_npm_cache::DownloadError> {
-        let headers = if let Some((name, value)) = maybe_auth_header {
-            Some(vec![(name, value.to_str().unwrap().to_string())])
-        } else {
-            None
+        maybe_header_name: Option<String>,
+        maybe_header_value: Option<String>,
+    ) -> Result<deno_npm_cache::NpmCacheHttpClientResponse, deno_npm_cache::DownloadError> {
+        let headers = match (maybe_header_name, maybe_header_value) {
+            (Some(name), Some(value)) => {
+                let header_name = HeaderName::from_bytes(name.as_bytes())
+                    .map_err(|e| deno_npm_cache::DownloadError {
+                        status_code: None,
+                        error: JsErrorBox::generic(format!("Invalid header name: {}", e)),
+                    })?;
+                let header_value = HeaderValue::from_str(&value)
+                    .map_err(|e| deno_npm_cache::DownloadError {
+                        status_code: None,
+                        error: JsErrorBox::generic(format!("Invalid header value: {}", e)),
+                    })?;
+                Some(vec![(header_name, value)])
+            }
+            _ => None,
         };
 
         AiDenoHttpClient::new()
             .download_with_retries_on_any_tokio_runtime(&url, headers)
             .await
+            .map(|opt_bytes| {
+                if let Some(bytes) = opt_bytes {
+                    deno_npm_cache::NpmCacheHttpClientResponse::Bytes(
+                        deno_npm_cache::NpmCacheHttpClientBytesResponse {
+                            bytes,
+                            etag: None,
+                        }
+                    )
+                } else {
+                    deno_npm_cache::NpmCacheHttpClientResponse::NotFound
+                }
+            })
     }
 }

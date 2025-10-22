@@ -24,32 +24,23 @@
 
 use crate::deno::async_bridge::{AsyncBridge, AsyncBridgeExt};
 use crate::deno::error::Error;
-use crate::deno::ext::bootstrap::bootstrap_deno;
-use crate::deno::ext::worker::deno_worker_host;
 use crate::deno::module::{Module, ModuleHandle};
 use crate::deno::module_loader::npm_package_manager::NpmPackageManager;
 use crate::deno::transpiler::transpile;
 use crate::deno_println;
+use deno_bundle_runtime;
 use deno_core::{CompiledWasmModuleStore, ImportAssertionsSupport};
-use deno_error::JsErrorBox;
-use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::{
     deno_broadcast_channel,
     deno_broadcast_channel::InMemoryBroadcastChannel,
     deno_cache, deno_canvas, deno_console, deno_core,
     deno_core::{
         error::AnyError, error::JsError, futures::FutureExt, url::Url, v8, FastString, JsRuntime,
-        ModuleSpecifier, PollEventLoopOptions, RuntimeOptions,
+        PollEventLoopOptions, RuntimeOptions,
     },
     deno_cron,
     deno_cron::local::LocalCronHandler,
-    deno_crypto, deno_fetch, deno_ffi, deno_fs,
-    deno_fs::sync::MaybeArc,
-    deno_http,
-    deno_http::DefaultHttpPropertyExtractor,
-    deno_io,
-    deno_io::{Stdio, StdioPipe},
-    deno_kv,
+    deno_crypto, deno_fetch, deno_ffi, deno_fs, deno_http, deno_io, deno_kv,
     deno_kv::dynamic::MultiBackendDbHandler,
     deno_napi, deno_net, deno_node, deno_os,
     deno_permissions::{Permissions, PermissionsContainer},
@@ -104,7 +95,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(option: RuntimeInit) -> Result<Self, Error> {
-        let runtime_options = runtime_options_factory(
+        let (runtime_options, services) = runtime_options_factory(
             option.package_root_dir.clone(),
             option.allowed_module_schemas,
             option.extensions,
@@ -117,9 +108,72 @@ impl Runtime {
 
         let tokio = AsyncBridge::new(option.timeout)?;
         let mut runtime = JsRuntime::new(runtime_options);
-        // deno_runtime::worker::MainWorker::bootstrap_from_options(runtime_options,
-        //
-        // );
+
+        // Initialize extensions with their arguments
+        // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L1138
+        runtime
+            .lazy_init_extensions(vec![
+                deno_web::deno_web::args::<PermissionsContainer>(
+                    services.blob_store.clone(),
+                    bootstrap_options.location.clone(),
+                ),
+                deno_fetch::deno_fetch::args::<PermissionsContainer>(deno_fetch::Options {
+                    user_agent: bootstrap_options.user_agent.clone(),
+                    ..Default::default()
+                }),
+                deno_cache::deno_cache::args(None),
+                deno_websocket::deno_websocket::args::<PermissionsContainer>(),
+                deno_webstorage::deno_webstorage::args(None),
+                deno_crypto::deno_crypto::args(None),
+                deno_broadcast_channel::deno_broadcast_channel::args(
+                    InMemoryBroadcastChannel::default(),
+                ),
+                deno_ffi::deno_ffi::args::<PermissionsContainer>(None),
+                deno_net::deno_net::args::<PermissionsContainer>(None, None),
+                deno_kv::deno_kv::args(
+                    MultiBackendDbHandler::remote_or_sqlite::<PermissionsContainer>(
+                        None,
+                        None,
+                        deno_kv::remote::HttpOptions {
+                            user_agent: bootstrap_options.user_agent.clone(),
+                            root_cert_store_provider: None,
+                            unsafely_ignore_certificate_errors: None,
+                            client_cert_chain_and_key: deno_runtime::deno_tls::TlsKeys::Null,
+                            proxy: None,
+                        },
+                    ),
+                    deno_kv::KvConfig::builder().build(),
+                ),
+                deno_napi::deno_napi::args::<PermissionsContainer>(None),
+                deno_http::deno_http::args(deno_http::Options::default()),
+                deno_io::deno_io::args(None),
+                deno_fs::deno_fs::args::<PermissionsContainer>(services.fs.clone()),
+                deno_os::deno_os::args(None),
+                deno_process::deno_process::args(None),
+                deno_node::deno_node::args::<
+                    PermissionsContainer,
+                    NpmPackageManager,
+                    NpmPackageManager,
+                    RealSys,
+                >(Some(services.node_services.clone()), services.fs.clone()),
+                deno_runtime::ops::runtime::deno_runtime::args(Url::parse("file:///").unwrap()),
+                deno_runtime::ops::worker_host::deno_worker_host::args(
+                    Arc::new(|_| unimplemented!("web workers are not supported")),
+                    None,
+                ),
+                deno_bundle_runtime::deno_bundle_runtime::args(None),
+            ])
+            .map_err(|e| Error::CoreError(format!("Failed to initialize extensions: {}", e)))?;
+
+        // Put additional state into OpState
+        {
+            let state = runtime.op_state();
+            let mut state = state.borrow_mut();
+            state.put::<PermissionsContainer>(services.permissions);
+            state.put(deno_runtime::ops::TestingFeaturesEnabled(false));
+            state.put(services.feature_checker);
+            state.put(RealSys::default());
+        }
 
         if !bootstrap_runtime(&mut runtime, &bootstrap_options).is_ok() {
             return Err(Error::CoreError("Failed to bootstrap runtime".into()));
@@ -183,24 +237,28 @@ impl Runtime {
     ) -> Result<v8::Global<v8::Value>, Error> {
         let module_namespace = self.deno_runtime.get_module_namespace(handle.module_id());
 
-        let mut scope = self.deno_runtime.handle_scope();
-        let mut scope = v8::TryCatch::new(&mut scope);
+        let context = self.deno_runtime.main_context();
+        let isolate = self.deno_runtime.v8_isolate();
+        v8::scope!(handle_scope, isolate);
+        let context_local = v8::Local::new(handle_scope, context);
+        let mut context_scope = v8::ContextScope::new(handle_scope, context_local);
+        v8::tc_scope!(let scope, &mut context_scope);
 
         let namespace: v8::Local<v8::Value> = if let Ok(module_namespace) = module_namespace {
-            v8::Local::<v8::Object>::new(&mut scope, module_namespace).into()
+            v8::Local::<v8::Object>::new(scope, module_namespace).into()
         } else {
             // Create a new object to use as the namespace if none is provided
-            //let obj: v8::Local<v8::Value> = v8::Object::new(&mut scope).into();
-            let obj: v8::Local<v8::Value> = v8::undefined(&mut scope).into();
+            //let obj: v8::Local<v8::Value> = v8::Object::new(scope).into();
+            let obj: v8::Local<v8::Value> = v8::undefined(scope).into();
             obj
         };
 
-        let function_instance = function.open(&mut scope);
-        let result = function_instance.call(&mut scope, namespace, &args);
+        let function_instance = function.open(scope);
+        let result = function_instance.call(scope, namespace, &args);
 
         match result {
             Some(value) => {
-                let value = v8::Global::new(&mut scope, value);
+                let value = v8::Global::new(scope, value);
                 Ok(value)
             }
             None if scope.has_caught() => {
@@ -208,17 +266,17 @@ impl Runtime {
                     .message()
                     .ok_or_else(|| Error::Runtime("Unknown error".to_string()))?;
 
-                let filename = e.get_script_resource_name(&mut scope);
-                let linenumber = e.get_line_number(&mut scope).unwrap_or_default();
+                let filename = e.get_script_resource_name(scope);
+                let linenumber = e.get_line_number(scope).unwrap_or_default();
                 let filename = if let Some(v) = filename {
-                    let filename = v.to_rust_string_lossy(&mut scope);
+                    let filename = v.to_rust_string_lossy(scope);
                     format!("{filename}:{linenumber}: ")
                 } else {
                     let filename = handle.module().filename().to_string_lossy();
                     format!("{filename}:{linenumber}: ")
                 };
 
-                let msg = e.get(&mut scope).to_rust_string_lossy(&mut scope);
+                let msg = e.get(scope).to_rust_string_lossy(scope);
                 let s = format!("{filename}{msg}");
                 Err(Error::Runtime(s))
             }
@@ -231,6 +289,7 @@ impl Runtime {
     pub fn load_main_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
         self.block_on(move |runtime| async move {
             let handle = runtime.attach_module_async(module, true).await;
+            // Additional event loop wait is crucial for complex modules
             runtime
                 .await_event_loop(PollEventLoopOptions::default(), None)
                 .await?;
@@ -239,8 +298,20 @@ impl Runtime {
     }
 
     pub fn attach_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
+        self.attach_module_with_main(module, false)
+    }
+
+    pub fn attach_main_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
+        self.attach_module_with_main(module, true)
+    }
+
+    fn attach_module_with_main(
+        &mut self,
+        module: &Module,
+        main: bool,
+    ) -> Result<ModuleHandle, Error> {
         self.block_on(move |runtime| async move {
-            let handle = runtime.attach_module_async(module, false).await;
+            let handle = runtime.attach_module_async(module, main).await;
             runtime
                 .await_event_loop(PollEventLoopOptions::default(), None)
                 .await?;
@@ -390,11 +461,19 @@ impl AsyncBridgeExt for Runtime {
     }
 }
 
+struct RuntimeServices {
+    blob_store: Arc<BlobStore>,
+    permissions: PermissionsContainer,
+    feature_checker: Arc<deno_runtime::FeatureChecker>,
+    fs: Arc<deno_runtime::deno_fs::RealFs>,
+    node_services: deno_node::NodeExtInitServices<NpmPackageManager, NpmPackageManager, RealSys>,
+}
+
 fn runtime_options_factory(
     package_root_dir: PathBuf,
     allowed_module_schemas: HashSet<String>,
     extra_extensions: Vec<deno_runtime::deno_core::Extension>,
-) -> RuntimeOptions {
+) -> (RuntimeOptions, RuntimeServices) {
     // let fs = RealSys::default();
     // let arcFs = Arc::new(fs.clone());
 
@@ -417,7 +496,7 @@ fn runtime_options_factory(
         package_root_dir: package_root_dir.clone(),
         allowed_module_schemas,
     });
-    let mut extensions = get_all_extensions(&module_loader);
+    let (mut extensions, services) = get_all_extensions(&module_loader);
     extensions.extend(extra_extensions);
 
     let module_loader = Rc::new(module_loader);
@@ -436,10 +515,12 @@ fn runtime_options_factory(
         ..Default::default()
     };
 
-    runtime_options
+    (runtime_options, services)
 }
 
-fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno_core::Extension> {
+fn get_all_extensions(
+    mod_loader: &AiDenoModuleLoader,
+) -> (Vec<deno_runtime::deno_core::Extension>, RuntimeServices) {
     // let fs = RealSys::default();
     // let arc_fs = Arc::new(fs.clone());
 
@@ -451,6 +532,7 @@ fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno
     };
 
     let blob_store: Arc<BlobStore> = Arc::new(BlobStore::default());
+    let fs = Arc::new(deno_runtime::deno_fs::RealFs);
     let maybe_location: Option<Url> = None;
     let kv_storedir = cachedir.join("deno_kv");
     let cache_storage_dir = cachedir.join("deno_cache");
@@ -459,128 +541,104 @@ fn get_all_extensions(mod_loader: &AiDenoModuleLoader) -> Vec<deno_runtime::deno
     let permission_desc_parser = Arc::new(RuntimePermissionDescriptorParser::new(RealSys));
     let permissions = PermissionsContainer::new(permission_desc_parser, Permissions::allow_all());
 
+    // Create FeatureChecker with all unstable features enabled
+    let feature_checker = Arc::new(deno_runtime::FeatureChecker::default());
+
     deno_core::extension!(deno_permissions_worker,
       options = {
         permissions: PermissionsContainer,
         enable_testing_features: bool,
+        bootstrap_options: BootstrapOptions,
+        blob_store: Arc<BlobStore>,
+        feature_checker: Arc<deno_runtime::FeatureChecker>,
       },
       state = |state, options| {
         state.put::<PermissionsContainer>(options.permissions);
         state.put(deno_runtime::ops::TestingFeaturesEnabled(options.enable_testing_features));
+        state.put(options.bootstrap_options);
+        state.put(deno_web::StartTime::default());
+        state.put(options.blob_store);
+        state.put(options.feature_checker);
+        state.put(deno_node::ops::handle_wrap::AsyncId::default());
       },
     );
 
-    // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L391
-    vec![
-        bootstrap_deno::init_ops_and_esm(BootstrapOptions::default()),
-        deno_telemetry::deno_telemetry::init_ops_and_esm(),
+    // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L1049
+    // NOTE: ordering is important here, keep it in sync with runtime/worker.rs
+    let extensions = vec![
+        deno_telemetry::deno_telemetry::init(),
         // Web APIs
-        deno_webidl::deno_webidl::init_ops_and_esm(),
-        deno_console::deno_console::init_ops_and_esm(),
-        deno_url::deno_url::init_ops_and_esm(),
-        deno_web::deno_web::init_ops_and_esm::<PermissionsContainer>(blob_store, maybe_location),
-        deno_webgpu::deno_webgpu::init_ops_and_esm(),
-        deno_canvas::deno_canvas::init_ops_and_esm(),
-        deno_fetch::deno_fetch::init_ops_and_esm::<PermissionsContainer>(deno_fetch::Options {
-            user_agent: user_agent.clone(),
-            root_cert_store_provider: None, // services.root_cert_store_provider.clone(),
-            unsafely_ignore_certificate_errors: None, // options.unsafely_ignore_certificate_errors.clone(),
-            file_fetch_handler: Rc::new(deno_fetch::FsFetchHandler),
-            resolver: deno_fetch::dns::Resolver::gai(), //services.fetch_dns_resolver,
-            proxy: None,
-            client_builder_hook: None,
-            request_builder_hook: None,
-            client_cert_chain_and_key: deno_tls::TlsKeys::Null,
-            // ..Default::default()
-        }),
-        deno_cache::deno_cache::init_ops_and_esm(None),
-        deno_websocket::deno_websocket::init_ops_and_esm::<PermissionsContainer>(
-            user_agent.clone(),
-            Some(Arc::new(EmptyCertStoreProvider::new())),
-            None,
-        ),
-        deno_webstorage::deno_webstorage::init_ops_and_esm(
-            // options.origin_storage_dir.clone(),
-            None,
-        ),
-        deno_crypto::deno_crypto::init_ops_and_esm(Some(1)),
-        deno_broadcast_channel::deno_broadcast_channel::init_ops_and_esm(
-            // services.broadcast_channel.clone(),
-            InMemoryBroadcastChannel::default(),
-        ),
-        deno_ffi::deno_ffi::init_ops_and_esm::<PermissionsContainer>(),
-        deno_net::deno_net::init_ops_and_esm::<PermissionsContainer>(
-            Some(Arc::new(EmptyCertStoreProvider::new())),
-            None,
-        ),
-        deno_tls::deno_tls::init_ops_and_esm(),
-        deno_kv::deno_kv::init_ops_and_esm(
-            MultiBackendDbHandler::remote_or_sqlite::<PermissionsContainer>(
-                Some(kv_storedir.clone()),
-                None,
-                deno_kv::remote::HttpOptions {
-                    user_agent: user_agent.clone(),
-                    root_cert_store_provider: None,
-                    unsafely_ignore_certificate_errors: None,
-                    client_cert_chain_and_key: TlsKeys::Null,
-                    proxy: None,
-                },
-            ),
-            deno_kv::KvConfig::builder().build(),
-        ),
-        deno_cron::deno_cron::init_ops_and_esm(LocalCronHandler::new()),
-        deno_napi::deno_napi::init_ops_and_esm::<PermissionsContainer>(),
-        deno_http::deno_http::init_ops_and_esm(deno_http::Options::default()),
-        deno_io::deno_io::init_ops_and_esm(Some(Stdio {
-            stdin: StdioPipe::inherit(),
-            stdout: StdioPipe::inherit(),
-            stderr: StdioPipe::inherit(),
-        })),
-        deno_fs::deno_fs::init_ops_and_esm::<PermissionsContainer>(MaybeArc::new(
-            deno_fs::RealFs::default(),
-        )),
-        deno_os::deno_os::init_ops_and_esm(deno_os::ExitCode::default()),
-        deno_process::deno_process::init_ops_and_esm(
-            None, // services.npm_process_state_provider,
-        ),
-        deno_node::deno_node::init_ops_and_esm::<
+        deno_webidl::deno_webidl::init(),
+        deno_console::deno_console::init(),
+        deno_url::deno_url::init(),
+        deno_web::deno_web::lazy_init::<PermissionsContainer>(),
+        deno_webgpu::deno_webgpu::init(),
+        deno_canvas::deno_canvas::init(),
+        deno_fetch::deno_fetch::lazy_init::<PermissionsContainer>(),
+        deno_cache::deno_cache::lazy_init(),
+        deno_websocket::deno_websocket::lazy_init::<PermissionsContainer>(),
+        deno_webstorage::deno_webstorage::lazy_init(),
+        deno_crypto::deno_crypto::lazy_init(),
+        deno_broadcast_channel::deno_broadcast_channel::lazy_init::<InMemoryBroadcastChannel>(),
+        deno_ffi::deno_ffi::lazy_init::<PermissionsContainer>(),
+        deno_net::deno_net::lazy_init::<PermissionsContainer>(),
+        deno_tls::deno_tls::init(),
+        deno_kv::deno_kv::lazy_init::<MultiBackendDbHandler>(),
+        deno_cron::deno_cron::init(LocalCronHandler::new()),
+        deno_napi::deno_napi::lazy_init::<PermissionsContainer>(),
+        deno_http::deno_http::lazy_init(),
+        deno_io::deno_io::lazy_init(),
+        deno_fs::deno_fs::lazy_init::<PermissionsContainer>(),
+        deno_os::deno_os::lazy_init(),
+        deno_process::deno_process::lazy_init(),
+        deno_node::deno_node::lazy_init::<
             PermissionsContainer,
             NpmPackageManager,
             NpmPackageManager,
             RealSys,
-        >(
-            Some(mod_loader.init_services()),
-            MaybeArc::new(deno_fs::RealFs::default()),
-        ),
+        >(),
         // Ops from this crate
-        deno_runtime::ops::runtime::deno_runtime::init_ops_and_esm(
-            ModuleSpecifier::parse("ai-deno://main_module.ts")
-                .unwrap()
-                .clone(),
+        deno_runtime::ops::runtime::deno_runtime::lazy_init(),
+        deno_runtime::ops::worker_host::deno_worker_host::lazy_init(),
+        deno_runtime::ops::fs_events::deno_fs_events::init(),
+        deno_runtime::ops::permissions::deno_permissions::init(),
+        deno_runtime::ops::tty::deno_tty::init(),
+        deno_runtime::ops::http::deno_http_runtime::init(),
+        // deno_bundle_runtime is required by the main runtime extension
+        deno_bundle_runtime::deno_bundle_runtime::lazy_init(),
+        // Bootstrap extension with ops (provide SnapshotOptions)
+        deno_runtime::ops::bootstrap::deno_bootstrap::init(Some(Default::default()), false),
+        // Main deno_runtime extension (contains 98_global_scope_shared.js)
+        deno_runtime::runtime::init(),
+        // Web worker ops (disabled for main worker)
+        deno_runtime::ops::web_worker::deno_web_worker::init().disable(),
+        // Custom extension to put BootstrapOptions and permissions in state
+        deno_permissions_worker::init(
+            permissions.clone(),
+            false,
+            BootstrapOptions::default(),
+            blob_store.clone(),
+            feature_checker.clone(),
         ),
-        deno_worker_host::init_ops_and_esm(),
-        // deno_runtime::ops::worker_host::deno_worker_host::init_ops_and_esm(
-        //     Arc::new(|_| unimplemented!("web workers are not supported")),
-        //     Some(Arc::new(deno_runtime::fmt_errors::format_js_error.clone())),
-        // ),
-        deno_runtime::ops::fs_events::deno_fs_events::init_ops_and_esm(),
-        deno_runtime::ops::permissions::deno_permissions::init_ops_and_esm(),
-        deno_runtime::ops::tty::deno_tty::init_ops_and_esm(),
-        deno_runtime::ops::http::deno_http_runtime::init_ops_and_esm(),
-        deno_runtime::ops::bootstrap::deno_bootstrap::init_ops_and_esm(
-            // if options.startup_snapshot.is_some() {
-            //     None
-            // } else {
-            Some(Default::default()), // },
-        ),
-        deno_permissions_worker::init_ops_and_esm(permissions, false),
-        runtime::init_ops_and_esm(),
-        // NOTE(bartlomieju): this is done, just so that ops from this extension
-        // are available and importing them in `99_main.js` doesn't cause an
-        // error because they're not defined. Trying to use these ops in non-worker
-        // context will cause a panic.
-        deno_runtime::ops::web_worker::deno_web_worker::init_ops_and_esm().disable(),
-    ]
+    ];
+
+    let node_services = deno_node::NodeExtInitServices {
+        node_require_loader: std::rc::Rc::new(mod_loader.require_loader.clone())
+            as std::rc::Rc<dyn deno_node::NodeRequireLoader>,
+        node_resolver: mod_loader.node_resolver.clone(),
+        pkg_json_resolver: mod_loader.pkg_json_resolver.clone(),
+        sys: RealSys::default(),
+    };
+
+    let services = RuntimeServices {
+        blob_store,
+        permissions,
+        feature_checker,
+        fs,
+        node_services,
+    };
+
+    (extensions, services)
 }
 
 fn bootstrap_runtime(js_runtime: &mut JsRuntime, options: &BootstrapOptions) -> Result<(), Error> {
@@ -600,8 +658,10 @@ fn bootstrap_runtime(js_runtime: &mut JsRuntime, options: &BootstrapOptions) -> 
         dispatch_process_exit_event_fn_global,
     ) = {
         let context = js_runtime.main_context();
-        let scope = &mut js_runtime.handle_scope();
-        let context_local = v8::Local::new(scope, context);
+        let isolate = js_runtime.v8_isolate();
+        v8::scope!(handle_scope, isolate);
+        let context_local = v8::Local::new(handle_scope, context);
+        let scope = &mut v8::ContextScope::new(handle_scope, context_local);
         let global_obj = context_local.global(scope);
         let bootstrap_str = v8::String::new_external_onebyte_static(scope, b"bootstrap").unwrap();
         let bootstrap_ns: v8::Local<v8::Object> = global_obj
@@ -659,8 +719,12 @@ fn bootstrap_runtime(js_runtime: &mut JsRuntime, options: &BootstrapOptions) -> 
         )
     };
 
-    let scope = &mut js_runtime.handle_scope();
-    let scope = &mut v8::TryCatch::new(scope);
+    let context = js_runtime.main_context();
+    let isolate = js_runtime.v8_isolate();
+    v8::scope!(handle_scope, isolate);
+    let context_local = v8::Local::new(handle_scope, context);
+    let mut context_scope = v8::ContextScope::new(handle_scope, context_local);
+    v8::tc_scope!(let scope, &mut context_scope);
 
     let bootstrap_fn = v8::Local::new(scope, bootstrap_fn_global);
     let undefined = v8::undefined(scope);
@@ -695,16 +759,215 @@ impl RuntimeTrait for JsRuntime {
     }
 }
 
-struct EmptyCertStoreProvider(RootCertStore);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::deno::module::Module;
 
-impl EmptyCertStoreProvider {
-    fn new() -> Self {
-        Self(RootCertStore::empty())
+    #[test]
+    fn test_simple_module_load() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+
+        let code = r#"
+            export function hello() {
+                return "world";
+            }
+            export const value = 42;
+        "#;
+
+        let module = Module::from_string("test.js", code);
+        let mut handle = runtime.load_main_module(&module).unwrap();
+
+        // Check exports are available
+        let exports = handle.get_module_exports(&mut runtime);
+        println!("Exports: {:?}", exports);
+
+        assert!(
+            exports.is_ok(),
+            "Failed to get module exports: {:?}",
+            exports.err()
+        );
+        let exports = exports.unwrap();
+        assert!(exports.contains(&"hello".to_string()));
+        assert!(exports.contains(&"value".to_string()));
     }
-}
 
-impl RootCertStoreProvider for EmptyCertStoreProvider {
-    fn get_or_try_init(&self) -> Result<&RootCertStore, JsErrorBox> {
-        Ok(&self.0)
+    #[test]
+    fn test_module_with_top_level_await() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+
+        let code = r#"
+            const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            await delay(10);
+
+            export function hello() {
+                return "world";
+            }
+        "#;
+
+        let module = Module::from_string("test_async.js", code);
+        let mut handle = runtime.load_main_module(&module).unwrap();
+
+        // Check exports are available after top-level await
+        let exports = handle.get_module_exports(&mut runtime);
+        println!("Exports with top-level await: {:?}", exports);
+
+        assert!(
+            exports.is_ok(),
+            "Failed to get module exports: {:?}",
+            exports.err()
+        );
+        let exports = exports.unwrap();
+        assert!(exports.contains(&"hello".to_string()));
+    }
+
+    #[test]
+    fn test_module_export_function_call() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+
+        let code = r#"
+            export function add(a, b) {
+                return a + b;
+            }
+        "#;
+
+        let module = Module::from_string("test_fn.js", code);
+        let mut handle = runtime.load_main_module(&module).unwrap();
+
+        // Get the function
+        let func = handle.get_export_function_by_name(&mut runtime, "add");
+        println!("Function result: {:?}", func);
+
+        assert!(
+            func.is_ok(),
+            "Failed to get export function: {:?}",
+            func.err()
+        );
+    }
+
+    #[test]
+    fn test_npm_dependency_simple() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+
+        let code = r#"
+            import { z } from "npm:zod@3.24.2";
+
+            export const schema = z.string();
+
+            export function validate(input) {
+                return schema.parse(input);
+            }
+        "#;
+
+        let module = Module::from_string("test_npm.js", code);
+
+        println!("\n=== Testing npm dependency (simple) ===");
+        let mut handle = runtime.load_main_module(&module).expect("Failed to load module with npm dependency");
+        println!("Module loaded successfully, module_id: {:?}", handle.module_id());
+
+        let exports = handle.get_module_exports(&mut runtime);
+        println!("Exports with npm dependency: {:?}", exports);
+
+        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
+        let exports = exports.unwrap();
+        assert!(exports.contains(&"schema".to_string()), "schema not found in exports");
+        assert!(exports.contains(&"validate".to_string()), "validate not found in exports");
+    }
+
+    #[test]
+    fn test_jsr_dependency_simple() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+
+        let code = r#"
+            import { join } from "jsr:@std/path@1.0.8";
+
+            export function joinPaths(a, b) {
+                return join(a, b);
+            }
+        "#;
+
+        let module = Module::from_string("test_jsr.js", code);
+
+        println!("\n=== Testing jsr dependency (simple) ===");
+        let mut handle = runtime.load_main_module(&module).expect("Failed to load module with jsr dependency");
+        println!("Module loaded successfully, module_id: {:?}", handle.module_id());
+
+        let exports = handle.get_module_exports(&mut runtime);
+        println!("Exports with jsr dependency: {:?}", exports);
+
+        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
+        let exports = exports.unwrap();
+        assert!(exports.contains(&"joinPaths".to_string()), "joinPaths not found in exports");
+    }
+
+    #[test]
+    fn test_actual_main_mjs_with_load() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+        let code = include_str!("../js/dist/main.mjs");
+        let module = Module::from_string("main.js", code);
+
+        println!("\n=== Testing load_main_module with actual main.mjs ===");
+        let mut handle = runtime.load_main_module(&module).expect("Failed to load module");
+        println!("Module loaded successfully, module_id: {:?}", handle.module_id());
+
+        let exports = handle.get_module_exports(&mut runtime);
+        println!("Exports from load_main_module: {:?}", exports);
+
+        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
+        let exports = exports.unwrap();
+        assert!(exports.contains(&"getLiveEffects".to_string()), "getLiveEffects not found");
+        assert!(exports.contains(&"loadEffects".to_string()), "loadEffects not found");
+    }
+
+    #[test]
+    fn test_actual_main_mjs_with_attach() {
+        let mut runtime = Runtime::new(Default::default()).unwrap();
+        let code = include_str!("../js/dist/main.mjs");
+        let module = Module::from_string("main.js", code);
+
+        println!("\n=== Testing attach_main_module with actual main.mjs ===");
+        let mut handle = runtime.attach_main_module(&module).expect("Failed to attach module");
+        println!("Module attached successfully, module_id: {:?}", handle.module_id());
+
+        let exports = handle.get_module_exports(&mut runtime);
+        println!("Exports from attach_main_module: {:?}", exports);
+
+        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
+        let exports = exports.unwrap();
+        assert!(exports.contains(&"getLiveEffects".to_string()), "getLiveEffects not found");
+        assert!(exports.contains(&"loadEffects".to_string()), "loadEffects not found");
+    }
+
+    #[test]
+    fn test_attach_main_module_vs_load_main_module() {
+        let code = r#"
+            export function test() {
+                return "ok";
+            }
+        "#;
+
+        println!("\n=== Testing attach_main_module ===");
+        let mut runtime1 = Runtime::new(Default::default()).unwrap();
+        let module1 = Module::from_string("test1.js", code);
+        let mut handle1 = runtime1.attach_main_module(&module1).unwrap();
+        let exports1 = handle1.get_module_exports(&mut runtime1);
+        println!("attach_main_module exports: {:?}", exports1);
+
+        println!("\n=== Testing load_main_module ===");
+        let mut runtime2 = Runtime::new(Default::default()).unwrap();
+        let module2 = Module::from_string("test2.js", code);
+        let mut handle2 = runtime2.load_main_module(&module2).unwrap();
+        let exports2 = handle2.get_module_exports(&mut runtime2);
+        println!("load_main_module exports: {:?}", exports2);
+
+        // Both should succeed
+        if exports1.is_err() && exports2.is_err() {
+            panic!(
+                "Both methods failed. attach_main_module: {:?}, load_main_module: {:?}",
+                exports1.err(),
+                exports2.err()
+            );
+        }
     }
 }

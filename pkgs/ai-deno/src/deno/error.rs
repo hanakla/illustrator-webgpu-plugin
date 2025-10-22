@@ -50,6 +50,10 @@ map_error!(JsError, |e| Error::Runtime(format!(
     "{}\n{}",
     e.message.unwrap_or("".to_string()).to_string(), e.stack.unwrap_or("".to_string()).to_string()
 )));
+map_error!(Box<JsError>, |e| Error::Runtime(format!(
+    "{}\n{}",
+    e.message.clone().unwrap_or("".to_string()).to_string(), e.stack.clone().unwrap_or("".to_string()).to_string()
+)));
 map_error!(std::io::Error, |e| Error::Runtime(e.to_string()));
 map_error!(deno_core::error::CoreError, |e| Error::CoreError(
     e.to_string()
