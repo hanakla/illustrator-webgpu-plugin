@@ -59,16 +59,10 @@ impl AiDenoCjsCodeAnalyzer {
                     reexports: ex.reexports,
                 }),
             )),
-            CliCjsAnalysis::Cjs(ex) => {
-                println!(
-                    "cjs analysis: exports: {:?}, reexports: {:?}",
-                    ex.exports, ex.reexports
-                );
-                Ok(CjsAnalysis::Cjs(CjsAnalysisExports {
-                    exports: ex.exports,
-                    reexports: ex.reexports,
-                }))
-            }
+            CliCjsAnalysis::Cjs(ex) => Ok(CjsAnalysis::Cjs(CjsAnalysisExports {
+                exports: ex.exports,
+                reexports: ex.reexports,
+            })),
         }
     }
 
@@ -158,7 +152,9 @@ impl node_resolver::analyze::CjsCodeAnalyzer for AiDenoCjsCodeAnalyzer {
                 if let Ok(path) = specifier.to_file_path() {
                     if let Ok(source_from_file) = self
                         .fs
-                        .read_text_file_lossy_async(deno_permissions::CheckedPathBuf::unsafe_new(path))
+                        .read_text_file_lossy_async(deno_permissions::CheckedPathBuf::unsafe_new(
+                            path,
+                        ))
                         .await
                     {
                         source_from_file

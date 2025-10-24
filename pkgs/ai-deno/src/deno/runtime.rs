@@ -110,7 +110,7 @@ impl Runtime {
         let mut runtime = JsRuntime::new(runtime_options);
 
         // Initialize extensions with their arguments
-        // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L1138
+        // SEE: https://github.com/denoland/deno/blob/main/runtime/worker.rs#L1038
         runtime
             .lazy_init_extensions(vec![
                 deno_web::deno_web::args::<PermissionsContainer>(
@@ -146,7 +146,7 @@ impl Runtime {
                 ),
                 deno_napi::deno_napi::args::<PermissionsContainer>(None),
                 deno_http::deno_http::args(deno_http::Options::default()),
-                deno_io::deno_io::args(None),
+                deno_io::deno_io::args(Some(deno_io::Stdio::default())),
                 deno_fs::deno_fs::args::<PermissionsContainer>(services.fs.clone()),
                 deno_os::deno_os::args(None),
                 deno_process::deno_process::args(None),
@@ -288,34 +288,11 @@ impl Runtime {
 
     pub fn load_main_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
         self.block_on(move |runtime| async move {
-            let handle = runtime.attach_module_async(module, true).await;
-            // Additional event loop wait is crucial for complex modules
+            let handle = runtime.attach_module_async(module, true).await?;
             runtime
                 .await_event_loop(PollEventLoopOptions::default(), None)
                 .await?;
-            handle
-        })
-    }
-
-    pub fn attach_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
-        self.attach_module_with_main(module, false)
-    }
-
-    pub fn attach_main_module(&mut self, module: &Module) -> Result<ModuleHandle, Error> {
-        self.attach_module_with_main(module, true)
-    }
-
-    fn attach_module_with_main(
-        &mut self,
-        module: &Module,
-        main: bool,
-    ) -> Result<ModuleHandle, Error> {
-        self.block_on(move |runtime| async move {
-            let handle = runtime.attach_module_async(module, main).await;
-            runtime
-                .await_event_loop(PollEventLoopOptions::default(), None)
-                .await?;
-            handle
+            Ok(handle)
         })
     }
 
@@ -763,33 +740,18 @@ impl RuntimeTrait for JsRuntime {
 mod tests {
     use super::*;
     use crate::deno::module::Module;
+    use crate::ext::{ai_user_extension, AiExtOptions};
 
-    #[test]
-    fn test_simple_module_load() {
-        let mut runtime = Runtime::new(Default::default()).unwrap();
+    // Mock C functions for testing
+    #[no_mangle]
+    pub extern "C" fn ai_deno_alert(_msg: *const std::os::raw::c_char) {
+        // No-op for tests
+    }
 
-        let code = r#"
-            export function hello() {
-                return "world";
-            }
-            export const value = 42;
-        "#;
-
-        let module = Module::from_string("test.js", code);
-        let mut handle = runtime.load_main_module(&module).unwrap();
-
-        // Check exports are available
-        let exports = handle.get_module_exports(&mut runtime);
-        println!("Exports: {:?}", exports);
-
-        assert!(
-            exports.is_ok(),
-            "Failed to get module exports: {:?}",
-            exports.err()
-        );
-        let exports = exports.unwrap();
-        assert!(exports.contains(&"hello".to_string()));
-        assert!(exports.contains(&"value".to_string()));
+    #[no_mangle]
+    pub extern "C" fn ai_deno_get_user_locale() -> *const std::os::raw::c_char {
+        // Return a static string pointer for testing
+        b"en_US\0".as_ptr() as *const std::os::raw::c_char
     }
 
     #[test]
@@ -804,6 +766,8 @@ mod tests {
             export function hello() {
                 return "world";
             }
+
+            export const value = 42;
         "#;
 
         let module = Module::from_string("test_async.js", code);
@@ -820,123 +784,111 @@ mod tests {
         );
         let exports = exports.unwrap();
         assert!(exports.contains(&"hello".to_string()));
+        assert!(exports.contains(&"value".to_string()));
     }
 
     #[test]
-    fn test_module_export_function_call() {
-        let mut runtime = Runtime::new(Default::default()).unwrap();
-
-        let code = r#"
-            export function add(a, b) {
-                return a + b;
-            }
-        "#;
-
-        let module = Module::from_string("test_fn.js", code);
-        let mut handle = runtime.load_main_module(&module).unwrap();
-
-        // Get the function
-        let func = handle.get_export_function_by_name(&mut runtime, "add");
-        println!("Function result: {:?}", func);
-
-        assert!(
-            func.is_ok(),
-            "Failed to get export function: {:?}",
-            func.err()
-        );
-    }
-
-    #[test]
-    fn test_npm_dependency_simple() {
+    fn test_multiple_dependencies_with_top_level_await() {
         let mut runtime = Runtime::new(Default::default()).unwrap();
 
         let code = r#"
             import { z } from "npm:zod@3.24.2";
+            import { join } from "jsr:@std/path@1.0.8";
+            import { isEqual } from "jsr:@es-toolkit/es-toolkit@1.33.0";
+
+            // Simulate async initialization like main.mjs
+            const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+            await delay(10);
 
             export const schema = z.string();
 
             export function validate(input) {
                 return schema.parse(input);
             }
-        "#;
-
-        let module = Module::from_string("test_npm.js", code);
-
-        println!("\n=== Testing npm dependency (simple) ===");
-        let mut handle = runtime.load_main_module(&module).expect("Failed to load module with npm dependency");
-        println!("Module loaded successfully, module_id: {:?}", handle.module_id());
-
-        let exports = handle.get_module_exports(&mut runtime);
-        println!("Exports with npm dependency: {:?}", exports);
-
-        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
-        let exports = exports.unwrap();
-        assert!(exports.contains(&"schema".to_string()), "schema not found in exports");
-        assert!(exports.contains(&"validate".to_string()), "validate not found in exports");
-    }
-
-    #[test]
-    fn test_jsr_dependency_simple() {
-        let mut runtime = Runtime::new(Default::default()).unwrap();
-
-        let code = r#"
-            import { join } from "jsr:@std/path@1.0.8";
 
             export function joinPaths(a, b) {
                 return join(a, b);
             }
+
+            export function checkEqual(a, b) {
+                return isEqual(a, b);
+            }
         "#;
 
-        let module = Module::from_string("test_jsr.js", code);
+        let module = Module::from_string("test_complex.js", code);
 
-        println!("\n=== Testing jsr dependency (simple) ===");
-        let mut handle = runtime.load_main_module(&module).expect("Failed to load module with jsr dependency");
-        println!("Module loaded successfully, module_id: {:?}", handle.module_id());
+        println!("\n=== Testing multiple dependencies with top-level await ===");
+        let handle = runtime
+            .load_main_module(&module)
+            .expect("Failed to load complex module");
+        println!(
+            "Module loaded successfully, module_id: {:?}",
+            handle.module_id()
+        );
 
         let exports = handle.get_module_exports(&mut runtime);
-        println!("Exports with jsr dependency: {:?}", exports);
+        println!(
+            "Exports with multiple deps + top-level await: {:?}",
+            exports
+        );
 
-        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
+        assert!(
+            exports.is_ok(),
+            "Failed to get module exports: {:?}",
+            exports.err()
+        );
         let exports = exports.unwrap();
-        assert!(exports.contains(&"joinPaths".to_string()), "joinPaths not found in exports");
+        assert!(exports.contains(&"schema".to_string()), "schema not found");
+        assert!(
+            exports.contains(&"validate".to_string()),
+            "validate not found"
+        );
+        assert!(
+            exports.contains(&"joinPaths".to_string()),
+            "joinPaths not found"
+        );
+        assert!(
+            exports.contains(&"checkEqual".to_string()),
+            "checkEqual not found"
+        );
     }
 
     #[test]
     fn test_actual_main_mjs_with_load() {
-        let mut runtime = Runtime::new(Default::default()).unwrap();
+        let mut runtime = Runtime::new(RuntimeInit {
+            extensions: vec![ai_user_extension::init(AiExtOptions {})],
+            ..Default::default()
+        })
+        .unwrap();
         let code = include_str!("../js/dist/main.mjs");
-        let module = Module::from_string("main.js", code);
+        let module = Module::from_string("main.ts", code);
 
         println!("\n=== Testing load_main_module with actual main.mjs ===");
-        let mut handle = runtime.load_main_module(&module).expect("Failed to load module");
-        println!("Module loaded successfully, module_id: {:?}", handle.module_id());
+        let handle = runtime
+            .load_main_module(&module)
+            .expect("Failed to load module");
+        println!(
+            "Module loaded successfully, module_id: {:?}",
+            handle.module_id()
+        );
 
         let exports = handle.get_module_exports(&mut runtime);
         println!("Exports from load_main_module: {:?}", exports);
 
-        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
+        assert!(
+            exports.is_ok(),
+            "Failed to get module exports: {:?}",
+            exports.err()
+        );
         let exports = exports.unwrap();
-        assert!(exports.contains(&"getLiveEffects".to_string()), "getLiveEffects not found");
-        assert!(exports.contains(&"loadEffects".to_string()), "loadEffects not found");
-    }
-
-    #[test]
-    fn test_actual_main_mjs_with_attach() {
-        let mut runtime = Runtime::new(Default::default()).unwrap();
-        let code = include_str!("../js/dist/main.mjs");
-        let module = Module::from_string("main.js", code);
-
-        println!("\n=== Testing attach_main_module with actual main.mjs ===");
-        let mut handle = runtime.attach_main_module(&module).expect("Failed to attach module");
-        println!("Module attached successfully, module_id: {:?}", handle.module_id());
-
-        let exports = handle.get_module_exports(&mut runtime);
-        println!("Exports from attach_main_module: {:?}", exports);
-
-        assert!(exports.is_ok(), "Failed to get module exports: {:?}", exports.err());
-        let exports = exports.unwrap();
-        assert!(exports.contains(&"getLiveEffects".to_string()), "getLiveEffects not found");
-        assert!(exports.contains(&"loadEffects".to_string()), "loadEffects not found");
+        assert!(
+            exports.contains(&"getLiveEffects".to_string()),
+            "getLiveEffects not found"
+        );
+        assert!(
+            exports.contains(&"loadEffects".to_string()),
+            "loadEffects not found"
+        );
     }
 
     #[test]

@@ -118,8 +118,6 @@ impl AiDenoModuleLoader {
 
         let pkg_manager = NpmPackageManager::new(root_node_modules_dir.clone());
 
-        // let in_npm_pkg_checker = DenoInNpmPackageChecker::new(CreateInNpmPkgCheckerOptions::Byonm);
-
         let node_resolver = MaybeArc::new(NodeResolver::new(
             pkg_manager.clone(),
             DenoIsBuiltInNodeModuleChecker {},
@@ -147,13 +145,7 @@ impl AiDenoModuleLoader {
             node_resolver::analyze::NodeCodeTranslatorMode::ModuleLoader,
         );
 
-        // let module_graph = ModuleGraph::new(deno_graph::GraphKind::All);
-
         let require_loader = AiDenoRequireLoader(MaybeArc::new(RealFs::default()));
-
-        // let pkg_json_folder_resolver = AiDenoNpmPackageFolderResolver {
-        //     byonm: byonm_npm_resolver.clone(),
-        // };
 
         let jsr_manager = JsrPackageManager::new(options.package_root_dir.clone());
 
@@ -190,17 +182,6 @@ impl AiDenoModuleLoader {
     //         )))
     //     })
     // }
-
-    pub fn init_services(
-        self: &Self,
-    ) -> NodeExtInitServices<NpmPackageManager, NpmPackageManager, RealSys> {
-        NodeExtInitServices {
-            node_require_loader: Rc::new(self.require_loader.clone()),
-            pkg_json_resolver: self.pkg_json_resolver.clone(),
-            node_resolver: self.node_resolver.clone(),
-            sys: RealSys::default(),
-        }
-    }
 
     pub fn extension_transpiler(&self) -> Rc<ExtensionTranspiler> {
         let allowed_schemas = self.allowed_module_schemas.clone();
@@ -393,8 +374,7 @@ impl AiDenoModuleLoader {
                     .map_err(|err| {
                         ModuleLoaderError::from(JsErrorBox::generic(format!(
                             "Failed to resolve npm package: {} - {:?}",
-                            module_specifier,
-                            err
+                            module_specifier, err
                         )))
                     })?;
 
@@ -413,9 +393,6 @@ impl AiDenoModuleLoader {
                     .translate_cjs_to_esm(&file_url, Some(Cow::Borrowed(&content)))
                     .map_err(|e| JsErrorBox::from_err(e))
                     .await?;
-
-                // let content =
-                //     ["console.log(import.meta);", content.to_string().as_str()].join("\n");
 
                 deno_println!("Translated content: {}", content);
 
