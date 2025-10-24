@@ -135,18 +135,15 @@ impl ModuleHandle {
         runtime: &mut Runtime,
         name: &str,
     ) -> Result<v8::Global<v8::Value>, Error> {
-        let module_namespace =
-            if let Ok(namespace) = runtime.deno_runtime().get_module_namespace(self.module_id) {
-                namespace
-            } else {
-                return Err(Error::Runtime(
-                    format!(
-                        "Failed to get module namespace: {}",
-                        self.module_id.to_string()
-                    )
-                    .to_string(),
-                ));
-            };
+        let module_namespace = match runtime.deno_runtime().get_module_namespace(self.module_id) {
+            Ok(namespace) => namespace,
+            Err(error) => {
+                return Err(Error::Runtime(format!(
+                    "Failed to get module namespace: {}",
+                    error
+                )));
+            }
+        };
 
         let deno_runtime = runtime.deno_runtime();
         let context = deno_runtime.main_context();
@@ -169,18 +166,15 @@ impl ModuleHandle {
     }
 
     pub fn get_module_exports(&self, runtime: &mut Runtime) -> Result<Vec<String>, Error> {
-        println!("[DEBUG] get_module_exports: trying to get namespace for module_id: {}", self.module_id);
-
-        let module_namespace =
-            if let Ok(namespace) = runtime.deno_runtime().get_module_namespace(self.module_id) {
-                println!("[DEBUG] get_module_exports: successfully got namespace");
-                namespace
-            } else {
-                println!("[DEBUG] get_module_exports: failed to get namespace for module_id: {}", self.module_id);
-                // Try to get more information about why it failed
-                eprintln!("[DEBUG] Module {} namespace not available - module may not be fully evaluated", self.module_id);
-                return Err(Error::Runtime(self.module_id().to_string()));
-            };
+        let module_namespace = match runtime.deno_runtime().get_module_namespace(self.module_id) {
+            Ok(namespace) => namespace,
+            Err(error) => {
+                return Err(Error::Runtime(format!(
+                    "Failed to get module namespace: {}",
+                    error
+                )));
+            }
+        };
 
         let deno_runtime = runtime.deno_runtime();
         let context = deno_runtime.main_context();

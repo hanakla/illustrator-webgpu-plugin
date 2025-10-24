@@ -123,11 +123,11 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
     dai_println!("Load module");
     let module = Module::from_string("main.js", include_str!("./js/dist/main.mjs"));
     // Allow to crash - load as main module to make exports accessible
-    let mut handle = match runtime.load_main_module(&module) {
+    let handle = match runtime.load_main_module(&module) {
         Ok(h) => {
             dai_println!("Module loaded successfully, module_id: {:?}", h.module_id());
             h
-        },
+        }
         Err(e) => {
             dai_println!("Failed to load module: {:?}", e);
             panic!("Module load failed: {:?}", e);
@@ -138,7 +138,7 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
     match handle.get_module_exports(&mut runtime) {
         Ok(exports) => {
             dai_println!("Module exports: {:?}", exports);
-        },
+        }
         Err(e) => {
             dai_println!("Failed to get module exports: {:?}", e);
         }
