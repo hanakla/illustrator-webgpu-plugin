@@ -3,7 +3,6 @@ name: CI
 on: [push]
 
 jobs:
-  # macOS向けRustバインディングをビルド
   build_macos_rust_binding:
     name: Build macOS ai-deno bindings
     runs-on: macos-latest
@@ -21,25 +20,17 @@ jobs:
         run: |
           rustup target add aarch64-apple-darwin
 
-      - name: Restore Cargo cache
-        id: cargo-cache-restore
-        uses: actions/cache/restore@v4
+      - name: Cache Rust build artifacts
+        id: cargo-target-cache
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            ${{ github.workspace }}/pkgs/ai-deno/target
+          key: ${{ runner.os }}-ai-deno-rust-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Restore build artifacts cache
-        id: build-cache-restore
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ github.workspace }}/pkgs/ai-deno/target
-          key: ${{ runner.os }}-macos-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
-          restore-keys: |
-            ${{ runner.os }}-macos-target-
+            ${{ runner.os }}-ai-deno-rust-
 
       - name: Build for macOS (aarch64)
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
@@ -50,28 +41,9 @@ jobs:
         run: |
           mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes
 
-          # macOSのバイナリとヘッダーをコピー
+          # Copy macOS binary and header
           cp ${{ github.workspace }}/pkgs/ai-deno/target/aarch64-apple-darwin/release/libai_deno.a ${{ github.workspace }}/pkgs/ai-deno/target/macos/
-          # ヘッダーファイルをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/macos/includes/
-
-      # ビルドが失敗してもCargoキャッシュを保存
-      - name: Save Cargo cache
-        if: always() && steps.cargo-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ steps.cargo-cache-restore.outputs.cache-primary-key || runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      # ビルドが成功した場合のみビルド成果物をキャッシュ
-      - name: Save build artifacts cache
-        if: success() && steps.build-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ github.workspace }}/pkgs/ai-deno/target
-          key: ${{ steps.build-cache-restore.outputs.cache-primary-key || runner.os }}-macos-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
 
       - name: Upload macOS binding artifact
         id: upload-macos-binding
@@ -85,7 +57,6 @@ jobs:
           compression-level: 3
           if-no-files-found: error
 
-  # Windows向けRustバインディングをビルド
   build_windows_rust_binding:
     name: Build Windows ai-deno bindings
     runs-on: windows-latest
@@ -97,25 +68,17 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Restore Cargo cache
-        id: cargo-cache-restore
-        uses: actions/cache/restore@v4
+      - name: Cache Rust build artifacts
+        id: cargo-target-cache
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            ${{ github.workspace }}/pkgs/ai-deno/target
+          key: ${{ runner.os }}-ai-deno-rust-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Restore build artifacts cache
-        id: build-cache-restore
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ github.workspace }}/pkgs/ai-deno/target
-          key: ${{ runner.os }}-windows-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
-          restore-keys: |
-            ${{ runner.os }}-windows-target-
+            ${{ runner.os }}-ai-deno-rust-
 
       - name: Build for Windows
         working-directory: ${{ github.workspace }}/pkgs/ai-deno
@@ -126,28 +89,9 @@ jobs:
         run: |
           mkdir -p ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes
 
-          # Windowsのバイナリとヘッダーをコピー
+          # Copy Windows binary and header
           cp ${{ github.workspace }}/pkgs/ai-deno/target/release/ai_deno.lib ${{ github.workspace }}/pkgs/ai-deno/target/windows/
-          # ヘッダーファイルをコピー
           cp ${{ github.workspace }}/pkgs/ai-deno/include/libai_deno.h ${{ github.workspace }}/pkgs/ai-deno/target/windows/includes/
-
-      # ビルドが失敗してもCargoキャッシュを保存
-      - name: Save Cargo cache
-        if: always() && steps.cargo-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ steps.cargo-cache-restore.outputs.cache-primary-key || runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      # ビルドが成功した場合のみビルド成果物をキャッシュ
-      - name: Save build artifacts cache
-        if: success() && steps.build-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ github.workspace }}/pkgs/ai-deno/target
-          key: ${{ steps.build-cache-restore.outputs.cache-primary-key || runner.os }}-windows-target-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'pkgs/ai-deno/src/**/*.rs') }}
 
       - name: Upload Windows binding artifact
         id: upload-windows-binding
@@ -161,7 +105,6 @@ jobs:
           compression-level: 3
           if-no-files-found: error
 
-  # ステップ2: macOS版プラグインをビルド
   build_macos_plugin:
     needs: build_macos_rust_binding
     runs-on: macos-latest
@@ -191,7 +134,7 @@ jobs:
       - name: Build with Xcode
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
-          # Xcodeでビルド - PIPL生成はXcodeのビルドフェーズで行われる
+          # Build the AiDenoPlugin scheme in Release configuration
           xcodebuild -project AiDenoPlugin.xcodeproj -scheme AiDenoPlugin -configuration Release build
 
       - name: Upload macOS plugin artifact
@@ -210,7 +153,6 @@ jobs:
           echo "Download URL: ${{ steps.upload-macos-artifact.outputs.artifact-url }}"
           echo "SHA-256: ${{ steps.upload-macos-artifact.outputs.artifact-digest }}"
 
-  # ステップ3: Windows版プラグインをビルド
   build_windows_plugin:
     needs: build_windows_rust_binding
     runs-on: windows-latest
@@ -250,7 +192,7 @@ jobs:
       - name: Create skeleton structure for build
         working-directory: ${{ github.workspace }}/pkgs/plugin
         run: |
-          # 正しくディレクトリを作成
+          # Create the directory structure correctly
           New-Item -Path "Source" -ItemType Directory -Force
           New-Item -Path "deps\imgui\misc\cpp" -ItemType Directory -Force
           New-Item -Path "Resources\Win" -ItemType Directory -Force
@@ -298,10 +240,10 @@ jobs:
             Set-Content -Path "Source\AiDenoPlugin.cpp" -Value $sourceContent
           }
 
-          # PIPL署名を生成
+          # Generate PIPL signature
           python -c "import sys, json; sys.path.append('..\..\illustrator-sdk\tools\pipl'); from create_pipl import create_pipl; create_pipl('[{\"name\":\"IllustratorDeno\"}, {\"entry_point\":\"PluginMain\"}]')"
 
-          # PIPLファイルが存在しない場合は作成
+          # Create PIPL file if it doesn't exist
           if (-Not (Test-Path "plugin.pipl")) {
             $piplContent = @'
           // PIPL
