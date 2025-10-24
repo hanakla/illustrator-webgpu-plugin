@@ -1,7 +1,6 @@
 use cjs_code_analyzer::AiDenoCjsCodeAnalyzer;
 use deno_ast::MediaType;
 use deno_error::JsErrorBox;
-use deno_graph::ModuleSpecifier;
 use deno_resolver::{
     cjs::CjsTracker,
     npm::{ByonmNpmResolver, ByonmNpmResolverCreateOptions},
@@ -9,8 +8,8 @@ use deno_resolver::{
 use deno_runtime::{
     deno_core::{
         error::ModuleLoaderError, url::Url, FastString, ModuleCodeString, ModuleLoadResponse,
-        ModuleLoader, ModuleName, ModuleSource, ModuleSourceCode, ModuleType, RequestedModuleType,
-        ResolutionKind, SourceMapData,
+        ModuleLoader, ModuleName, ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType,
+        RequestedModuleType, ResolutionKind, SourceMapData,
     },
     deno_fs::{sync::MaybeArc, RealFs},
     deno_node::{NodeExtInitServices, NodeResolver, NodeResolverRc},
@@ -18,7 +17,7 @@ use deno_runtime::{
 use futures::TryFutureExt;
 use jsr_package_manager::{parse_jsr_specifier, JsrPackageManager};
 use node_resolver::{
-    analyze::NodeCodeTranslator,
+    analyze::{CjsModuleExportAnalyzer, NodeCodeTranslator},
     cache::{NodeResolutionSys, NodeResolutionThreadLocalCache},
     DenoIsBuiltInNodeModuleChecker, NodeResolutionKind, PackageJsonResolver, ResolutionMode,
     UrlOrPathRef,
@@ -119,15 +118,13 @@ impl AiDenoModuleLoader {
 
         let pkg_manager = NpmPackageManager::new(root_node_modules_dir.clone());
 
-        // let in_npm_pkg_checker = DenoInNpmPackageChecker::new(CreateInNpmPkgCheckerOptions::Byonm);
-
         let node_resolver = MaybeArc::new(NodeResolver::new(
             pkg_manager.clone(),
             DenoIsBuiltInNodeModuleChecker {},
             pkg_manager.clone(),
             pkg_json_resolver.clone(),
             node_resolution_sys,
-            node_resolver::ConditionsFromResolutionMode::default(),
+            node_resolver::NodeResolverOptions::default(),
         ));
 
         let cjs_tracker = CjsTracker::new(
@@ -137,21 +134,18 @@ impl AiDenoModuleLoader {
         );
 
         let cjs_translator = NodeCodeTranslator::new(
-            AiDenoCjsCodeAnalyzer::new(MaybeArc::new(RealFs::default()), cjs_tracker),
-            pkg_manager.clone(),
-            node_resolver.clone(),
-            pkg_manager.clone(),
-            pkg_json_resolver.clone(),
-            real_sys.clone(),
+            MaybeArc::new(CjsModuleExportAnalyzer::new(
+                AiDenoCjsCodeAnalyzer::new(MaybeArc::new(RealFs::default()), cjs_tracker),
+                pkg_manager.clone(),
+                node_resolver.clone(),
+                pkg_manager.clone(),
+                pkg_json_resolver.clone(),
+                real_sys.clone(),
+            )),
+            node_resolver::analyze::NodeCodeTranslatorMode::ModuleLoader,
         );
 
-        // let module_graph = ModuleGraph::new(deno_graph::GraphKind::All);
-
         let require_loader = AiDenoRequireLoader(MaybeArc::new(RealFs::default()));
-
-        // let pkg_json_folder_resolver = AiDenoNpmPackageFolderResolver {
-        //     byonm: byonm_npm_resolver.clone(),
-        // };
 
         let jsr_manager = JsrPackageManager::new(options.package_root_dir.clone());
 
@@ -189,17 +183,6 @@ impl AiDenoModuleLoader {
     //     })
     // }
 
-    pub fn init_services(
-        self: &Self,
-    ) -> NodeExtInitServices<NpmPackageManager, NpmPackageManager, RealSys> {
-        NodeExtInitServices {
-            node_require_loader: Rc::new(self.require_loader.clone()),
-            pkg_json_resolver: self.pkg_json_resolver.clone(),
-            node_resolver: self.node_resolver.clone(),
-            sys: RealSys::default(),
-        }
-    }
-
     pub fn extension_transpiler(&self) -> Rc<ExtensionTranspiler> {
         let allowed_schemas = self.allowed_module_schemas.clone();
 
@@ -231,7 +214,7 @@ impl AiDenoModuleLoader {
         let package_name = specifier.strip_prefix("npm:").unwrap_or(specifier);
 
         let npm_client = self.pkg_manager.npm_client.clone();
-        let (name, version, _sub_path) = parse_npm_specifier(package_name).map_err(|err| {
+        let (name, version, sub_path) = parse_npm_specifier(package_name).map_err(|err| {
             ModuleLoaderError::from(JsErrorBox::generic(format!(
                 "Failed to parse npm specifier: {} - {}",
                 package_name, err
@@ -272,7 +255,14 @@ impl AiDenoModuleLoader {
             deno_println!("Package already installed: {}@{:?}", name, resolved_version);
         }
 
-        return Ok(ModuleSpecifier::parse(specifier).unwrap());
+        // Return specifier with resolved version
+        let resolved_specifier = if sub_path.is_empty() {
+            format!("npm:{}@{}", name, resolved_version)
+        } else {
+            format!("npm:{}@{}/{}", name, resolved_version, sub_path)
+        };
+
+        return Ok(ModuleSpecifier::parse(&resolved_specifier).unwrap());
     }
 
     pub fn resolve_npm_module(
@@ -381,7 +371,12 @@ impl AiDenoModuleLoader {
                 let path = self
                     .pkg_manager
                     .resolve_specifier_to_file_path(module_specifier.as_str(), None)
-                    .unwrap();
+                    .map_err(|err| {
+                        ModuleLoaderError::from(JsErrorBox::generic(format!(
+                            "Failed to resolve npm package: {} - {:?}",
+                            module_specifier, err
+                        )))
+                    })?;
 
                 let content = std::fs::read_to_string(&path).map_err(|err| {
                     ModuleLoaderError::from(JsErrorBox::generic(format!(
@@ -398,9 +393,6 @@ impl AiDenoModuleLoader {
                     .translate_cjs_to_esm(&file_url, Some(Cow::Borrowed(&content)))
                     .map_err(|e| JsErrorBox::from_err(e))
                     .await?;
-
-                // let content =
-                //     ["console.log(import.meta);", content.to_string().as_str()].join("\n");
 
                 deno_println!("Translated content: {}", content);
 

@@ -1,20 +1,23 @@
 use deno_runtime::deno_core::v8;
 use deno_runtime::deno_core::v8::HandleScope;
 use crate::deno::error::Error;
+use std::pin::Pin;
 
 pub trait ToV8String {
   fn to_v8_string<'a>(
     &self,
-    scope: &mut HandleScope<'a>,
+    scope: &'a mut HandleScope<'a>,
   ) -> Result<v8::Local<'a, v8::String>, Error>;
 }
 
 impl ToV8String for str {
   fn to_v8_string<'a>(
     &self,
-    scope: &mut HandleScope<'a>,
+    scope: &'a mut HandleScope<'a>,
   ) -> Result<v8::Local<'a, v8::String>, Error> {
-    v8::String::new(scope, self).ok_or(Error::V8Encoding(self.to_string()))
+    let pinned = unsafe { Pin::new_unchecked(scope) };
+    let pinned_ref = v8::PinnedRef::from(pinned);
+    v8::String::new(&pinned_ref, self).ok_or(Error::V8Encoding(self.to_string()))
   }
 }
 

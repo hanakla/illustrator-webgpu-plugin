@@ -63,7 +63,7 @@ impl AiDenoHttpClient {
 
                 if !status.is_success() {
                     return Err(deno_npm_cache::DownloadError {
-                        status_code: Some(StatusCode::from_u16(status.as_u16()).unwrap()),
+                        status_code: Some(status.as_u16()),
                         error: JsErrorBox::generic(format!("Failed to load url: {}", url)),
                     });
                 }
@@ -72,7 +72,7 @@ impl AiDenoHttpClient {
                     .bytes()
                     .await
                     .map_err(|e| deno_npm_cache::DownloadError {
-                        status_code: Some(StatusCode::from_u16(status.as_u16()).unwrap()),
+                        status_code: Some(status.as_u16()),
                         error: JsErrorBox::generic(format!(
                             "Failed to receive bytes: {}; {}",
                             url,

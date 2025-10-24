@@ -111,7 +111,7 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
     allowed_schemas.insert("ai_deno:".to_string());
 
     let mut runtime = Runtime::new(RuntimeInit {
-        extensions: vec![ai_user_extension::init_ops_and_esm(AiExtOptions {
+        extensions: vec![ai_user_extension::init(AiExtOptions {
             // alert: alert_fn,
         })],
         allowed_module_schemas: allowed_schemas,
@@ -122,8 +122,27 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
 
     dai_println!("Load module");
     let module = Module::from_string("main.js", include_str!("./js/dist/main.mjs"));
-    // Allow to crash
-    let handle = runtime.attach_module(&module).unwrap();
+    // Allow to crash - load as main module to make exports accessible
+    let handle = match runtime.load_main_module(&module) {
+        Ok(h) => {
+            dai_println!("Module loaded successfully, module_id: {:?}", h.module_id());
+            h
+        }
+        Err(e) => {
+            dai_println!("Failed to load module: {:?}", e);
+            panic!("Module load failed: {:?}", e);
+        }
+    };
+
+    // Debug: Check what exports are available
+    match handle.get_module_exports(&mut runtime) {
+        Ok(exports) => {
+            dai_println!("Module exports: {:?}", exports);
+        }
+        Err(e) => {
+            dai_println!("Failed to get module exports: {:?}", e);
+        }
+    }
 
     let mut boxed_main = Box::new(AiMain {
         main_runtime: runtime,
@@ -131,6 +150,7 @@ pub extern "C" fn initialize(_ai_alert: extern "C" fn(*const JsonFunctionResult)
         ai_alert: _ai_alert,
     });
 
+    dai_println!("Calling loadEffects");
     execute_export_function_and_raw_return(&mut *boxed_main, "loadEffects", |scope| Ok(vec![]));
 
     Box::into_raw(boxed_main) as OpaqueAiMain
@@ -176,10 +196,10 @@ pub extern "C" fn get_live_effect_view_tree(
     let params_clone = params.clone();
 
     let result = execute_exported_function(ai_main, "getEffectViewNode", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id_clone.as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
-        let params = v8::String::new(scope, params_clone.to_string().as_str()).unwrap();
-        let params = v8::json::parse(scope, params).unwrap();
+        let effect_id = v8::String::new(&*scope, effect_id_clone.as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
+        let params = v8::String::new(&*scope, params_clone.to_string().as_str()).unwrap();
+        let params = v8::json::parse(&*scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
         let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into()];
@@ -213,19 +233,19 @@ extern "C" fn go_live_effect(
     dai_println!("go_live_effect: effect_id = {}", effect_id);
 
     let result = execute_export_function_and_raw_return(ai_main, "goLiveEffect", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id.to_string().as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
+        let effect_id = v8::String::new(&*scope, effect_id.to_string().as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
 
-        let params = v8::String::new(scope, params.to_string().as_str()).unwrap();
-        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::String::new(&*scope, params.to_string().as_str()).unwrap();
+        let params = v8::json::parse(&*scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
-        let env_json = v8::String::new(scope, env_json.to_string().as_str()).unwrap();
-        let env_json = v8::json::parse(scope, env_json).unwrap();
+        let env_json = v8::String::new(&*scope, env_json.to_string().as_str()).unwrap();
+        let env_json = v8::json::parse(&*scope, env_json).unwrap();
         let env_json = v8::Local::<v8::Object>::try_from(env_json).unwrap();
 
-        let width = v8::Number::new(scope, image_data.width as f64);
-        let height = v8::Number::new(scope, image_data.height as f64);
+        let width = v8::Number::new(&*scope, image_data.width as f64);
+        let height = v8::Number::new(&*scope, image_data.height as f64);
 
         let buffer = {
             let bufferdata = unsafe {
@@ -238,9 +258,9 @@ extern "C" fn go_live_effect(
             let len = image_data.byte_length;
 
             let store = v8::ArrayBuffer::new_backing_store_from_bytes(bufferdata).make_shared();
-            let array_buffer = v8::ArrayBuffer::with_backing_store(scope, &store);
+            let array_buffer = v8::ArrayBuffer::with_backing_store(&*scope, &store);
 
-            v8::Uint8ClampedArray::new(scope, array_buffer, 0, len)
+            v8::Uint8ClampedArray::new(&*scope, array_buffer, 0, len)
         }
         .unwrap();
 
@@ -267,18 +287,24 @@ extern "C" fn go_live_effect(
     };
 
     let deno_runtime = &mut ai_main.main_runtime.deno_runtime();
-    let scope = &mut deno_runtime.handle_scope();
+    let context = deno_runtime.main_context();
+    let isolate = deno_runtime.v8_isolate();
+    v8::scope!(handle_scope, isolate);
+    let context_local = v8::Local::new(handle_scope, context);
+    let scope = &mut v8::ContextScope::new(handle_scope, context_local);
 
     let print_js_object = {
-        let source = v8::String::new(scope, "(value)=>console.log(value)").unwrap();
-        let script = v8::Script::compile(scope, source, None).unwrap();
-        let __fn = script.run(scope).unwrap();
+        let source = v8::String::new(&*scope, "(value)=>console.log(value)").unwrap();
+        let script = v8::Script::compile(&*scope, source, None).unwrap();
+        let __fn = script.run(&mut *scope).unwrap();
         let __fn = v8::Local::<v8::Function>::try_from(__fn).unwrap();
-        let undefined = v8::undefined(scope);
+        let undefined = v8::undefined(&*scope);
 
         move |scope: &mut v8::HandleScope, value: v8::Local<v8::Value>| {
             let args = vec![value];
-            __fn.call(scope, undefined.into(), &args);
+            let pinned = unsafe { std::pin::Pin::new_unchecked(scope) };
+            let pinned_ref = v8::PinnedRef::from(pinned);
+            __fn.call(&pinned_ref, undefined.into(), &args);
         }
     };
 
@@ -295,22 +321,22 @@ extern "C" fn go_live_effect(
         let obj = v8::Local::<v8::Value>::try_from(result)?;
         let obj = v8::Local::<v8::Object>::try_from(obj)?;
 
-        let property = v8::String::new(scope, "width").unwrap();
+        let property = v8::String::new(&*scope, "width").unwrap();
         let width = obj
-            .get(scope, property.into())
+            .get(&mut *scope, property.into())
             .unwrap()
-            .int32_value(scope)
+            .int32_value(&mut *scope)
             .unwrap();
 
-        let property = v8::String::new(scope, "height").unwrap();
+        let property = v8::String::new(&*scope, "height").unwrap();
         let height = obj
-            .get(scope, property.into())
+            .get(&mut *scope, property.into())
             .unwrap()
-            .int32_value(scope)
+            .int32_value(&mut *scope)
             .unwrap();
 
-        let property = v8::String::new(scope, "data").unwrap();
-        let buffer = obj.get(scope, property.into()).unwrap();
+        let property = v8::String::new(&*scope, "data").unwrap();
+        let buffer = obj.get(&mut *scope, property.into()).unwrap();
         let buffer = v8::Local::<v8::Uint8ClampedArray>::try_from(buffer)?;
         let buffer = buffer.get_backing_store().unwrap();
 
@@ -375,11 +401,11 @@ pub extern "C" fn edit_live_effect_parameters(
     let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
 
     let result = execute_exported_function(ai_main, "editLiveEffectParameters", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
+        let effect_id = v8::String::new(&*scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
 
-        let params = v8::String::new(scope, params.as_str()).unwrap();
-        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::String::new(&*scope, params.as_str()).unwrap();
+        let params = v8::json::parse(&*scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
         let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into()];
@@ -405,15 +431,15 @@ pub extern "C" fn edit_live_effect_fire_event(
     let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
 
     let result = execute_exported_function(ai_main, "editLiveEffectFireCallback", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
+        let effect_id = v8::String::new(&*scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
 
-        let event_payload = v8::String::new(scope, event_payload.as_str()).unwrap();
-        let event_payload = v8::json::parse(scope, event_payload).unwrap();
+        let event_payload = v8::String::new(&*scope, event_payload.as_str()).unwrap();
+        let event_payload = v8::json::parse(&*scope, event_payload).unwrap();
         let event_payload = v8::Local::<v8::Object>::try_from(event_payload).unwrap();
 
-        let params = v8::String::new(scope, params.as_str()).unwrap();
-        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::String::new(&*scope, params.as_str()).unwrap();
+        let params = v8::json::parse(&*scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
         let args: Vec<v8::Local<v8::Value>> =
@@ -448,18 +474,18 @@ pub extern "C" fn live_effect_adjust_colors(
     let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
 
     let result = execute_exported_function(ai_main, "liveEffectAdjustColors", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
+        let effect_id = v8::String::new(&*scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
 
-        let params = v8::String::new(scope, params.as_str()).unwrap();
-        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::String::new(&*scope, params.as_str()).unwrap();
+        let params = v8::json::parse(&*scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
         let adjust_color_ptr = adjust_color_fn as *mut c_void;
-        let adjust_color_ext = v8::External::new(scope, adjust_color_ptr);
+        let adjust_color_ext = v8::External::new(&*scope, adjust_color_ptr);
 
         let adjust_color = v8::Function::builder(
-            |scope: &mut v8::HandleScope,
+            |scope: &mut v8::PinnedRef<v8::HandleScope>,
              args: v8::FunctionCallbackArguments,
              mut ret: v8::ReturnValue| {
                 // args[0]: ColorRGBA to json
@@ -490,7 +516,8 @@ pub extern "C" fn live_effect_adjust_colors(
                     .and_then(|s| v8::json::parse(scope, s))
                     .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok())
                 else {
-                    throw_v8_exception(scope, "Failed to parse adjust_color_fn result");
+                    // Failed to parse, return undefined
+                    dai_println!("Failed to parse adjust_color_fn result");
                     return;
                 };
 
@@ -499,7 +526,7 @@ pub extern "C" fn live_effect_adjust_colors(
             },
         )
         .data(adjust_color_ext.into())
-        .build(scope)
+        .build(&*scope)
         .unwrap();
 
         Ok(vec![effect_id.into(), params.into(), adjust_color.into()])
@@ -523,14 +550,14 @@ pub extern "C" fn live_effect_scale_parameters(
     let params = unsafe { CStr::from_ptr(params).to_string_lossy().to_string() };
 
     let result = execute_exported_function(ai_main, "liveEffectScaleParameters", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
+        let effect_id = v8::String::new(&*scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
 
-        let params = v8::String::new(scope, params.as_str()).unwrap();
-        let params = v8::json::parse(scope, params).unwrap();
+        let params = v8::String::new(&*scope, params.as_str()).unwrap();
+        let params = v8::json::parse(&*scope, params).unwrap();
         let params = v8::Local::<v8::Object>::try_from(params).unwrap();
 
-        let scale = v8::Number::new(scope, scale_factor);
+        let scale = v8::Number::new(&*scope, scale_factor);
 
         let args: Vec<v8::Local<v8::Value>> = vec![effect_id.into(), params.into(), scale.into()];
         Ok(args)
@@ -555,18 +582,18 @@ pub extern "C" fn live_effect_interpolate(
     let target_params = unsafe { CStr::from_ptr(params_b).to_string_lossy().to_string() };
 
     let result = execute_exported_function(ai_main, "liveEffectInterpolate", move |scope| {
-        let effect_id = v8::String::new(scope, effect_id.as_str()).unwrap();
-        let effect_id = v8::Local::new(scope, effect_id);
+        let effect_id = v8::String::new(&*scope, effect_id.as_str()).unwrap();
+        let effect_id = v8::Local::new(&mut *scope, effect_id);
 
-        let params_a = v8::String::new(scope, params.as_str()).unwrap();
-        let params_a = v8::json::parse(scope, params_a).unwrap();
+        let params_a = v8::String::new(&*scope, params.as_str()).unwrap();
+        let params_a = v8::json::parse(&*scope, params_a).unwrap();
         let params_a = v8::Local::<v8::Object>::try_from(params_a).unwrap();
 
-        let target_params = v8::String::new(scope, target_params.as_str()).unwrap();
-        let target_params = v8::json::parse(scope, target_params).unwrap();
+        let target_params = v8::String::new(&*scope, target_params.as_str()).unwrap();
+        let target_params = v8::json::parse(&*scope, target_params).unwrap();
         let target_params = v8::Local::<v8::Object>::try_from(target_params).unwrap();
 
-        let percent = v8::Number::new(scope, percent);
+        let percent = v8::Number::new(&*scope, percent);
 
         let args: Vec<v8::Local<v8::Value>> = vec![
             effect_id.into(),
@@ -582,14 +609,17 @@ pub extern "C" fn live_effect_interpolate(
     Box::into_raw(boxed)
 }
 
-fn execute_export_function_and_raw_return<'a>(
+fn execute_export_function_and_raw_return<F>(
     ai_main: &mut AiMain,
     function_name: &str,
-    args_factory: impl for<'b> FnOnce(
-            &mut v8::HandleScope<'b>,
-        ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>
+    args_factory: F,
+) -> Option<v8::Global<v8::Value>>
+where
+    F: for<'a> FnOnce(
+            &'a mut v8::ContextScope<v8::HandleScope>,
+        ) -> Result<Vec<v8::Local<'a, v8::Value>>, anyhow::Error>
         + 'static,
-) -> Option<v8::Global<v8::Value>> {
+{
     let tokio_runtime = ai_main.main_runtime.tokio_runtime();
     let ai_main_ptr = ai_main as *mut AiMain;
     let ai_main: &'static mut AiMain = unsafe { &mut *ai_main_ptr };
@@ -621,10 +651,17 @@ fn execute_export_function_and_raw_return<'a>(
 
             // let fn_ref = v8::Local::<v8::Function>::new(handle_scope, fn_ref);
             let args = {
-                let handle_scope = &mut deno_runtime.handle_scope();
-                let args = args_factory(handle_scope).unwrap();
-                args.iter()
-                    .map(|v| v8::Global::new(handle_scope, *v))
+                let context = deno_runtime.main_context();
+                let isolate = deno_runtime.v8_isolate();
+                v8::scope!(handle_scope_temp, isolate);
+                let context_local = v8::Local::new(handle_scope_temp, context);
+                let handle_scope = &mut v8::ContextScope::new(handle_scope_temp, context_local);
+                let scope_ptr: *mut v8::ContextScope<v8::HandleScope> = handle_scope as *mut _;
+                let args_vec = args_factory(handle_scope).unwrap();
+                let handle_scope_ref = unsafe { &mut *scope_ptr };
+                args_vec
+                    .into_iter()
+                    .map(|v| v8::Global::new(handle_scope_ref, v))
                     .collect::<Vec<_>>()
             };
 
@@ -644,7 +681,11 @@ fn execute_export_function_and_raw_return<'a>(
                 Err(e) => return Err(e),
             };
 
-            let handle_scope = &mut deno_runtime.handle_scope();
+            let context = deno_runtime.main_context();
+            let isolate = deno_runtime.v8_isolate();
+            v8::scope!(handle_scope_temp2, isolate);
+            let context_local = v8::Local::new(handle_scope_temp2, context);
+            let handle_scope = &mut v8::ContextScope::new(handle_scope_temp2, context_local);
 
             match ret {
                 Ok(ret) => Ok(Box::new(v8::Global::<v8::Value>::new(handle_scope, ret))),
@@ -671,15 +712,15 @@ fn execute_export_function_and_raw_return<'a>(
     }
 }
 
-fn execute_exported_function<'a, F>(
+fn execute_exported_function<F>(
     ai_main: &mut AiMain,
     function_name: &str,
     args_factory: F,
 ) -> JsonFunctionResult
 where
-    F: for<'b> FnOnce(
-            &mut v8::HandleScope<'b>,
-        ) -> Result<Vec<v8::Local<'b, v8::Value>>, anyhow::Error>
+    F: for<'a> FnOnce(
+            &'a mut v8::ContextScope<v8::HandleScope>,
+        ) -> Result<Vec<v8::Local<'a, v8::Value>>, anyhow::Error>
         + 'static,
 {
     let failed_res = JsonFunctionResult {
@@ -698,7 +739,12 @@ where
     };
 
     let runtime = &mut ai_main.main_runtime;
-    let scope = &mut runtime.deno_runtime().handle_scope();
+    let deno_runtime = runtime.deno_runtime();
+    let context = deno_runtime.main_context();
+    let isolate = deno_runtime.v8_isolate();
+    v8::scope!(handle_scope_temp3, isolate);
+    let context_local = v8::Local::new(handle_scope_temp3, context);
+    let scope = &mut v8::ContextScope::new(handle_scope_temp3, context_local);
     let result = v8::Local::<v8::Value>::new(scope, result);
     let result = v8::json::stringify(scope, result)
         .unwrap()
@@ -708,12 +754,6 @@ where
         success: true,
         json: CString::new(result).unwrap().into_raw(),
     }
-}
-
-fn throw_v8_exception(scope: &mut v8::HandleScope, message: &str) {
-    let error = v8::String::new(scope, message).unwrap();
-    let error = v8::Exception::error(scope, error);
-    scope.throw_exception(error);
 }
 
 pub fn c_char_to_string(c_char: *mut c_char) -> String {

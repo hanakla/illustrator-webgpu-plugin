@@ -1,11 +1,11 @@
 // Copyright 2025 AI Deno authors. MIT license.
 // Copyright (c) 2022 Richard Carson
 
-use deno_ast::{MediaType, ModuleSpecifier, ParsedSource};
+use deno_ast::{MediaType, ModuleExportsAndReExports, ModuleSpecifier, ParsedSource};
 use deno_error::JsErrorBox;
-use deno_graph::{CapturingEsParser, DefaultEsParser, EsParser, ParseOptions, ParsedSourceStore};
 use deno_resolver::{cjs::CjsTracker, npm::DenoInNpmPackageChecker};
 use deno_runtime::deno_fs;
+use node_resolver::analyze::EsmAnalysisMode;
 use node_resolver::analyze::{CjsAnalysis, CjsAnalysisExports};
 use serde::Deserialize;
 use serde::Serialize;
@@ -51,15 +51,18 @@ impl AiDenoCjsCodeAnalyzer {
         deno_println!("analyze_cjs: {:?}", analysis);
 
         match analysis {
-            CliCjsAnalysis::Esm => Ok(CjsAnalysis::<'b>::Esm(source)),
-            CliCjsAnalysis::Cjs { exports, reexports } => {
-                deno_println!(
-                    "cjs analysis: exports: {:?}, reexports: {:?}",
-                    exports,
-                    reexports
-                );
-                Ok(CjsAnalysis::Cjs(CjsAnalysisExports { exports, reexports }))
-            }
+            CliCjsAnalysis::Esm => Ok(CjsAnalysis::<'b>::Esm(source, None)),
+            CliCjsAnalysis::EsmAnalysis(ex) => Ok(CjsAnalysis::Esm(
+                source,
+                Some(CjsAnalysisExports {
+                    exports: ex.exports,
+                    reexports: ex.reexports,
+                }),
+            )),
+            CliCjsAnalysis::Cjs(ex) => Ok(CjsAnalysis::Cjs(CjsAnalysisExports {
+                exports: ex.exports,
+                reexports: ex.reexports,
+            })),
         }
     }
 
@@ -78,10 +81,10 @@ impl AiDenoCjsCodeAnalyzer {
 
         let media_type = MediaType::from_specifier(specifier);
         if media_type == MediaType::Json {
-            return Ok(CliCjsAnalysis::Cjs {
+            return Ok(CliCjsAnalysis::Cjs(ModuleExportsAndReExports {
                 exports: vec![],
                 reexports: vec![],
-            });
+            }));
         }
 
         let cjs_tracker = self.cjs_tracker.clone();
@@ -117,10 +120,10 @@ impl AiDenoCjsCodeAnalyzer {
             if is_cjs {
                 let analysis = source.analyze_cjs();
 
-                CliCjsAnalysis::Cjs {
+                CliCjsAnalysis::Cjs(ModuleExportsAndReExports {
                     exports: analysis.exports,
                     reexports: analysis.reexports,
-                }
+                })
             } else {
                 CliCjsAnalysis::Esm
             }
@@ -141,13 +144,18 @@ impl node_resolver::analyze::CjsCodeAnalyzer for AiDenoCjsCodeAnalyzer {
         &self,
         specifier: &ModuleSpecifier,
         source: Option<Cow<'b, str>>,
+        esm_analysis_mode: EsmAnalysisMode,
     ) -> Result<CjsAnalysis<'b>, JsErrorBox> {
         let source = match source {
             Some(source) => source,
             None => {
                 if let Ok(path) = specifier.to_file_path() {
-                    if let Ok(source_from_file) =
-                        self.fs.read_text_file_lossy_async(path, None).await
+                    if let Ok(source_from_file) = self
+                        .fs
+                        .read_text_file_lossy_async(deno_permissions::CheckedPathBuf::unsafe_new(
+                            path,
+                        ))
+                        .await
                     {
                         source_from_file
                     } else {
@@ -173,11 +181,11 @@ impl node_resolver::analyze::CjsCodeAnalyzer for AiDenoCjsCodeAnalyzer {
 pub enum CliCjsAnalysis {
     /// The module was found to be an ES module.
     Esm,
+    /// The module was found to be an ES module and
+    /// it was analyzed for imports and exports.
+    EsmAnalysis(ModuleExportsAndReExports),
     /// The module was CJS.
-    Cjs {
-        exports: Vec<String>,
-        reexports: Vec<String>,
-    },
+    Cjs(ModuleExportsAndReExports),
 }
 
 #[derive(Clone)]
@@ -224,7 +232,7 @@ pub struct ParsedSourceCache {
 /// and in LSP settings the concurrency will be enforced
 /// at a higher level to ensure this will have the latest
 /// parsed source.
-impl deno_graph::ParsedSourceStore for ParsedSourceCache {
+impl ParsedSourceCache {
     fn set_parsed_source(
         &self,
         specifier: ModuleSpecifier,
@@ -240,7 +248,7 @@ impl deno_graph::ParsedSourceStore for ParsedSourceCache {
         self.sources.lock().unwrap().get(specifier).cloned()
     }
 
-    fn remove_parsed_source(&self, specifier: &ModuleSpecifier) -> Option<ParsedSource> {
+    pub fn remove_parsed_source(&self, specifier: &ModuleSpecifier) -> Option<ParsedSource> {
         self.sources.lock().unwrap().remove(specifier)
     }
 
@@ -254,51 +262,11 @@ impl deno_graph::ParsedSourceStore for ParsedSourceCache {
             Some(parsed_source.clone())
         } else {
             // upgrade to have scope analysis
-            let parsed_source = sources.remove(specifier).unwrap();
+            let parsed_source = sources.remove(specifier)?;
             let parsed_source = parsed_source.into_with_scope_analysis();
             sources.insert(specifier.clone(), parsed_source.clone());
             Some(parsed_source)
         }
-    }
-}
-
-impl ParsedSourceCache {
-    pub fn get_parsed_source_from_js_module(
-        &self,
-        module: &deno_graph::JsModule,
-    ) -> Result<ParsedSource, deno_ast::ParseDiagnostic> {
-        let parser = self.as_capturing_parser();
-        // this will conditionally parse because it's using a CapturingEsParser
-        parser.parse_program(ParseOptions {
-            specifier: &module.specifier,
-            source: module.source.clone(),
-            media_type: module.media_type,
-            scope_analysis: false,
-        })
-    }
-
-    pub fn remove_or_parse_module(
-        &self,
-        specifier: &ModuleSpecifier,
-        source: Arc<str>,
-        media_type: MediaType,
-    ) -> Result<ParsedSource, deno_ast::ParseDiagnostic> {
-        if let Some(parsed_source) = self.remove_parsed_source(specifier) {
-            if parsed_source.media_type() == media_type
-                && parsed_source.text().as_ref() == source.as_ref()
-            {
-                // note: message used tests
-                // log::debug!("Removed parsed source: {}", specifier);
-                return Ok(parsed_source);
-            }
-        }
-        let options = ParseOptions {
-            specifier,
-            source,
-            media_type,
-            scope_analysis: false,
-        };
-        DefaultEsParser.parse_program(options)
     }
 
     /// Frees the parsed source from memory.
@@ -306,14 +274,8 @@ impl ParsedSourceCache {
         self.sources.lock().unwrap().remove(specifier);
     }
 
-    /// Fress all parsed sources from memory.
+    /// Frees all parsed sources from memory.
     pub fn free_all(&self) {
         self.sources.lock().unwrap().clear();
-    }
-
-    /// Creates a parser that will reuse a ParsedSource from the store
-    /// if it exists, or else parse.
-    pub fn as_capturing_parser(&self) -> CapturingEsParser {
-        CapturingEsParser::new(None, self)
     }
 }
